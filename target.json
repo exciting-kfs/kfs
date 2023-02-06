@@ -1,0 +1,17 @@
+{
+  "arch": "x86",
+  "cpu": "pentium4",
+  "target-endian": "little",
+  "target-c-int-width": "32",
+  "data-layout": "e-m:e-p:32:32-p270:32:32-p271:32:32-p272:64:64-f64:32:64-f80:32-n8:16:32-S128",
+  "env": "elf",
+  "is-builtin": false,
+  "llvm-target": "i686-unknown-none-elf",
+  "os": "none",
+  "linker-flavor": "ld",
+  "linker": "i686-elf-ld",
+  "panic-strategy": "abort",
+  "target-pointer-width": "32",
+  "disable-redzone": true,
+  "features": "-mmx,-sse,+soft-float"
+}
