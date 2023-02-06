@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "kfs1"
+name = "kfs"
 version = "0.1.0"
