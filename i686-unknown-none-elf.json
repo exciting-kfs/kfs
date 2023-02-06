@@ -8,10 +8,9 @@
   "is-builtin": false,
   "llvm-target": "i686-unknown-none-elf",
   "os": "none",
-  "linker-flavor": "ld",
-  "linker": "i686-elf-ld",
+  "linker-flavor": "ld.lld",
+  "linker": "rust-lld",
   "panic-strategy": "abort",
   "target-pointer-width": "32",
-  "disable-redzone": true,
   "features": "-mmx,-sse,+soft-float"
 }

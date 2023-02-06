@@ -2,26 +2,24 @@
 
 ## 설정
 
-file: $CARGO_HOME/config.toml
-```toml
-[unstable]
-build-std-features= ["compiler-builtins-mem"]
-build-std = ["core", "compiler_builtins"]
-
+### enable rust nightly
+```
+$ rustup default nightly
 ```
 
 ## 빌드
 ```shell
-cargo build --target ./target.json
+$ cargo build
 ```
 
 ## 결과
 
+```shell
+$ objdump -x ./target/i686-unknown-none-elf/debug/kernel
 ```
-Symbol table '.symtab' contains 4 entries:
-   Num:    Value  Size Type    Bind   Vis      Ndx Name
-     0: 00000000     0 NOTYPE  LOCAL  DEFAULT  UND 
-     1: 00000000     0 FILE    LOCAL  DEFAULT  ABS 4uwhhi6mzx6h9uy6
-     2: 00100000    24 OBJECT  LOCAL  DEFAULT    1 _ZN4kfs17_HEADER[...]
-     3: 00100020     4 FUNC    GLOBAL DEFAULT    2 kernel_entry
+```
+SYMBOL TABLE:
+00000000 l    df *ABS*  00000000 388nr5smw4oaeq89
+00100000 l     O .boot  00000018 _ZN6kernel17_MULTIBOOT_HEADER17hb16eff14b948178bE
+00100020 g     F .text  00000004 kernel_entry
 ```
