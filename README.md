@@ -1,25 +1,35 @@
-# cargo만을 이용해서 커널 바이너리 성성
+# x86 32 bit kernel project
 
-## 설정
+## Dependencies
+
+- cargo / rustc (nightly)
+- qemu
+- grub2 (compiled with CC_TARGET=i686-elf-gcc)
+
+## Configure
 
 ### enable rust nightly
 ```
 $ rustup default nightly
 ```
 
-## 빌드
+## Build & Run
+
+### create kernel binary
 ```shell
 $ cargo build
+
+OR
+
+$ make build
 ```
 
-## 결과
-
+### create rescue image
 ```shell
-$ objdump -x ./target/i686-unknown-none-elf/debug/kernel
+$ make rescue
 ```
-```
-SYMBOL TABLE:
-00000000 l    df *ABS*  00000000 388nr5smw4oaeq89
-00100000 l     O .boot  00000018 _ZN6kernel17_MULTIBOOT_HEADER17hb16eff14b948178bE
-00100020 g     F .text  00000004 kernel_entry
+
+### run rescue image with qemu
+```shell
+$ make run
 ```
