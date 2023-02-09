@@ -1,15 +1,7 @@
 // use super::screen::Screen;
-use super::{keyboard::KeyboardToken, tty::Tty};
+use super::{keyboard::KeyInput, tty::Tty};
 
 const TTY_COUNTS: usize = 4;
-
-pub enum TtyControl {
-	ChangeTty,
-	// ShowDmesg,
-	// CloseDmesg,
-	ChangeColor,
-	MoveCursor(i8, i8),
-}
 
 pub struct TtyController {
 	foreground: usize,
@@ -17,7 +9,7 @@ pub struct TtyController {
 }
 
 impl TtyController {
-	pub const fn new() -> Self {
+	pub fn new() -> Self {
 		TtyController {
 			foreground: 0,
 			tty: [Tty::new(); 4],
@@ -28,23 +20,18 @@ impl TtyController {
 		&mut self.tty[self.foreground]
 	}
 
-	pub fn input(&mut self, token: KeyboardToken) {
-		let foreground = self.foreground;
-		let tty = &mut self.tty[foreground];
-		match token {
-			KeyboardToken::Control(ref tc) => match tc {
-				TtyControl::ChangeTty => {
-					let next = (foreground + 1) % 4;
-					self.tty[next].draw();
-					self.foreground = next;
-				}
-				_ => tty.input(token),
-			},
-			KeyboardToken::Input(_) => {
-				if foreground != 0 {
-					tty.input(token)
-				}
-			}
+	pub fn input(&mut self, key_input: KeyInput) {
+		if key_input.ctrl && TtyController::is_tty_index(key_input.code) {
+			self.foreground = (key_input.code - '0' as u8) as usize;
+			self.tty[self.foreground].draw();
+		} else if key_input.alt {
+			self.tty[self.foreground].set_attribute(key_input.code);
+		} else {
+			self.tty[self.foreground].input(key_input);
 		}
+	}
+
+	fn is_tty_index(code: u8) -> bool {
+		code >= '1' as u8 && code < '4' as u8
 	}
 }

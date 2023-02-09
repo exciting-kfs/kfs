@@ -1,5 +1,4 @@
-use super::controller::TtyControl;
-use super::keyboard::KeyboardToken;
+use super::keyboard::KeyInput;
 use super::position::Position;
 use super::screen::{IScreen, Screen, SCREEN_HEIGHT, SCREEN_WITDH};
 // use super::screen::Screen;
@@ -8,40 +7,60 @@ pub const BUFFER_HEIGHT: usize = 100;
 const BUFFER_WIDTH: usize = 80;
 const SCREEN_POS_MAX: usize = BUFFER_HEIGHT - SCREEN_HEIGHT;
 
+#[rustfmt::skip]
+static CODE_TO_ASCII: [char; 128] = [
+	'\0', '\0', '1', '2', '3', '4',  '5',  '6',  '7', '8',  '9',  '0',  '-',  '=', '\0', '\0', // null, ?, backspace, tab
+	 'q',  'w', 'e', 'r', 't', 'y',  'u',  'i',  'o', 'p',  '[',  ']', '\n', '\0',  'a',  's',
+	 'd',  'f', 'g', 'h', 'j', 'k',  'l',  ';', '\'', '`', '\0', '\\',  'z',  'x',  'c',  'v',
+	 'b',  'n', 'm', ',', '.', '/', '\0', '\0', '\0', ' ', '\0', '\0', '\0', '\0', '\0', '\0',
+	 '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0',
+	 '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0',
+	 '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0',
+	 '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0',
+];
+
 #[derive(Clone, Copy)]
 pub struct Tty {
-	frame_buffer: [[u8; BUFFER_WIDTH]; BUFFER_HEIGHT],
+	frame_buffer: [[char; BUFFER_WIDTH]; BUFFER_HEIGHT],
 	screen_pos: usize, // top
 	cursor: Position,
 	attribute: u8,
 }
 
 impl Tty {
-	pub const fn new() -> Self {
+	pub fn new() -> Self {
 		Tty {
-			frame_buffer: [[0; BUFFER_WIDTH]; BUFFER_HEIGHT],
+			frame_buffer: [['\0'; BUFFER_WIDTH]; BUFFER_HEIGHT],
 			screen_pos: 0,
 			cursor: Position(0, 0),
 			attribute: 0x2f, // FIXME
 		}
 	}
 
-	pub fn input(&mut self, token: KeyboardToken) {
-		match token {
-			KeyboardToken::Control(tc) => match tc {
-				TtyControl::ChangeColor => self.attribute += 0x1, // FIXME
-				TtyControl::MoveCursor(dx, dy) => self.move_cursor(dx, dy),
-				_ => {} // logic error
-			},
-			KeyboardToken::Input(c) => {
-				Screen::putc(c, self.attribute, self.cursor);
+	pub fn input(&mut self, key_input: KeyInput) {
+		match key_input.code {
+			0x4b => self.move_cursor(0, -1),
+			0x48 => self.move_cursor(-1, 0),
+			0x4d => self.move_cursor(0, 1),
+			0x50 => self.move_cursor(1, 0),
+			code => {
+				let c = CODE_TO_ASCII[code as usize];
+				let x = self.screen_pos + self.cursor.0 as usize;
+				let y = self.cursor.1 as usize;
+				Screen::putc(self.cursor, c, self.attribute);
+				self.frame_buffer[x][y] = c;
 				self.move_cursor(0, 1);
 			}
 		}
+		self.draw();
+	}
+
+	pub fn set_attribute(&mut self, attribute: u8) {
+		self.attribute = attribute;
 	}
 
 	pub fn draw(&mut self) {
-		Screen::draw(self.screen_pos, &self.frame_buffer, self.attribute);
+		Screen::draw(&self.frame_buffer, self.screen_pos, self.attribute);
 	}
 
 	fn move_cursor(&mut self, dx: i8, dy: i8) {

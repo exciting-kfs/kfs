@@ -40,6 +40,7 @@ static _TEMP_STACK: TempStack = TempStack::new();
 
 #[panic_handler]
 fn software_halt(_info: &PanicInfo) -> ! {
+	unsafe { asm!("mov eax, 0x2f65", "mov [0xb8000], eax") }
 	loop {}
 }
 
@@ -64,17 +65,15 @@ extern "C" fn kernel_init() -> ! {
 
 #[no_mangle]
 pub extern "C" fn kernel_entry() -> ! {
-	let mut al: u8 = 0;
-	let mut x: u16 = 0;
-	let mut y: u16 = 0;
-
 	let mut keyboard = Keyboard::new();
 	let mut tty_cont = TtyController::new();
 
+	tty_cont.get_tty().draw();
+
 	loop {
 		keyboard.read();
-		if let Some(token) = keyboard.get_token() {
-			tty_cont.input(token)
+		if let Some(key_input) = keyboard.get_key_input() {
+			tty_cont.input(key_input)
 		}
 	}
 }

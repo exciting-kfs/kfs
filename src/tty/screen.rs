@@ -13,30 +13,30 @@ pub const SCREEN_HEIGHT: usize = 25;
 pub struct Screen;
 
 pub trait IScreen {
-	fn draw(screen_pos: usize, buf: &[[u8; SCREEN_WITDH]; BUFFER_HEIGHT], attr: u8);
-	fn putc(c: char, attr: u8, pos: Position); // print char at cursor
+	fn draw(buf: &[[char; SCREEN_WITDH]; BUFFER_HEIGHT], line: usize, attr: u8);
+	fn putc(pos: Position, c: char, attr: u8); // print char at cursor
 	fn put_cursor(pos: Position);
 }
 
 impl IScreen for Screen {
-	fn draw(mut line: usize, buf: &[[u8; SCREEN_WITDH]; BUFFER_HEIGHT], attr: u8) {
+	fn draw(buf: &[[char; SCREEN_WITDH]; BUFFER_HEIGHT], mut line: usize, attr: u8) {
 		let mut index = 0;
 
-		while line < BUFFER_HEIGHT {
-			Screen::print_line(index, &buf[line], attr);
+		while line < BUFFER_HEIGHT && index < SCREEN_HEIGHT as u8 {
+			Screen::print_line(&buf[line], index, attr);
 			line += 1;
 			index += 1;
 		}
 
 		line = 0;
 		while index < SCREEN_HEIGHT as u8 {
-			Screen::print_line(index, &buf[line], attr);
+			Screen::print_line(&buf[line], index, attr);
 			index += 1;
 		}
 	}
 
-	fn putc(c: char, attr: u8, pos: Position) {
-		let eax: u32 = VGA_TEXT_START + (pos.0 * SCREEN_WITDH as u8 * 2 + pos.1 * 2) as u32;
+	fn putc(pos: Position, c: char, attr: u8) {
+		let eax: u32 = VGA_TEXT_START + pos.0 as u32 * SCREEN_WITDH as u32 * 2 + pos.1 as u32 * 2;
 		let ebx: u32 = (c as u32) + ((attr as u32) << 8);
 		unsafe {
 			asm!(
@@ -79,12 +79,12 @@ impl IScreen for Screen {
 }
 
 impl Screen {
-	pub fn print_line(index: u8, buf: &[u8; 80], attr: u8) {
+	pub fn print_line(buf: &[char; SCREEN_WITDH], line: u8, attr: u8) {
 		let mut i = 0;
 
-		while i < SCREEN_WITDH {
-			let pos = Position(index, i as u8);
-			Screen::putc(buf[i as usize] as char, attr, pos);
+		while i < SCREEN_WITDH as u8 {
+			let pos = Position(line, i);
+			Screen::putc(pos, buf[i as usize] as char, attr);
 			i += 1;
 		}
 	}

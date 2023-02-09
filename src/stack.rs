@@ -1,4 +1,4 @@
-pub const TEMP_STACK_SIZE: usize = 0x100;
+pub const TEMP_STACK_SIZE: usize = 0x80000;
 
 #[repr(packed)]
 #[allow(dead_code)]
