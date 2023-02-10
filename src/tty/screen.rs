@@ -7,7 +7,7 @@ use super::tty::BUFFER_HEIGHT;
 const VGA_TEXT_START: u32 = 0xb8000;
 // const VGA_TEXT_END: u32 = 0xb8fa0;
 pub const SCREEN_WITDH: usize = 80;
-pub const SCREEN_HEIGHT: usize = 25;
+pub const SCREEN_HEIGHT: usize = 24;
 
 #[derive(Clone, Copy)]
 pub struct Screen;
@@ -40,7 +40,7 @@ impl IScreen for Screen {
 		let ebx: u32 = (c as u32) + ((attr as u32) << 8);
 		unsafe {
 			asm!(
-				"mov [eax], ebx",
+				"mov [eax], bx",
 				in("eax") eax,
 				in("ebx") ebx
 			)
@@ -79,12 +79,20 @@ impl IScreen for Screen {
 }
 
 impl Screen {
-	pub fn print_line(buf: &[char; SCREEN_WITDH], screen_x: u8, attr: u8) {
+	fn print_line(buf: &[char; SCREEN_WITDH], screen_x: u8, attr: u8) {
 		let mut screen_y = 0;
 
 		while screen_y < SCREEN_WITDH as u8 {
 			let pos = Position(screen_x, screen_y);
 			Screen::putc(pos, buf[screen_y as usize] as char, attr);
+			screen_y += 1;
+		}
+	}
+
+	pub fn line_clear(screen_x: u8, mut screen_y: u8, attr: u8) {
+		while screen_y < SCREEN_WITDH as u8 {
+			let pos = Position(screen_x, screen_y);
+			Screen::putc(pos, 0 as char, attr);
 			screen_y += 1;
 		}
 	}

@@ -21,6 +21,7 @@ pub static CODE_TO_ASCII: [char; 128] = [
 
 #[derive(Clone, Copy)]
 pub struct Tty {
+	seq: u8,
 	frame_buffer: [[char; BUFFER_WIDTH]; BUFFER_HEIGHT],
 	screen_pos: usize, // top
 	cursor: Position,
@@ -28,8 +29,9 @@ pub struct Tty {
 }
 
 impl Tty {
-	pub fn new() -> Self {
+	pub fn new(seq: u8) -> Self {
 		Tty {
+			seq,
 			frame_buffer: [['\0'; BUFFER_WIDTH]; BUFFER_HEIGHT],
 			screen_pos: 0,
 			cursor: Position(0, 0),
@@ -52,7 +54,6 @@ impl Tty {
 				self.move_cursor(0, 1);
 			}
 		}
-		self.draw();
 	}
 
 	pub fn set_attribute(&mut self, attribute: u8) {
@@ -61,6 +62,12 @@ impl Tty {
 
 	pub fn draw(&mut self) {
 		Screen::draw(&self.frame_buffer, self.screen_pos, self.attribute);
+		Screen::put_cursor(self.cursor);
+		Screen::putc(
+			Position(SCREEN_HEIGHT as u8, SCREEN_WITDH as u8 - 1),
+			(0x30 + self.seq as u8) as char,
+			0x0f,
+		);
 	}
 
 	fn move_cursor(&mut self, dx: i8, dy: i8) {
