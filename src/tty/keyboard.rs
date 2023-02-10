@@ -55,7 +55,7 @@ impl Keyboard {
 	}
 
 	pub fn read(&mut self) {
-		let mut c;
+		let c;
 		if Keyboard::can_read() {
 			c = Keyboard::read_code();
 
