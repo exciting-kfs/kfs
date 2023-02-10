@@ -32,6 +32,6 @@ impl TtyController {
 	}
 
 	fn is_tty_index(code: u8) -> bool {
-		code >= '1' as u8 && code < '4' as u8
+		code >= b'1' && code < b'4'
 	}
 }
