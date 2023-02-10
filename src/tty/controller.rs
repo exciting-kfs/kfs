@@ -1,5 +1,5 @@
 // use super::screen::Screen;
-use super::{keyboard::KeyInput, tty::Tty};
+use super::{keyboard::KeyInput, tty::Tty, tty::CODE_TO_ASCII};
 
 const TTY_COUNTS: usize = 4;
 
@@ -21,8 +21,9 @@ impl TtyController {
 	}
 
 	pub fn input(&mut self, key_input: KeyInput) {
-		if key_input.ctrl && TtyController::is_tty_index(key_input.code) {
-			self.foreground = (key_input.code - '0' as u8) as usize;
+		let code = key_input.code;
+		if key_input.ctrl && TtyController::is_tty_index(code) {
+			self.foreground = (CODE_TO_ASCII[code as usize] as u8 - '0' as u8) as usize;
 			self.tty[self.foreground].draw();
 		} else if key_input.alt {
 			self.tty[self.foreground].set_attribute(key_input.code);
@@ -32,6 +33,7 @@ impl TtyController {
 	}
 
 	fn is_tty_index(code: u8) -> bool {
-		code >= b'1' && code < b'4'
+		let code = CODE_TO_ASCII[code as usize];
+		code >= '1' && code < '4'
 	}
 }
