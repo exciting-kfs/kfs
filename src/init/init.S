@@ -1,4 +1,4 @@
-%define STACK_SIZE 4096
+%define STACK_SIZE 0x400000 ; 4MB
 
 section .stack
     resb STACK_SIZE
