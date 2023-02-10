@@ -1,13 +1,7 @@
 use core::arch::asm;
 
-// const ARROW_PRESS_LEFT: u8 = 0x4b;
-// const ARROW_PRESS_TOP: u8 = 0x48;
-// const ARROW_PRESS_RIGHT: u8 = 0x4d;
-// const ARROW_PRESS_DOWN: u8 = 0x50;
-// const ARROW_RELEASE_LEFT: u8 = 0xcb;
-// const ARROW_RELEASE_TOP: u8 = 0xc8;
-// const ARROW_RELEASE_RIGHT: u8 = 0xcd;
-// const ARROW_RELEASE_DOWN: u8 = 0xd0;
+use super::position::Position;
+use super::screen::{IScreen, Screen, SCREEN_HEIGHT};
 
 #[derive(PartialEq)]
 enum KeyboardState {
@@ -26,6 +20,7 @@ pub struct KeyInput {
 }
 
 pub struct Keyboard {
+	input_observer: u8,
 	state: KeyboardState,
 	input: u8,
 	ctrl: bool,
@@ -41,6 +36,7 @@ pub struct Keyboard {
 impl Keyboard {
 	pub fn new() -> Self {
 		Keyboard {
+			input_observer: 0,
 			state: KeyboardState::IMMEDIATE,
 			input: 0,
 			ctrl: false,
@@ -55,9 +51,11 @@ impl Keyboard {
 	}
 
 	pub fn read(&mut self) {
-		let mut c;
+		let c;
 		if Keyboard::can_read() {
 			c = Keyboard::read_code();
+
+			self.track_code(c);
 
 			match self.state {
 				KeyboardState::IMMEDIATE => self.immediate_state(c),
@@ -86,22 +84,16 @@ impl Keyboard {
 		while x < 1000000 {
 			x += 1;
 		}
-
+		Screen::line_clear(SCREEN_HEIGHT as u8, self.input_observer, 0x00);
+		self.input_observer = 0;
 		Some(k)
 	}
 
-	// fn print_char(&self, c:u8) {
-	// 	static mut x: i32 = 0xb8000;
-	// 	unsafe {
-	// 		asm!(
-	// 			"add eax, 0x2f00",
-	// 			"mov [ebx], eax",
-	// 			in("al") c,
-	// 			in("ebx") x
-	// 		);
-	// 		x += 2;
-	// 	}
-	// }
+	fn track_code(&mut self, c: u8) {
+		let pos = Position(SCREEN_HEIGHT as u8, self.input_observer);
+		Screen::putc(pos, c as char, 0x0f);
+		self.input_observer += 1;
+	}
 
 	fn can_read() -> bool {
 		let mut eax: u32 = 0;
@@ -153,6 +145,7 @@ impl Keyboard {
 			0x1d | 0x9d => self.ctrl = is_pressed,
 			_ => self.init_state(), // error
 		}
+		self.state = KeyboardState::IMMEDIATE;
 	}
 
 	fn capslock_state(&mut self, c: u8) {
@@ -161,6 +154,7 @@ impl Keyboard {
 		} else {
 			self.init_state(); // error
 		}
+		self.state = KeyboardState::IMMEDIATE;
 	}
 
 	fn init_state(&mut self) {

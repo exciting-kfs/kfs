@@ -7,7 +7,7 @@ use super::tty::BUFFER_HEIGHT;
 const VGA_TEXT_START: u32 = 0xb8000;
 // const VGA_TEXT_END: u32 = 0xb8fa0;
 pub const SCREEN_WITDH: usize = 80;
-pub const SCREEN_HEIGHT: usize = 25;
+pub const SCREEN_HEIGHT: usize = 24;
 
 #[derive(Clone, Copy)]
 pub struct Screen;
@@ -19,19 +19,19 @@ pub trait IScreen {
 }
 
 impl IScreen for Screen {
-	fn draw(buf: &[[char; SCREEN_WITDH]; BUFFER_HEIGHT], mut line: usize, attr: u8) {
-		let mut index = 0;
+	fn draw(buf: &[[char; SCREEN_WITDH]; BUFFER_HEIGHT], mut buf_x: usize, attr: u8) {
+		let mut screen_x = 0;
 
-		while line < BUFFER_HEIGHT && index < SCREEN_HEIGHT as u8 {
-			Screen::print_line(&buf[line], index, attr);
-			line += 1;
-			index += 1;
+		while buf_x < BUFFER_HEIGHT && screen_x < SCREEN_HEIGHT as u8 {
+			Screen::print_line(&buf[buf_x], screen_x, attr);
+			buf_x += 1;
+			screen_x += 1;
 		}
 
-		line = 0;
-		while index < SCREEN_HEIGHT as u8 {
-			Screen::print_line(&buf[line], index, attr);
-			index += 1;
+		buf_x = 0;
+		while screen_x < SCREEN_HEIGHT as u8 {
+			Screen::print_line(&buf[buf_x], screen_x, attr);
+			screen_x += 1;
 		}
 	}
 
@@ -40,7 +40,7 @@ impl IScreen for Screen {
 		let ebx: u32 = (c as u32) + ((attr as u32) << 8);
 		unsafe {
 			asm!(
-				"mov [eax], ebx",
+				"mov [eax], bx",
 				in("eax") eax,
 				in("ebx") ebx
 			)
@@ -79,13 +79,21 @@ impl IScreen for Screen {
 }
 
 impl Screen {
-	pub fn print_line(buf: &[char; SCREEN_WITDH], line: u8, attr: u8) {
-		let mut i = 0;
+	fn print_line(buf: &[char; SCREEN_WITDH], screen_x: u8, attr: u8) {
+		let mut screen_y = 0;
 
-		while i < SCREEN_WITDH as u8 {
-			let pos = Position(line, i);
-			Screen::putc(pos, buf[i as usize] as char, attr);
-			i += 1;
+		while screen_y < SCREEN_WITDH as u8 {
+			let pos = Position(screen_x, screen_y);
+			Screen::putc(pos, buf[screen_y as usize] as char, attr);
+			screen_y += 1;
+		}
+	}
+
+	pub fn line_clear(screen_x: u8, mut screen_y: u8, attr: u8) {
+		while screen_y < SCREEN_WITDH as u8 {
+			let pos = Position(screen_x, screen_y);
+			Screen::putc(pos, 0 as char, attr);
+			screen_y += 1;
 		}
 	}
 }
