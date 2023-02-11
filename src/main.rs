@@ -57,7 +57,7 @@ pub extern "C" fn kernel_entry() -> ! {
 	let mut keyboard = Keyboard::new();
 	let mut tty_cont = TtyController::new();
 
-	tty_cont.get_tty().draw();
+	tty_cont.get_tty_forground().draw();
 
 	loop {
 		keyboard.read();

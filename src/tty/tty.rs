@@ -1,41 +1,43 @@
 use super::keyboard::KeyInput;
 use super::position::Position;
 use super::screen::{IScreen, Screen, SCREEN_HEIGHT, SCREEN_WITDH};
-// use super::screen::Screen;
+use super::screen_char::{Color, ColorCode, ScreenChar};
 
 pub const BUFFER_HEIGHT: usize = 100;
 const BUFFER_WIDTH: usize = 80;
-const SCREEN_POS_MAX: usize = BUFFER_HEIGHT - SCREEN_HEIGHT;
 
 #[rustfmt::skip]
 pub static CODE_TO_ASCII: [char; 128] = [
-	'\0',  '\0',  '1',  '2',  '3',  '4',  '5',  '6',  '7', '8',   '9',  '0',  '-',  '=', '\0', '\0', // null, ?, backspace, tab
-	 'q',   'w',  'e',  'r',  't',  'y',  'u',  'i',  'o', 'p',   '[',  ']', '\n', '\0',  'a',  's',
-	 'd',   'f',  'g',  'h',  'j',  'k',  'l',  ';', '\'', '`',  '\0', '\\',  'z',  'x',  'c',  'v',
-	 'b',   'n',  'm',  ',',  '.',  '/', '\0', '\0', '\0', ' ',  '\0', '\0', '\0', '\0', '\0', '\0',
+	'\0',  '\0',  '1',  '2',  '3',  '4',  '5',  '6',  '7',  '8',  '9',  '0',  '-',  '=', '\0', '\0', // null, ?, backspace, tab
+	 'q',   'w',  'e',  'r',  't',  'y',  'u',  'i',  'o',  'p',  '[',  ']', '\n', '\0',  'a',  's',
+	 'd',   'f',  'g',  'h',  'j',  'k',  'l',  ';', '\'',  '`', '\0', '\\',  'z',  'x',  'c',  'v',
+	 'b',   'n',  'm',  ',',  '.',  '/', '\0', '\0', '\0',  ' ', '\0', '\0', '\0', '\0', '\0', '\0',
 	 '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0',
 	 '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0',
 	 '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0',
 	 '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0',
 ];
 
-#[derive(Clone, Copy)]
 pub struct Tty {
-	seq: u8,
-	frame_buffer: [[char; BUFFER_WIDTH]; BUFFER_HEIGHT],
-	screen_pos: usize, // top
+	index: u8,
+	buffer: [[ScreenChar; BUFFER_WIDTH]; BUFFER_HEIGHT],
+	buffer_top: usize,
+	screen_top: usize, // screen top
 	cursor: Position,
-	attribute: u8,
+	default_color: ColorCode,
 }
 
 impl Tty {
-	pub fn new(seq: u8) -> Self {
+	pub fn new(index: u8) -> Self {
+		let default_color = ColorCode::new(Color::White, Color::Green);
+		let default_char = ScreenChar::new(default_color, '\0');
 		Tty {
-			seq,
-			frame_buffer: [['\0'; BUFFER_WIDTH]; BUFFER_HEIGHT],
-			screen_pos: 0,
+			index,
+			buffer: [[default_char; BUFFER_WIDTH]; BUFFER_HEIGHT],
+			buffer_top: 0,
+			screen_top: 0,
 			cursor: Position(0, 0),
-			attribute: 0x2f, // FIXME
+			default_color,
 		}
 	}
 
@@ -47,27 +49,28 @@ impl Tty {
 			0x50 => self.move_cursor(1, 0),
 			code => {
 				let c = CODE_TO_ASCII[code as usize];
-				let x = self.screen_pos + self.cursor.0 as usize;
+				let s = ScreenChar::new(self.default_color, c);
+				let x = self.screen_top + self.cursor.0 as usize;
 				let y = self.cursor.1 as usize;
-				Screen::putc(self.cursor, c, self.attribute);
-				self.frame_buffer[x][y] = c;
+				Screen::putc(self.cursor, s);
+				self.buffer[x][y] = s;
 				self.move_cursor(0, 1);
 			}
 		}
 	}
 
-	pub fn set_attribute(&mut self, attribute: u8) {
-		self.attribute = attribute;
+	pub fn set_default_color(&mut self, default_color: ColorCode) {
+		self.default_color = default_color;
 	}
 
 	pub fn draw(&mut self) {
-		Screen::draw(&self.frame_buffer, self.screen_pos, self.attribute);
+		Screen::draw(&self.buffer, self.screen_top);
 		Screen::put_cursor(self.cursor);
-		Screen::putc(
-			Position(SCREEN_HEIGHT as u8, SCREEN_WITDH as u8 - 1),
-			(0x30 + self.seq as u8) as char,
-			0x0f,
-		);
+
+		let right_bot = Position(SCREEN_HEIGHT as u8, SCREEN_WITDH as u8 - 1);
+		let color = ColorCode::new(Color::White, Color::Black);
+		let ch = ScreenChar::new(color, (0x30 + self.index as u8) as char);
+		Screen::putc(right_bot, ch);
 	}
 
 	fn move_cursor(&mut self, dx: i8, dy: i8) {
@@ -85,21 +88,38 @@ impl Tty {
 		}
 
 		if x < 0 {
-			let pos = self.screen_pos as i8 + x;
-			self.screen_pos = if pos < 0 { 0 } else { pos as usize };
+			let top = self.screen_top as isize + x as isize;
+			self.screen_top = self.calc_screen_top(top);
 			x = 0;
 		}
 
 		if x >= SCREEN_HEIGHT as i8 {
-			let pos = self.screen_pos as i8 + (x - SCREEN_HEIGHT as i8 + 1);
-			if pos > SCREEN_POS_MAX as i8 {
-				self.screen_pos = SCREEN_POS_MAX;
-			} else {
-				self.screen_pos = pos as usize;
-			}
+			let top = self.screen_top as isize + x as isize;
+			let top = top - SCREEN_HEIGHT as isize + 1;
+			self.screen_top = self.calc_screen_top(top);
 			x = SCREEN_HEIGHT as i8 - 1;
 		}
 		self.cursor = Position(x as u8, y as u8);
 		Screen::put_cursor(self.cursor);
+	}
+
+	fn get_screen_top_max(&self) -> usize {
+		if self.buffer_top < SCREEN_HEIGHT {
+			BUFFER_HEIGHT + self.buffer_top - SCREEN_HEIGHT
+		} else {
+			self.buffer_top - SCREEN_HEIGHT
+		}
+	}
+
+	fn calc_screen_top(&mut self, top: isize) -> usize {
+		let screen_top_max = self.get_screen_top_max();
+
+		if top > screen_top_max as isize {
+			screen_top_max
+		} else if top < self.buffer_top as isize {
+			self.buffer_top
+		} else {
+			top as usize
+		}
 	}
 }
