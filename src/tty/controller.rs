@@ -1,3 +1,4 @@
+use super::screen_char::ColorCode;
 use super::{keyboard::KeyInput, tty::Tty};
 
 const TTY_COUNTS: usize = 4;
@@ -15,19 +16,27 @@ impl TtyController {
 		}
 	}
 
-	pub fn get_tty<'a>(&'a mut self) -> &'a mut Tty {
+	pub fn get_tty_forground<'a>(&'a mut self) -> &'a mut Tty {
 		&mut self.tty[self.foreground]
+	}
+
+	pub fn get_tty<'a>(&'a mut self, index: usize) -> &'a mut Tty {
+		&mut self.tty[index]
 	}
 
 	pub fn input(&mut self, key_input: KeyInput) {
 		let num = code_to_num(key_input.code);
+		let foreground = self.foreground;
+
 		if key_input.ctrl && TtyController::is_tty_index(num) {
 			self.foreground = num.unwrap() as usize;
 		} else if key_input.alt {
-			self.tty[self.foreground].set_attribute(key_input.code);
+			let c = ColorCode::from_u8(key_input.code);
+			self.tty[foreground].set_default_color(c);
 		} else {
-			self.tty[self.foreground].input(key_input);
+			self.tty[foreground].input(key_input);
 		}
+
 		self.tty[self.foreground].draw();
 	}
 

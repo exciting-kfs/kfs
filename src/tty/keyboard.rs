@@ -2,6 +2,7 @@ use core::arch::asm;
 
 use super::position::Position;
 use super::screen::{IScreen, Screen, SCREEN_HEIGHT};
+use super::screen_char::{ColorCode, ScreenChar};
 
 #[derive(PartialEq)]
 enum KeyboardState {
@@ -20,7 +21,7 @@ pub struct KeyInput {
 }
 
 pub struct Keyboard {
-	input_observer: u8,
+	keycode_observer: u8,
 	state: KeyboardState,
 	input: u8,
 	ctrl: bool,
@@ -36,7 +37,7 @@ pub struct Keyboard {
 impl Keyboard {
 	pub fn new() -> Self {
 		Keyboard {
-			input_observer: 0,
+			keycode_observer: 0,
 			state: KeyboardState::IMMEDIATE,
 			input: 0,
 			ctrl: false,
@@ -84,15 +85,19 @@ impl Keyboard {
 		while x < 1000000 {
 			x += 1;
 		}
-		Screen::line_clear(SCREEN_HEIGHT as u8, self.input_observer, 0x00);
-		self.input_observer = 0;
+		Screen::line_clear(
+			Position(SCREEN_HEIGHT as u8, self.keycode_observer),
+			ColorCode::from_u8(0x00),
+		);
+		self.keycode_observer = 0;
 		Some(k)
 	}
 
 	fn track_code(&mut self, c: u8) {
-		let pos = Position(SCREEN_HEIGHT as u8, self.input_observer);
-		Screen::putc(pos, c as char, 0x0f);
-		self.input_observer += 1;
+		let pos = Position(SCREEN_HEIGHT as u8, self.keycode_observer);
+		let ch = ScreenChar::new(ColorCode::from_u8(0x0f), c as char);
+		Screen::putc(pos, ch);
+		self.keycode_observer += 1;
 	}
 
 	fn can_read() -> bool {
