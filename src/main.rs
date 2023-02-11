@@ -11,6 +11,14 @@ use tty::keyboard::Keyboard;
 
 mod vga;
 use vga::TextVGA;
+use vga::Char as VGAChar;
+use vga::Attr as VGAAttr;
+use vga::Color as Color;
+
+mod pmio;
+
+mod ps2;
+use ps2::keyboard;
 
 const SCREEN_WITDH: u32 = 80;
 const SCREEN_HEIGHT: u32 = 25;
@@ -32,15 +40,28 @@ fn panic_handler_impl(_info: &PanicInfo) -> ! {
 
 #[no_mangle]
 pub extern "C" fn kernel_entry() -> ! {
-	let mut keyboard = Keyboard::new();
-	let mut tty_cont = TtyController::new();
+	let cyan    = VGAChar::styled(VGAAttr::new(false, Color::Cyan, false, Color::Cyan), b'\0');
+	let magenta = VGAChar::styled(VGAAttr::new(false, Color::Magenta, false, Color::Magenta), b'\0');
 
-	tty_cont.get_tty_forground().draw();
+	TextVGA::clear();
 
-	loop {
-		keyboard.read();
-		if let Some(key_input) = keyboard.get_key_input() {
-			tty_cont.input(key_input)
+	loop {	
+		if let Some(event) = keyboard::get_key_event() {
+			TextVGA::clear();
+			TextVGA::putc(24, 79, cyan);
+
+			if event.key == keyboard::Key::A {
+				let attr = match event.state {
+					keyboard::KeyState::Pressed => VGAAttr::new(false, Color::Cyan, false, Color::White),
+					keyboard::KeyState::Released => VGAAttr::new(false, Color::Magenta, false, Color::White),
+				};
+				TextVGA::putc(0, 1, VGAChar::styled(attr, b'A'));
+			}
+			for _ in 0..500000 {}
+		} else {
+			TextVGA::putc(24, 79, magenta);
+			for _ in 0..500000 {}
 		}
+		
 	}
 }

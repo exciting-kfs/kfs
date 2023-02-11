@@ -1,6 +1,5 @@
-use core::ptr;
-
 #[repr(u8)]
+#[derive(Clone, Copy)]
 pub enum Color {
 	Black = 0,
 	Blue = 1,
@@ -13,6 +12,7 @@ pub enum Color {
 }
 
 #[repr(transparent)]
+#[derive(Clone, Copy)]
 pub struct Attr(u8);
 
 impl Attr {
@@ -34,6 +34,7 @@ impl Attr {
 }
 
 #[repr(transparent)]
+#[derive(Clone, Copy)]
 pub struct Char(u16);
 
 impl Char {
@@ -50,26 +51,29 @@ impl Char {
 	}
 }
 
-pub struct TextVGA;
+pub mod TextVGA {
+	use super::*;
+	use core::ptr;
 
-impl TextVGA {
-	pub const WIDTH: isize = 80;
-	pub const HEIGHT: isize = 25;
+	pub const WIDTH: usize = 80;
+	pub const HEIGHT: usize = 25;
 	const MMIO_ADDR: *mut u16 = 0xb8000 as *mut u16;
 
-	pub fn putc(y: isize, x: isize, c: Char) {
-		if x >= Self::WIDTH || y >= Self::HEIGHT {
-			panic!();
+	pub fn putc(y: usize, x: usize, c: Char) {
+		if x >= WIDTH || y >= HEIGHT {
+			panic!("putc: invalid coordinate ({y}, {x}), ");
 		}
 		unsafe {
-			ptr::write_volatile(Self::MMIO_ADDR.offset(y * Self::WIDTH + x), c.0);
+			ptr::write_volatile(MMIO_ADDR.offset((y * WIDTH + x) as isize), c.0);
 		}
 	}
 
-	pub fn fill_reds() {
-		let red = Char::styled(Attr::new(false, Color::Red, false, Color::Red), b'\0');
-		// for i in 0..(Self::WIDTH * Self::HEIGHT) {
-			unsafe { ptr::write_volatile(Self::MMIO_ADDR.offset(0), red.0) };
-		// }
+	pub fn clear() {
+		let black = Char::styled(Attr::new(false, Color::Black, false, Color::Black), b'\0');
+		for i in 0..(HEIGHT) {
+			for j in 0..(WIDTH) {
+				putc(i, j, black)
+			}
+		}
 	}
 }
