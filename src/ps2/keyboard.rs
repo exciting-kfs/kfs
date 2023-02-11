@@ -94,6 +94,26 @@ pub fn wait_key_event() -> KeyEvent {
 	}
 }
 
+
+/* 
+ * case 1 ) first_code == 0xe1
+ *  | there is only scancode starts with 0xe1. that is `Pause`
+ *  | so ignore left bytes in buffer (0x1D, 0x45, 0xE1, 0x9D, 0xC5) and return.
+ * 	
+ * case 2 ) first_code == 0xe0
+ *  | scancode is extended code. so lookup next code
+ *  |
+ *  - case 2-1 ) second_code == 0x27 or 0xb7
+ *  |  | scancode is `PrintScr`
+ *  |  | like we did above, ignore left bytes and return.
+ *  |
+ *  - case 2-2 ) otherwise
+ *  |  | almost same as case 3. but lookup key from CODE_SET1[1]
+ *   
+ * case 3 ) otherwise
+ *  | if MSB is zero, then key is pressed. if not, key is released.
+ *  | lookup CODE_SET1[0][(scancode with MSB cleared)] to get exact key
+*/
 pub fn get_key_event() -> Option<KeyEvent> {
 	let raw_scancode = get_raw_scancode();
 
