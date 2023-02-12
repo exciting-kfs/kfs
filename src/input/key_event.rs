@@ -118,7 +118,7 @@ pub enum ModVar {
 	Right,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum PrintVar {
 	Regular,
 	Keypad,
@@ -135,10 +135,28 @@ pub enum Key {
 	Acpi(Code),
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum KeyState {
 	Pressed,
 	Released,
+}
+
+impl Into<bool> for KeyState {
+    fn into(self) -> bool {
+        match self {
+            Self::Pressed => true,
+            Self::Released => false,
+        }
+    }
+}
+
+impl From<bool> for KeyState {
+    fn from(value: bool) -> Self {
+        match value {
+            true => Self::Pressed,
+            false => Self::Released,
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
