@@ -1,4 +1,4 @@
-use crate::pmio::Port;
+use crate::raw_io::pmio::Port;
 
 static CONTROL_PORT: Port = Port::new(0x64);
 

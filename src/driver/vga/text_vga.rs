@@ -51,29 +51,26 @@ impl Char {
 	}
 }
 
-pub mod TextVGA {
-	use super::*;
-	use core::ptr;
+use core::ptr;
 
-	pub const WIDTH: usize = 80;
-	pub const HEIGHT: usize = 25;
-	const MMIO_ADDR: *mut u16 = 0xb8000 as *mut u16;
+pub const WIDTH: usize = 80;
+pub const HEIGHT: usize = 25;
+const MMIO_ADDR: *mut u16 = 0xb8000 as *mut u16; // TODO: use 2d array type
 
-	pub fn putc(y: usize, x: usize, c: Char) {
-		if x >= WIDTH || y >= HEIGHT {
-			panic!("putc: invalid coordinate ({y}, {x}), ");
-		}
-		unsafe {
-			ptr::write_volatile(MMIO_ADDR.offset((y * WIDTH + x) as isize), c.0);
-		}
+pub fn putc(y: usize, x: usize, c: Char) {
+	if x >= WIDTH || y >= HEIGHT {
+		panic!("putc: invalid coordinate ({y}, {x}), ");
 	}
+	unsafe {
+		ptr::write_volatile(MMIO_ADDR.offset((y * WIDTH + x) as isize), c.0);
+	}
+}
 
-	pub fn clear() {
-		let black = Char::styled(Attr::new(false, Color::Black, false, Color::Black), b'\0');
-		for i in 0..(HEIGHT) {
-			for j in 0..(WIDTH) {
-				putc(i, j, black)
-			}
+pub fn clear() {
+	let black = Char::styled(Attr::new(false, Color::Black, false, Color::Black), b'\0');
+	for i in 0..(HEIGHT) {
+		for j in 0..(WIDTH) {
+			putc(i, j, black)
 		}
 	}
 }
