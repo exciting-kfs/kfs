@@ -1,68 +1,50 @@
-#![feature(used_with_arg)]
-#![feature(asm_const)]
-#![feature(naked_functions)]
 #![feature(exclusive_range_pattern)]
 #![no_std]
 #![no_main]
 
+mod driver;
+mod raw_io;
+
 use core::arch::asm;
 use core::panic::PanicInfo;
 
-mod multiboot;
-use multiboot::Multiboot2;
+use driver::vga::text_vga;
+use text_vga::Char as VGAChar;
+use text_vga::Attr as VGAAttr;
+use text_vga::Color as Color;
 
-mod stack;
-use stack::TempStack;
-
-mod tty;
-use tty::controller::TtyController;
-use tty::keyboard::Keyboard;
-
-#[used(linker)]
-#[link_section = ".multiboot2_header"]
-static _MULTIBOOT_HEADER: Multiboot2 = Multiboot2::new();
-
-#[used(linker)]
-#[no_mangle]
-#[link_section = ".stack.temp"]
-static _TEMP_STACK: TempStack = TempStack::new();
+use driver::ps2::keyboard;
 
 #[panic_handler]
-fn software_halt(_info: &PanicInfo) -> ! {
+fn panic_handler_impl(_info: &PanicInfo) -> ! {
 	unsafe { asm!("mov eax, 0x2f65", "mov [0xb8000], eax") }
 	loop {}
 }
 
 #[no_mangle]
-#[cfg(target_arch = "x86")]
-extern "C" fn kernel_init() -> ! {
-	#![naked]
-	unsafe {
-		asm!(
-		"mov eax, _TEMP_STACK", // stack bot의 주소를 가져오는 더 좋은 방법?
-		"add eax, {}",
-		"mov esp, eax",
-		"mov al, 0xa7",
-		"out 0x64, al",		// disable second PS/2 port
-
-		"jmp kernel_entry",
-		const stack::TEMP_STACK_SIZE,
-		options(noreturn),
-		)
-	}
-}
-
-#[no_mangle]
 pub extern "C" fn kernel_entry() -> ! {
-	let mut keyboard = Keyboard::new();
-	let mut tty_cont = TtyController::new();
+	let cyan    = VGAChar::styled(VGAAttr::new(false, Color::Cyan, false, Color::Cyan), b'\0');
+	let magenta = VGAChar::styled(VGAAttr::new(false, Color::Magenta, false, Color::Magenta), b'\0');
 
-	tty_cont.get_tty_forground().draw();
+	text_vga::clear();
 
-	loop {
-		keyboard.read();
-		if let Some(key_input) = keyboard.get_key_input() {
-			tty_cont.input(key_input)
+	loop {	
+		if let Some(event) = keyboard::get_key_event() {
+			text_vga::clear();
+			text_vga::putc(24, 79, cyan);
+
+			if event.key == keyboard::Key::A {
+				let attr = match event.state {
+					keyboard::KeyState::Pressed => VGAAttr::new(false, Color::Cyan, false, Color::Black),
+					keyboard::KeyState::Released => VGAAttr::new(false, Color::Magenta, false, Color::Black),
+				};
+				text_vga::putc(0, 1, VGAChar::styled(attr, b'A'));
+			}
+			for _ in 0..100000 {}
+		} else {
+			text_vga::putc(24, 79, magenta);
+			for _ in 0..100000 {}
 		}
+		
 	}
 }
