@@ -4,6 +4,7 @@ static CONTROL_PORT: Port = Port::new(0x64);
 
 #[repr(u8)]
 #[rustfmt::skip]
+#[allow(unused)]
 pub enum Status {
 	OBF = (1<<0), /* output buffer full */
 	IBF = (1<<1), /* input buffer full  */
