@@ -1,5 +1,6 @@
 #[repr(u8)]
 #[derive(Clone, Copy)]
+#[allow(unused)]
 pub enum Color {
 	Black = 0,
 	Blue = 1,
