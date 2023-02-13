@@ -2,6 +2,7 @@ use crate::raw_io::pmio::Port;
 
 static CONTROL_PORT: Port = Port::new(0x64);
 
+/// PS/2 Controller status register mask
 #[repr(u8)]
 #[rustfmt::skip]
 #[allow(unused)]

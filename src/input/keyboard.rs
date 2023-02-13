@@ -1,5 +1,12 @@
+//! Implements common keyboard tasks
+//! 
+//! ### some example of `common tasks`
+//!  - save modifier / toggle keys state
+//!  - convert pressed key to ascii representation (if possible)
+//!  - key repeat rate / threshold
+
 use super::key_event::{Code, Key, KeyState, PrintVar};
-use crate::driver::{ps2::keyboard::get_key_event, vga::text_vga};
+use crate::driver::{ps2::keyboard::get_key_event};
 
 #[derive(Default)]
 pub struct Keyboard {
@@ -12,7 +19,11 @@ pub struct Keyboard {
 	scroll_lock: bool,
 }
 
-//TODO - unicode support?
+/// General keyboard event
+/// 
+/// - `state`: either key is pressed or released.
+/// - `key`: **exact** related key.
+/// - `ascii`: ascii representation of key.
 pub struct KeyboardEvent {
 	pub state: KeyState,
 	pub key: Key,
@@ -20,8 +31,47 @@ pub struct KeyboardEvent {
 }
 
 impl Keyboard {
+
 	pub fn new() -> Self {
-		Self::default()
+		Self::default() // false, false, false ...
+	}
+
+	/// 키보드에서 키 하나를 입력받고, 상태를 저장한 후, 받은 키를 반환한다.
+	/// 
+	/// # Returns
+	///  - `None` -> 현재 키보드 버퍼에서 읽을 키가 존재하지 않음.
+	///  - `Some(x)` -> 읽은 키에 대한 정보
+	pub fn get_keyboard_event(&mut self) -> Option<KeyboardEvent> {
+		let event = match get_key_event() {
+			Some(ev) => ev,
+			None => return None,
+		};
+
+		match event.key {
+			Key::Modifier(key, ..) => self.handle_modifier_key(key, event.state),
+			Key::Toggle(key) => self.handle_toggle_key(key, event.state),
+			_ => (),
+		};
+
+		let ascii = match event.key {
+			Key::Printable(key, var) => self.printable_to_ascii(key as u8, var),
+			_ => b'\0',
+		};
+
+		Some(KeyboardEvent {
+			state: event.state,
+			key: event.key,
+			ascii,
+		})
+	}
+
+	/// wait until key is pressed, then return received event.
+	pub fn wait_keyboard_event(&mut self) -> KeyboardEvent {
+		loop {
+			if let Some(ev) = self.get_keyboard_event() {
+				return ev;
+			}
+		}
 	}
 
 	fn handle_modifier_key(&mut self, code: Code, state: KeyState) {
@@ -47,6 +97,7 @@ impl Keyboard {
 		}
 	}
 
+	/// 알파벳 대소문자 처리
 	fn alpha_to_ascii(&self, code: u8) -> u8 {
 		let upper_case = self.caps_lock || self.shift;
 
@@ -57,11 +108,14 @@ impl Keyboard {
 		}
 	}
 
+	/// 표준 배열과 넘패드에 동시에 존재하는 키를 ascii로 변환함.
+	/// 
+	/// 만약,
+	/// 1) 시프트가 눌림.
+	/// 2) 키가 넘패드에서 눌리지 않았음.
+	/// 
+	/// 위 두가지 조건이 동시에 충족되었을 경우 추가적인 변환이 일어남.
 	fn numpad_to_ascii(&self, code: u8, var: PrintVar) -> u8 {
-		// convert to special char when
-		//  (1). shift is pressed
-		//  (2). key was not pressed from numpad
-
 		let is_special = self.shift && var == PrintVar::Regular;
 
 		if !is_special {
@@ -86,6 +140,7 @@ impl Keyboard {
 		}
 	}
 
+	/// 추가적으로 shift를 눌렀을 때 변화가 일어나야 하는 키들의 처리
 	fn others_to_ascii(&self, code: u8) -> u8 {
 		let alternate = self.shift;
 
@@ -106,44 +161,13 @@ impl Keyboard {
 		}
 	}
 
+	/// shift / capslock 등 현재 키 입력 상태에 따라 다른 ascii 표현을 가지는 키를 처리
 	fn printable_to_ascii(&self, code: u8, var: PrintVar) -> u8 {
 		match code {
 			b'a'..=b'z' => self.alpha_to_ascii(code),
 			b'0'..=b'9' | b'-' | b'/' | b'.' => self.numpad_to_ascii(code, var),
 			b'`' | b'=' | b'[' | b']' | b'\\' | b';' | b'\'' | b',' => self.others_to_ascii(code),
 			_ => unreachable!("unknown code detected"),
-		}
-	}
-
-	pub fn get_keyboard_event(&mut self) -> Option<KeyboardEvent> {
-		let event = match get_key_event() {
-			Some(ev) => ev,
-			None => return None,
-		};
-
-		match event.key {
-			Key::Modifier(key, ..) => self.handle_modifier_key(key, event.state),
-			Key::Toggle(key) => self.handle_toggle_key(key, event.state),
-			_ => (),
-		};
-
-		let ascii = match event.key {
-			Key::Printable(key, var) => self.printable_to_ascii(key as u8, var),
-			_ => b'\0',
-		};
-
-		Some(KeyboardEvent {
-			state: event.state,
-			key: event.key,
-			ascii,
-		})
-	}
-
-	pub fn wait_keyboard_event(&mut self) -> KeyboardEvent {
-		loop {
-			if let Some(ev) = self.get_keyboard_event() {
-				return ev;
-			}
 		}
 	}
 }

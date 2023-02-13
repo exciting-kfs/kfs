@@ -7,6 +7,13 @@ all : rescue
 build :
 	cargo build
 
+doc :
+	cargo doc
+
+# it works on macos, but not tested on another os
+doc-open : doc
+	open target/i686-unknown-none-elf/doc/kernel/index.html
+
 run :
 	scripts/qemu.sh
 
