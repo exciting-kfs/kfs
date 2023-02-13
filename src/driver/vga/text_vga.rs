@@ -77,27 +77,6 @@ pub fn put_cursor(y: usize, x: usize) {
 
 	INDEX_PORT.write_byte(0x0e); // cursor position high
 	DATA_PORT.write_byte(high as u8);
-
-	// unsafe {
-	// 	asm!( 	// bx = x * width + y
-
-	// 		"mov dx, 0x03D4",	// pointer index register
-	// 		"mov al, 0x0F",		// select cursor low
-	// 		"out dx, al",
-
-	// 		"inc dl",		// pointer data register
-	// 		"mov al, bl",		// write bl ?
-	// 		"out dx, al",
-
-	// 		"dec dl",		// dx = 0x03d4
-	// 		"mov al, 0x0E",		// ?
-	// 		"out dx, al",
-
-	// 		"inc dl",		// dx = 0x03d5
-	// 		"mov al, bh",		// write bh ?
-	// 		"out dx, al",
-	// 	)
-	// }
 }
 
 fn addr_of(y: usize, x: usize) -> *mut u16 {

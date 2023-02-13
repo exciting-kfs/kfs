@@ -37,24 +37,6 @@ impl Console {
 		}
 	}
 
-	// pub fn input(&mut self, key_input: KeyInput) {
-	// 	match key_input.code {
-	// 		0x4b => self.move_cursor(0, -1),
-	// 		0x48 => self.move_cursor(-1, 0),
-	// 		0x4d => self.move_cursor(0, 1),
-	// 		0x50 => self.move_cursor(1, 0),
-	// 		code => {
-	// 			let c = CODE_TO_ASCII[code as usize];
-	// 			let s = text_vga::Char::new(self.default_color, c);
-	// 			let x = self.vga_top + self.cursor.0 as usize;
-	// 			let y = self.cursor.1 as usize;
-	// 			Screen::putc(self.cursor, s);
-	// 			self.buf[x][y] = s;
-	// 			self.move_cursor(0, 1);
-	// 		}
-	// 	}
-	// }
-
 	pub fn put_char(&mut self, c: u8) {
 		let ch = VGAChar::styled(self.attr, c);
 		let y = self.cursor.y + self.vga_top;

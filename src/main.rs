@@ -15,10 +15,8 @@ use text_vga::Attr as VGAAttr;
 use text_vga::Char as VGAChar;
 use text_vga::Color;
 
-use input::key_event::Key;
-use input::keyboard::Keyboard;
-
 use console::ConsoleManager;
+use input::keyboard::Keyboard;
 
 #[panic_handler]
 fn panic_handler_impl(_info: &PanicInfo) -> ! {
