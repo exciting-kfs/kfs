@@ -14,6 +14,9 @@ pub const WIDTH: usize = 80;
 pub const HEIGHT: usize = 25;
 const MMIO_ADDR: *mut u16 = 0xb8000 as *mut u16; // TODO: use 2d array type
 
+static INDEX_PORT: Port = Port::new(0x03d4);
+static DATA_PORT: Port = Port::new(0x03d5);
+
 pub fn draw(buf: &[[Char; WIDTH]; console::BUFFER_HEIGHT], mut buf_y: usize) {
 	let mut vga_y = 0;
 
@@ -54,19 +57,26 @@ pub fn clear() {
 	}
 }
 
+pub fn enable_cursor(start: usize, end: usize) {
+	INDEX_PORT.write_byte(0x0a); // cursor start
+	let start = DATA_PORT.read_byte() & 0xc0 | start as u8;
+	DATA_PORT.write_byte(start);
+
+	INDEX_PORT.write_byte(0x0b); // cursor end
+	let end = DATA_PORT.read_byte() & 0xe0 | end as u8;
+	DATA_PORT.write_byte(end);
+}
+
 pub fn put_cursor(y: usize, x: usize) {
 	let offset = offset_count(y, x);
 	let low = offset & 0xff;
 	let high = (offset >> 8) & 0xff;
 
-	let reg_select = Port::new(0x03d4);
-	let reg_data = Port::new(0x03d5);
+	INDEX_PORT.write_byte(0x0f); // cursor position low
+	DATA_PORT.write_byte(low as u8);
 
-	reg_select.write_byte(0x0f); // cursor position low
-	reg_data.write_byte(low as u8);
-
-	reg_select.write_byte(0x0e); // cursor position high
-	reg_data.write_byte(high as u8);
+	INDEX_PORT.write_byte(0x0e); // cursor position high
+	DATA_PORT.write_byte(high as u8);
 
 	// unsafe {
 	// 	asm!( 	// bx = x * width + y

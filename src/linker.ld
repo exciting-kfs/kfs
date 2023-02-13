@@ -9,7 +9,7 @@ SECTIONS {
 		KEEP(*(.multiboot2_header))
 	}
 
-    .text : {
+    	.text : {
 		*(.text .text.*)
 	}
 

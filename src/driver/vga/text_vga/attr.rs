@@ -20,4 +20,8 @@ impl Attr {
 	pub fn toggle_bright(self) -> Self {
 		Attr((self.0) ^ (1 << 3))
 	}
+
+	pub fn form_u8(attr: u8) -> Self {
+		Attr(attr)
+	}
 }
