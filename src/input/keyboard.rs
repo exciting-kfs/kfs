@@ -51,10 +51,8 @@ impl Keyboard {
 		let upper_case = self.caps_lock || self.shift;
 
 		if upper_case {
-			text_vga::putc(1, 1, text_vga::Char::new(b'Y'));
 			code.to_ascii_uppercase()
 		} else {
-			text_vga::putc(1, 1, text_vga::Char::new(b'N'));
 			code
 		}
 	}
