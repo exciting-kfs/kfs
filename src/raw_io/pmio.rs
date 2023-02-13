@@ -26,7 +26,7 @@ impl Port {
 	pub fn write_byte(&self, byte: u8) {
 		unsafe {
 			asm!(
-				"out al, dx",
+				"out dx, al",
 				in("dx") self.port,
 				in("al") byte,
 			)
