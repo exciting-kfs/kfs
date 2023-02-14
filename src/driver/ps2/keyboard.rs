@@ -94,52 +94,6 @@ pub fn wait_key_event() -> KeyEvent {
 /// Get current key event.
 /// 
 /// if there is no available event, then returns None.
-/// 
-/// # Implementation Detail
-/// 
-/// translate scancode to `enum Code` is little tricky.
-/// 
-/// ## Common Rules for PS/2 SCANCODE SET 1
-/// 
-/// - every key has different scancodes for released and pressed state. 
-/// - scancode's MSB represents it's pressed(0) or released(1)
-/// - most scancode are 1byte in size.
-/// - if scancode starts with 0xe0. then scancode is 2byte.
-/// 
-/// but there is exceptions. that is PrintScr, Pause
-///
-/// - they are longer than 2byte,
-/// - Pause dosen't have scancode for released state.
-/// - PrintScr's MSB dosen't represents it's state.
-/// 
-/// ## Approch
-/// 
-/// So. there is 4 cases.
-/// 
-/// case 1 ) first_code == 0xe1
-///  + `Pause` only starts with 0xe1
-///  |
-///  + so ignore left bytes in buffer (0x1D, 0x45, 0xE1, 0x9D, 0xC5) and return.
-///
-/// case 2 ) first_code == 0xe0
-///  |
-///  + scancode 2-byte long. so read next code
-///  |
-///  + case 2-1 ) second_code == 0x27 or 0xb7
-///  |  |
-///  |  + scancode is `PrintScr`
-///  |  |
-///  |  + like we did above, ignore left bytes and return.
-///  |
-///  + case 2-2 ) otherwise
-///  |  |
-///  +  + almost same as case 3. but lookup `Code` from CODE_SET1\[1\]
-///
-/// case 3 ) otherwise
-///  |
-///  + if MSB is zero, then key is pressed. if not, key is released.
-///  |
-///  + lookup CODE_SET1[0][(scancode with MSB cleared)] to get `Code`
 pub fn get_key_event() -> Option<KeyEvent> {
 	let raw_scancode = get_raw_scancode();
 

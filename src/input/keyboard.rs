@@ -1,6 +1,6 @@
 //! Implements common keyboard tasks
 //! 
-//! ### some example of `common tasks`
+//! ### some example of common tasks
 //!  - save modifier / toggle keys state
 //!  - convert pressed key to ascii representation (if possible)
 //!  - key repeat rate / threshold
@@ -110,11 +110,8 @@ impl Keyboard {
 
 	/// 표준 배열과 넘패드에 동시에 존재하는 키를 ascii로 변환함.
 	/// 
-	/// 만약,
-	/// 1) 시프트가 눌림.
-	/// 2) 키가 넘패드에서 눌리지 않았음.
-	/// 
-	/// 위 두가지 조건이 동시에 충족되었을 경우 추가적인 변환이 일어남.
+	/// 만약 시프트가 눌렸고, 눌린 키가 넘패드에서 눌린 것이 아닌 경우
+	/// 추가적인 변환이 일어남.
 	fn numpad_to_ascii(&self, code: u8, var: PrintVar) -> u8 {
 		let is_special = self.shift && var == PrintVar::Regular;
 
