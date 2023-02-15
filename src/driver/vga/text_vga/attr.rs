@@ -5,11 +5,11 @@ use super::Color;
 pub struct Attr(pub u8);
 
 impl Attr {
-	pub fn new(blink: bool, bg: Color, bright: bool, fg: Color) -> Self {
+	pub const fn new(blink: bool, bg: Color, bright: bool, fg: Color) -> Self {
 		Attr(((blink as u8) << 7) | ((bg as u8) << 4) | ((bright as u8) << 3) | (fg as u8))
 	}
 
-	pub fn default() -> Self {
+	pub const fn default() -> Self {
 		Self::new(false, Color::Black, false, Color::White)
 	}
 

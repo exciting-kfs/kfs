@@ -1,59 +1,51 @@
-use crate::console::Console;
 use crate::input::key_event::{Code, Key, KeyState};
 use crate::input::keyboard::KeyboardEvent;
 
+use crate::printk::DMESG;
+
+use super::console::{Console, IConsole};
 use super::key_record::KeyRecord;
+use super::readonly_console::ReadOnlyConsole;
+
+pub static mut CONSOLE_MANAGER: ConsoleManager = ConsoleManager::new();
 
 const CONSOLE_COUNTS: usize = 4;
 
 pub struct ConsoleManager {
-	foreground: usize,
-	console: [Console; CONSOLE_COUNTS],
 	key_record: KeyRecord,
+	foreground: usize,
+	read_only_on: bool,
+	read_only: ReadOnlyConsole,
+	console: [Console; CONSOLE_COUNTS],
 }
 
 impl ConsoleManager {
-	pub fn new() -> Self {
+	pub const fn new() -> Self {
 		ConsoleManager {
 			key_record: KeyRecord::new(),
 			foreground: 1,
-			console: [
-				Console::new(0),
-				Console::new(1),
-				Console::new(2),
-				Console::new(3),
-			],
+			read_only_on: false,
+			read_only: ReadOnlyConsole::new(),
+			console: [Console::new(); 4],
 		}
-	}
-
-	pub fn get_console<'a>(&'a mut self, index: usize) -> &'a mut Console {
-		&mut self.console[index]
 	}
 
 	pub fn update(&mut self, kbd_ev: KeyboardEvent) {
-		let console = &mut self.console[self.foreground];
-
-		if let (Key::Control(c), KeyState::Pressed) = (kbd_ev.key, kbd_ev.state) {
-			match c {
-				// 0xa1..=0xa8 => 여기 어떻게 안되나요?
-				Code::Home
-				| Code::ArrowUp
-				| Code::PageUp
-				| Code::ArrowLeft
-				| Code::ArrowRight
-				| Code::End
-				| Code::ArrowDown
-				| Code::PageDown => console.move_cursor(c),
-				Code::Delete => console.delete_char(),
-				Code::Backspace => console.delete_char_and_move_cursor_left(), // 이름 추천
-				_ => {}
-			}
-		}
-
 		self.record_key(&kbd_ev);
-		self.evaluate_key(kbd_ev.ascii);
+		self.select_console();
 
-		self.console[self.foreground].draw();
+		if self.read_only_on {
+			self.read_only.update(&kbd_ev, &self.key_record);
+			self.read_only.draw();
+		} else {
+			let console = &mut self.console[self.foreground];
+			console.update(&kbd_ev, &self.key_record);
+			console.draw();
+		}
+	}
+
+	pub fn dmesg(&mut self) -> &mut ReadOnlyConsole {
+		&mut self.read_only
 	}
 
 	fn record_key(&mut self, kbd_ev: &KeyboardEvent) {
@@ -72,23 +64,33 @@ impl ConsoleManager {
 		}
 	}
 
-	fn evaluate_key(&mut self, ascii: u8) {
-		let console = &mut self.console[self.foreground];
+	fn select_console(&mut self) {
 		let printable = self.key_record.printable;
 		let control = self.key_record.control;
-		let alt = self.key_record.alt;
 
 		if let Code::None = printable {
 			return;
 		}
 
-		let num = printable as usize - Code::N0 as usize;
-		if control && num >= 1 && num <= 3 {
-			self.foreground = num;
-		} else if alt {
-			console.change_color(printable);
+		let num = self.is_console_index(printable);
+		if control && num <= CONSOLE_COUNTS - 1 {
+			self.read_only_on = false;
+			self.foreground = num as usize;
+			self.key_record.printable = Code::None;
+		} else if control && printable == Code::Minus {
+			self.read_only_on = true;
+			self.key_record.printable = Code::None;
+			unsafe { DMESG.flush() };
+		}
+	}
+
+	fn is_console_index(&self, code: Code) -> usize {
+		let code = code as usize;
+		let n0 = Code::N0 as usize;
+		if code >= n0 {
+			code - n0
 		} else {
-			console.put_char(ascii);
+			CONSOLE_COUNTS
 		}
 	}
 }

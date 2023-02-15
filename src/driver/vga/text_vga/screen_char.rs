@@ -5,11 +5,11 @@ use super::Attr;
 pub struct Char(pub u16);
 
 impl Char {
-	pub fn styled(attr: Attr, ch: u8) -> Self {
+	pub const fn styled(attr: Attr, ch: u8) -> Self {
 		Char(((attr.0 as u16) << 8) | (ch as u16))
 	}
 
-	pub fn new(ch: u8) -> Self {
+	pub const fn new(ch: u8) -> Self {
 		Self::styled(Attr::default(), ch)
 	}
 

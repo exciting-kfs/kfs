@@ -4,6 +4,7 @@
 mod console;
 mod driver;
 mod input;
+mod printk;
 mod raw_io;
 
 use core::arch::asm;
@@ -15,7 +16,7 @@ use text_vga::Attr as VGAAttr;
 use text_vga::Char as VGAChar;
 use text_vga::Color;
 
-use console::ConsoleManager;
+use console::CONSOLE_MANAGER;
 use input::keyboard::Keyboard;
 
 #[panic_handler]
@@ -33,7 +34,6 @@ pub extern "C" fn kernel_entry() -> ! {
 	);
 
 	let mut keyboard = Keyboard::new();
-	let mut console_manager = ConsoleManager::new();
 
 	text_vga::clear();
 	text_vga::enable_cursor(0, 11);
@@ -41,9 +41,9 @@ pub extern "C" fn kernel_entry() -> ! {
 	loop {
 		if let Some(event) = keyboard.get_keyboard_event() {
 			text_vga::putc(24, 79, cyan);
-			console_manager.update(event);
+			unsafe { CONSOLE_MANAGER.update(event) };
 		}
 		text_vga::putc(24, 79, magenta);
-		for _ in 0..90000 {}
+		for _ in 0..50000 {}
 	}
 }

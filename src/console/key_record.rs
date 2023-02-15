@@ -7,13 +7,7 @@ pub struct KeyRecord {
 }
 
 impl KeyRecord {
-	pub fn new() -> Self {
-		Self::default()
-	}
-}
-
-impl Default for KeyRecord {
-	fn default() -> Self {
+	pub const fn new() -> Self {
 		KeyRecord {
 			control: false,
 			alt: false,

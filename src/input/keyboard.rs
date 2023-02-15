@@ -1,12 +1,12 @@
 //! Implements common keyboard tasks
-//! 
+//!
 //! ### some example of common tasks
 //!  - save modifier / toggle keys state
 //!  - convert pressed key to ascii representation (if possible)
 //!  - key repeat rate / threshold
 
 use super::key_event::{Code, Key, KeyState, PrintVar};
-use crate::driver::{ps2::keyboard::get_key_event};
+use crate::driver::ps2::keyboard::get_key_event;
 
 #[derive(Default)]
 pub struct Keyboard {
@@ -20,7 +20,7 @@ pub struct Keyboard {
 }
 
 /// General keyboard event
-/// 
+///
 /// - `state`: either key is pressed or released.
 /// - `key`: **exact** related key.
 /// - `ascii`: ascii representation of key.
@@ -31,13 +31,12 @@ pub struct KeyboardEvent {
 }
 
 impl Keyboard {
-
 	pub fn new() -> Self {
 		Self::default() // false, false, false ...
 	}
 
 	/// 키보드에서 키 하나를 입력받고, 상태를 저장한 후, 받은 키를 반환한다.
-	/// 
+	///
 	/// # Returns
 	///  - `None` -> 현재 키보드 버퍼에서 읽을 키가 존재하지 않음.
 	///  - `Some(x)` -> 읽은 키에 대한 정보
@@ -109,7 +108,7 @@ impl Keyboard {
 	}
 
 	/// 표준 배열과 넘패드에 동시에 존재하는 키를 ascii로 변환함.
-	/// 
+	///
 	/// 만약 시프트가 눌렸고, 눌린 키가 넘패드에서 눌린 것이 아닌 경우
 	/// 추가적인 변환이 일어남.
 	fn numpad_to_ascii(&self, code: u8, var: PrintVar) -> u8 {
