@@ -79,8 +79,6 @@ pub fn put_cursor(y: usize, x: usize) {
 	INDEX_PORT.write_byte(0x0e); // cursor position high
 	DATA_PORT.write_byte(high as u8);
 
-	putc(24, 77, Char::new(y as u8));
-	putc(24, 78, Char::new(x as u8));
 }
 
 fn addr_of(y: usize, x: usize) -> *mut u16 {
