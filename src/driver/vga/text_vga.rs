@@ -29,6 +29,7 @@ pub fn draw(buf: &[[Char; WIDTH]; console::BUFFER_HEIGHT], mut buf_y: usize) {
 	buf_y = 0;
 	while vga_y < HEIGHT {
 		put_line(vga_y, &buf[buf_y]);
+		buf_y += 1;
 		vga_y += 1;
 	}
 }
@@ -77,6 +78,9 @@ pub fn put_cursor(y: usize, x: usize) {
 
 	INDEX_PORT.write_byte(0x0e); // cursor position high
 	DATA_PORT.write_byte(high as u8);
+
+	putc(24, 77, Char::new(y as u8));
+	putc(24, 78, Char::new(x as u8));
 }
 
 fn addr_of(y: usize, x: usize) -> *mut u16 {

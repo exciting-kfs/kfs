@@ -13,7 +13,7 @@
 /// 
 /// otherwise. value is some random value greater than 127(max valid ascii code).
 #[repr(u8)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum Code {
 	None = 0x00,
 	SingleQuote = 0x27,

@@ -1,38 +1,36 @@
 use crate::driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar};
-use crate::input::key_event::Code;
+use crate::input::key_event::{Code, Key, KeyState};
+use crate::input::keyboard::KeyboardEvent;
+use crate::printkln;
+
+use super::cursor::{Cursor, MoveResult};
+use super::key_record::KeyRecord;
 
 pub const BUFFER_HEIGHT: usize = 100;
-const BUFFER_WIDTH: usize = 80;
+pub const BUFFER_WIDTH: usize = 80;
 
-struct Position {
-	y: usize,
-	x: usize,
+pub trait IConsole {
+	fn update(&mut self, ev: &KeyboardEvent, record: &KeyRecord);
+	fn draw(&self);
 }
 
-impl Position {
-	fn new(y: usize, x: usize) -> Self {
-		Position { x, y }
-	}
-}
-
+#[derive(Clone, Copy)]
 pub struct Console {
-	id: u8,
-	buf: [[text_vga::Char; BUFFER_WIDTH]; BUFFER_HEIGHT],
-	buf_top: usize,
-	vga_top: usize,
-	cursor: Position,
+	buf: [[VGAChar; BUFFER_WIDTH]; BUFFER_HEIGHT],
+	pub vga_top: usize,
+	pub buf_top: usize,
+	pub cursor: Cursor,
 	attr: VGAAttr,
 }
 
 impl Console {
-	pub fn new(id: u8) -> Self {
+	pub const fn new() -> Self {
 		let default_char = VGAChar::new(0);
 		Console {
-			id,
 			buf: [[default_char; BUFFER_WIDTH]; BUFFER_HEIGHT],
 			buf_top: 0,
 			vga_top: 0,
-			cursor: Position::new(0, 0),
+			cursor: Cursor::new(0, 0),
 			attr: VGAAttr::default(),
 		}
 	}
@@ -43,25 +41,18 @@ impl Console {
 		let x = self.cursor.x;
 
 		self.buf[y][x] = ch;
-		self._move_cursor(0, 1);
+	}
+
+	pub fn put_char_cursor(&mut self, c: u8, pos: Cursor) {
+		let ch = VGAChar::styled(self.attr, c);
+		let y = pos.y;
+		let x = pos.x;
+
+		self.buf[y][x] = ch;
 	}
 
 	pub fn delete_char(&mut self) {
-		let ch = VGAChar::styled(self.attr, 0);
-		let y = self.cursor.y + self.vga_top;
-		let x = self.cursor.x;
-
-		self.buf[y][x] = ch;
-	}
-
-	pub fn delete_char_and_move_cursor_left(&mut self) {
-		self._move_cursor(0, -1);
-
-		let ch = VGAChar::styled(self.attr, 0);
-		let y = self.cursor.y + self.vga_top;
-		let x = self.cursor.x;
-
-		self.buf[y][x] = ch;
+		self.put_char(0);
 	}
 
 	pub fn change_color(&mut self, color: Code) {
@@ -83,74 +74,98 @@ impl Console {
 		let up = -(text_vga::HEIGHT as isize) + 1;
 		let down = text_vga::HEIGHT as isize - 1;
 
-		match code {
-			Code::Home => self._move_cursor(0, home),
-			Code::ArrowUp => self._move_cursor(-1, 0),
-			Code::PageUp => self._move_cursor(up, 0),
-			Code::ArrowLeft => self._move_cursor(0, -1),
-			Code::ArrowRight => self._move_cursor(0, 1),
-			Code::End => self._move_cursor(0, end),
-			Code::ArrowDown => self._move_cursor(1, 0),
-			Code::PageDown => self._move_cursor(down, 0),
-			_ => {}
+		let res = match code {
+			Code::Home => self.cursor.relative_move(0, home),
+			Code::ArrowUp => self.cursor.relative_move(-1, 0),
+			Code::PageUp => self.cursor.relative_move(up, 0),
+			Code::ArrowLeft => self.cursor.relative_move(0, -1),
+			Code::ArrowRight => self.cursor.relative_move(0, 1),
+			Code::End => self.cursor.relative_move(0, end),
+			Code::ArrowDown => self.cursor.relative_move(1, 0),
+			Code::PageDown => self.cursor.relative_move(down, 0),
+			_ => MoveResult::Pass,
+		};
+
+		if let MoveResult::AdjustTop(dy) = res {
+			self.adjust_vga_top(dy)
 		}
 	}
 
-	pub fn draw(&mut self) {
+	fn _draw(&self) {
 		text_vga::draw(&self.buf, self.vga_top);
 		text_vga::put_cursor(self.cursor.y, self.cursor.x);
+
+		text_vga::putc(24, 75, VGAChar::new(self.buf_top as u8));
+		text_vga::putc(24, 76, VGAChar::new(self.vga_top as u8));
 	}
 
-	fn _move_cursor(&mut self, dy: isize, dx: isize) {
-		let mut y = self.cursor.y as isize + dy;
-		let mut x = self.cursor.x as isize + dx;
-		let vga_width: isize = text_vga::WIDTH as isize;
+	fn adjust_vga_top(&mut self, dy: isize) {
 		let vga_height: isize = text_vga::HEIGHT as isize;
+		let buf_height: isize = BUFFER_HEIGHT as isize;
+		let mut vga_top: isize = self.vga_top as isize;
+		let s = self.buf_top as isize;
+		let e = s - vga_height + 1 + buf_height;
+		let top;
 
-		if x >= vga_width {
-			y += 1;
-			x = 0;
+		if vga_top < s {
+			vga_top += buf_height;
 		}
 
-		if x < 0 {
-			y -= 1;
-			x = vga_width - 1;
+		let y = dy + vga_top as isize;
+
+		if dy < 0 && y < s {
+			top = s;
+		} else if dy > 0 && y >= e {
+			top = e - 1;
+		} else {
+			top = y;
 		}
 
-		if y < 0 {
-			let top = self.vga_top as isize + y;
-			self.vga_top = self.calc_vga_top(top);
-			y = 0;
-		}
+		self.vga_top = top as usize % BUFFER_HEIGHT;
+	}
+}
 
-		if y >= vga_height {
-			let top = self.vga_top as isize + y;
-			let top = top - vga_height + 1;
-			self.vga_top = self.calc_vga_top(top);
-			y = vga_height - 1;
-		}
-
-		self.cursor = Position::new(y as usize, x as usize);
-		text_vga::put_cursor(self.cursor.y, self.cursor.x);
+impl IConsole for Console {
+	fn draw(&self) {
+		self._draw();
 	}
 
-	fn get_vga_top_max(&self) -> usize {
-		if self.buf_top < text_vga::HEIGHT {
-			BUFFER_HEIGHT + self.buf_top - text_vga::HEIGHT
-		} else {
-			self.buf_top - text_vga::HEIGHT
+	fn update(&mut self, ev: &KeyboardEvent, record: &KeyRecord) {
+		if let (Key::Control(c), KeyState::Pressed) = (ev.key, ev.state) {
+			match c {
+				Code::Home
+				| Code::ArrowUp
+				| Code::PageUp
+				| Code::ArrowLeft
+				| Code::ArrowRight
+				| Code::End
+				| Code::ArrowDown
+				| Code::PageDown => self.move_cursor(c),
+				Code::Delete => self.delete_char(),
+				Code::Backspace => {
+					self.move_cursor(Code::ArrowLeft);
+					self.delete_char();
+				}
+				_ => {}
+			}
 		}
-	}
 
-	fn calc_vga_top(&mut self, top: isize) -> usize {
-		let vga_top_max = self.get_vga_top_max();
+		if let Code::None = record.printable {
+			return;
+		}
 
-		if top > vga_top_max as isize {
-			vga_top_max
-		} else if top < self.buf_top as isize {
-			self.buf_top
+		if record.alt {
+			self.change_color(record.printable);
 		} else {
-			top as usize
+			self.put_char(ev.ascii);
+			self.move_cursor(Code::ArrowRight);
+		}
+
+		static mut I: usize = 0;
+
+		printkln!("kernel_entry: {}", I);
+		unsafe {
+			I += 1;
 		}
 	}
 }
