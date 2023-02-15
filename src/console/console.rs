@@ -95,8 +95,6 @@ impl Console {
 		text_vga::draw(&self.buf, self.vga_top);
 		text_vga::put_cursor(self.cursor.y, self.cursor.x);
 
-		text_vga::putc(24, 75, VGAChar::new(self.buf_top as u8));
-		text_vga::putc(24, 76, VGAChar::new(self.vga_top as u8));
 	}
 
 	fn adjust_vga_top(&mut self, dy: isize) {
