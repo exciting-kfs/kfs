@@ -44,6 +44,12 @@ impl ConsoleManager {
 		}
 	}
 
+	pub fn panic(&mut self, kbd_ev: KeyboardEvent) {
+		unsafe { DMESG.flush() };
+		self.read_only.update(&kbd_ev, &self.key_record);
+		self.read_only.draw();
+	}
+
 	pub fn dmesg(&mut self) -> &mut ReadOnlyConsole {
 		&mut self.read_only
 	}
