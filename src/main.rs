@@ -6,6 +6,7 @@ mod driver;
 mod input;
 mod printk;
 mod raw_io;
+mod collection;
 
 use core::panic::PanicInfo;
 
@@ -16,6 +17,8 @@ use text_vga::{Attr as VGAAttr, Char as VGAChar, Color};
 use console::CONSOLE_MANAGER;
 
 use input::keyboard::Keyboard;
+
+use collection::{Window, WrapQueue};
 
 #[panic_handler]
 fn panic_handler_impl(_info: &PanicInfo) -> ! {
@@ -46,8 +49,16 @@ pub extern "C" fn kernel_entry() -> ! {
 
 	let mut keyboard = Keyboard::new();
 
+	// let mut queue = WrapQueue::<VGAChar, 2000>::from_fn(|idx| VGAChar::new((idx % 10) as u8 + b'0'));
+
+	// queue.extend(2000);
+
+	// let view = queue.view(0, 2000).expect("plz");
+
 	text_vga::clear();
 	text_vga::enable_cursor(0, 11);
+
+	// text_vga::put_slice_iter(view);
 
 	loop {
 		if let Some(event) = keyboard.get_keyboard_event() {

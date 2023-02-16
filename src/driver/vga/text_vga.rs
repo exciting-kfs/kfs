@@ -12,7 +12,7 @@ use core::ptr;
 
 pub const WIDTH: usize = 80;
 pub const HEIGHT: usize = 25;
-const MMIO_ADDR: *mut u16 = 0xb8000 as *mut u16; // TODO: use 2d array type
+const MMIO_ADDR: *mut Char = 0xb8000 as *mut Char; // TODO: use 2d array type
 
 static INDEX_PORT: Port = Port::new(0x03d4);
 static DATA_PORT: Port = Port::new(0x03d5);
@@ -40,11 +40,30 @@ pub fn put_line(y: usize, line: &[Char; WIDTH]) {
 	}
 }
 
+pub fn put_slice_iter<'a, Iter>(collection: Iter)
+where
+	Iter: IntoIterator<Item = &'a [Char]>,
+{
+	let mut offset: isize = 0;
+
+	for chunk in collection.into_iter() {
+		let size = chunk.len();
+
+		unsafe {
+			MMIO_ADDR
+				.offset(offset)
+				.copy_from_nonoverlapping(chunk.as_ptr(), size as usize)
+		};
+
+		offset += size as isize;
+	}
+}
+
 pub fn putc(y: usize, x: usize, c: Char) {
 	if x >= WIDTH || y >= HEIGHT {
 		panic!("putc: invalid coordinate ({y}, {x}), ");
 	}
-	unsafe { ptr::write_volatile(addr_of(y, x), c.0) }
+	unsafe { ptr::write_volatile(addr_of(y, x), c) }
 }
 
 pub fn clear() {
@@ -78,10 +97,9 @@ pub fn put_cursor(y: usize, x: usize) {
 
 	INDEX_PORT.write_byte(0x0e); // cursor position high
 	DATA_PORT.write_byte(high as u8);
-
 }
 
-fn addr_of(y: usize, x: usize) -> *mut u16 {
+fn addr_of(y: usize, x: usize) -> *mut Char {
 	let count = offset_count(y, x);
 	unsafe { MMIO_ADDR.offset(count as isize) }
 }
