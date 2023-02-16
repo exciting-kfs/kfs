@@ -1,4 +1,4 @@
-use core::ops::Index;
+use core::ops::{Index, IndexMut};
 
 #[derive(PartialEq)]
 enum State {
@@ -97,50 +97,71 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
         self.extend(1)
     }
 
-    pub fn view<'a>(&'a self, start: usize, size: usize) -> Option<Window<'a, T>> {
+    pub fn window<'a>(&'a self, start: usize, size: usize) -> Option<Window<&'a [T], CAPACITY>> {
         if size == 0 {
             return None;
         }
 
-        // i hope...
         let head = self.translate_idx(start)?;
         let tail = self.translate_idx(start + size - 1)? + 1;
 
-        if head < tail {
-            Some(Window {
-                parts: [&self.data[head..tail], &[]],
-            })
-        } else {
-            Some(Window {
-                parts: [&self.data[head..], &self.data[0..tail]],
-            })
+        Some(Window { head, tail, data: &self.data })
+    }
+
+    pub fn window_mut<'a>(&'a mut self, start: usize, size: usize) -> Option<Window<&'a mut [T], CAPACITY>> {
+        if size == 0 {
+            return None;
         }
+
+        let head = self.translate_idx(start)?;
+        let tail = self.translate_idx(start + size - 1)? + 1;
+
+        Some(Window { head, tail, data: &mut self.data })
     }
 }
 
-pub struct Window<'a, T> {
-    parts: [&'a [T]; 2],
+pub struct Window<T, const N: usize> {
+    head: usize,
+    tail: usize,
+    data: T,
 }
 
-impl<'a, T> Index<usize> for Window<'a, T> {
+impl<'a, T, const CAPACITY: usize> Index<usize> for Window<&'a [T], CAPACITY> {
     type Output = T;
 
     fn index(&self, index: usize) -> &Self::Output {
-        let low_size = self.parts[0].len();
-
-        if low_size > index {
-            &self.parts[0][index]
-        } else {
-            &self.parts[1][index - low_size]
-        }
+        let index = (self.head + index ) % CAPACITY;
+        
+        &self.data[index]
     }
 }
 
-impl<'a, T> IntoIterator for Window<'a, T> {
+impl<'a, T, const CAPACITY: usize> Index<usize> for Window<&'a mut [T], CAPACITY> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        let index = (self.head + index ) % CAPACITY;
+        
+        &self.data[index]
+    }
+}
+
+impl<'a, T, const CAPACITY: usize> IndexMut<usize> for Window<&'a mut [T], CAPACITY> {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        let index = (self.head + index ) % CAPACITY;
+
+        &mut self.data[index]
+    }
+}
+
+impl<'a, T, const N: usize> IntoIterator for Window<&'a [T], N> {
     type Item = &'a [T];
     type IntoIter = core::array::IntoIter<Self::Item, 2>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.parts.into_iter()
+        match self.head < self.tail {
+            true => [&self.data[self.head..self.tail], &[]],
+            false => [&self.data[self.head..], &self.data[0..self.tail]]
+        }.into_iter()
     }
 }

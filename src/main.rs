@@ -7,6 +7,7 @@ mod input;
 mod printk;
 mod raw_io;
 mod collection;
+mod util;
 
 use core::panic::PanicInfo;
 
@@ -19,6 +20,7 @@ use console::CONSOLE_MANAGER;
 use input::keyboard::Keyboard;
 
 use collection::{Window, WrapQueue};
+
 
 #[panic_handler]
 fn panic_handler_impl(_info: &PanicInfo) -> ! {
@@ -63,7 +65,7 @@ pub extern "C" fn kernel_entry() -> ! {
 	loop {
 		if let Some(event) = keyboard.get_keyboard_event() {
 			text_vga::putc(24, 79, cyan);
-			unsafe { CONSOLE_MANAGER.update(event) };
+			unsafe { CONSOLE_MANAGER.get().update(event) };
 		}
 		text_vga::putc(24, 79, magenta);
 		for _ in 0..50000 {}

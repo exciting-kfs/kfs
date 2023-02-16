@@ -17,7 +17,7 @@ impl DebugMessage {
 	}
 
 	pub unsafe fn flush(&mut self) {
-		CONSOLE_MANAGER.dmesg().write_buf(&self.buf, self.len);
+		CONSOLE_MANAGER.get().dmesg().write_buf(&self.buf, self.len);
 		self.len = 0;
 	}
 

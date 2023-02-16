@@ -1,7 +1,7 @@
-use crate::input::{
+use crate::{input::{
 	key_event::{Code, Key, KeyState},
 	keyboard::KeyboardEvent,
-};
+}, driver::vga::text_vga};
 
 use super::{
 	console::{Console, IConsole, BUFFER_HEIGHT, BUFFER_WIDTH},
@@ -15,7 +15,7 @@ pub struct ReadOnlyConsole {
 }
 
 impl ReadOnlyConsole {
-	pub const fn new() -> Self {
+	pub fn new() -> Self {
 		ReadOnlyConsole {
 			inner: Console::new(),
 			w_cursor: Cursor::new(0, 0),
@@ -36,10 +36,14 @@ impl ReadOnlyConsole {
 		if b == b'\n' || (self.w_cursor.x >= BUFFER_WIDTH) {
 			self.w_cursor.x = 0;
 			self.w_cursor.y += 1;
-			self.w_cursor.y %= BUFFER_HEIGHT;
-			self.inner.buf_top = self.w_cursor.y;
-			self.inner.vga_top = self.w_cursor.y;
-			return true;
+			if self.w_cursor.y >= text_vga::HEIGHT {
+				for _ in 0..text_vga::WIDTH {
+					self.inner.buf.push(text_vga::Char::styled(self.inner.attr, b'\0'));
+				}
+				self.w_cursor.y = text_vga::HEIGHT - 1;
+				self.inner.adjust_window_start(1);
+			}
+			return b == b'\n';
 		}
 		false
 	}

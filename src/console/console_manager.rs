@@ -3,11 +3,16 @@ use crate::input::keyboard::KeyboardEvent;
 
 use crate::printk::DMESG;
 
+use crate::util::LazyInit;
+
 use super::console::{Console, IConsole};
 use super::key_record::KeyRecord;
 use super::readonly_console::ReadOnlyConsole;
 
-pub static mut CONSOLE_MANAGER: ConsoleManager = ConsoleManager::new();
+use core::array;
+
+
+pub static mut CONSOLE_MANAGER: LazyInit<ConsoleManager> = LazyInit::new(ConsoleManager::new);
 
 const CONSOLE_COUNTS: usize = 4;
 
@@ -20,13 +25,13 @@ pub struct ConsoleManager {
 }
 
 impl ConsoleManager {
-	pub const fn new() -> Self {
+	pub fn new() -> Self {
 		ConsoleManager {
 			key_record: KeyRecord::new(),
 			foreground: 1,
 			read_only_on: false,
 			read_only: ReadOnlyConsole::new(),
-			console: [Console::new(); 4],
+			console: array::from_fn(|_| Console::new()),
 		}
 	}
 
