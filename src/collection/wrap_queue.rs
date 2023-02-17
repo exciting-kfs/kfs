@@ -77,7 +77,31 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 		self.translate_idx(idx).map(|i| &self.data[i])
 	}
 
-	pub fn extend(&mut self, n: usize) {
+	pub fn push_n(&mut self, item: T, n: usize)
+	where
+		T: Copy,
+	{
+		for _ in 0..n {
+			self.push(item);
+		}
+	}
+
+	pub fn reserve(&mut self, n: usize)
+	where
+		T: Default,
+	{
+		if n > CAPACITY {
+			panic!("insufficient wrapqueue capacity.");
+		}
+
+		let size = self.size();
+		for _ in size..n {
+			let item = T::default();
+			self.push(item);
+		}
+	}
+
+	fn extend(&mut self, n: usize) {
 		for _ in 0..n {
 			if self.full() {
 				self.head = Self::circular_next(self.head);

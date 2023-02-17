@@ -6,39 +6,16 @@ pub use attr::Attr;
 pub use color::Color;
 pub use screen_char::Char;
 
-use crate::console;
 use crate::raw_io::pmio::Port;
 use core::ptr;
 
 pub const WIDTH: usize = 80;
 pub const HEIGHT: usize = 25;
+pub const WINDOW_SIZE: usize = WIDTH * HEIGHT;
 const MMIO_ADDR: *mut Char = 0xb8000 as *mut Char; // TODO: use 2d array type
 
 static INDEX_PORT: Port = Port::new(0x03d4);
 static DATA_PORT: Port = Port::new(0x03d5);
-
-pub fn draw(buf: &[[Char; WIDTH]; console::BUFFER_HEIGHT], mut buf_y: usize) {
-	let mut vga_y = 0;
-
-	while buf_y < console::BUFFER_HEIGHT && vga_y < HEIGHT {
-		put_line(vga_y, &buf[buf_y]);
-		buf_y += 1;
-		vga_y += 1;
-	}
-
-	buf_y = 0;
-	while vga_y < HEIGHT {
-		put_line(vga_y, &buf[buf_y]);
-		buf_y += 1;
-		vga_y += 1;
-	}
-}
-
-pub fn put_line(y: usize, line: &[Char; WIDTH]) {
-	for x in 0..WIDTH {
-		putc(y, x, line[x]);
-	}
-}
 
 pub fn put_slice_iter<'a, Iter>(collection: Iter)
 where

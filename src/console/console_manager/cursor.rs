@@ -1,7 +1,7 @@
 use crate::driver::vga::text_vga;
 pub enum MoveResult {
 	Pass,
-	AdjustTop(isize),
+	AdjustWindowStart(isize),
 }
 
 #[derive(Clone, Copy)]
@@ -33,10 +33,10 @@ impl Cursor {
 		}
 
 		if y < 0 {
-			ret = MoveResult::AdjustTop(y);
+			ret = MoveResult::AdjustWindowStart(y);
 			y = 0;
 		} else if y >= vga_height {
-			ret = MoveResult::AdjustTop(y - vga_height + 1);
+			ret = MoveResult::AdjustWindowStart(y - vga_height + 1);
 			y = vga_height - 1;
 		}
 

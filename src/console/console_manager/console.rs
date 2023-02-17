@@ -1,17 +1,18 @@
-use crate::driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar};
-use crate::input::key_event::{Code, Key, KeyState};
-use crate::input::keyboard::KeyboardEvent;
-use crate::printkln;
-
-use crate::collection::{Window, WrapQueue};
-
 use super::cursor::{Cursor, MoveResult};
 use super::key_record::KeyRecord;
+
+use crate::collection::WrapQueue;
+use crate::driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar};
+use crate::input::{
+	key_event::{Code, Key, KeyState},
+	keyboard::KeyboardEvent,
+};
+use crate::printkln;
 
 pub const BUFFER_HEIGHT: usize = 100;
 pub const BUFFER_WIDTH: usize = 80;
 
-const BUFFER_SIZE: usize = BUFFER_HEIGHT * BUFFER_WIDTH;
+pub const BUFFER_SIZE: usize = BUFFER_HEIGHT * BUFFER_WIDTH;
 
 pub trait IConsole {
 	fn update(&mut self, ev: &KeyboardEvent, record: &KeyRecord);
@@ -19,17 +20,15 @@ pub trait IConsole {
 }
 
 pub struct Console {
-	pub buf: WrapQueue<VGAChar, BUFFER_SIZE>,
-	pub window_start: usize,
-	pub cursor: Cursor,
-	pub attr: VGAAttr,
+	buf: WrapQueue<VGAChar, BUFFER_SIZE>,
+	window_start: usize,
+	cursor: Cursor,
+	attr: VGAAttr,
 }
 
 impl Console {
 	pub fn new() -> Self {
-		let mut buf = WrapQueue::from_fn(|_| VGAChar::new(b'\0'));
-
-		buf.extend(text_vga::WIDTH * text_vga::HEIGHT);
+		let buf = WrapQueue::from_fn(|_| VGAChar::new(b'\0'));
 
 		Console {
 			buf,
@@ -39,19 +38,37 @@ impl Console {
 		}
 	}
 
-	pub fn put_char(&mut self, c: u8) {
-		self.put_char_cursor(c, self.cursor);
+	pub fn buffer_reserved(n: usize) -> Self {
+		let mut buf = WrapQueue::from_fn(|_| VGAChar::new(b'\0'));
+		buf.reserve(n);
+
+		Console {
+			buf,
+			window_start: 0,
+			cursor: Cursor::new(0, 0),
+			attr: VGAAttr::default(),
+		}
 	}
 
-	pub fn put_char_cursor(&mut self, c: u8, pos: Cursor) {
+	pub fn put_char(&mut self, ch: u8) {
 		let mut window = self
 			.buf
 			.window_mut(self.window_start, text_vga::WIDTH * text_vga::HEIGHT)
 			.expect("buffer overflow");
 
-		let ch = VGAChar::styled(self.attr, c);
+		let ch = VGAChar::styled(self.attr, ch);
 
-		window[pos.to_idx()] = ch;
+		window[self.cursor.to_idx()] = ch;
+	}
+
+	pub fn put_char_absolute(&mut self, ch: u8, pos: &Cursor) {
+		let ch = VGAChar::styled(self.attr, ch);
+		*self.buf.at_mut(pos.y * BUFFER_WIDTH + pos.x).unwrap() = ch;
+	}
+
+	pub fn put_empty_line(&mut self) {
+		let ch = VGAChar::styled(self.attr, b'\0');
+		self.buf.push_n(ch, BUFFER_WIDTH);
 	}
 
 	pub fn delete_char(&mut self) {
@@ -85,18 +102,14 @@ impl Console {
 			_ => MoveResult::Pass,
 		};
 
-		if let MoveResult::AdjustTop(dy) = res {
+		if let MoveResult::AdjustWindowStart(dy) = res {
 			self.adjust_window_start(dy)
 		}
 	}
 
-	fn _draw(&self) {
-		let window = self
-			.buf
-			.window(self.window_start, text_vga::WIDTH * text_vga::HEIGHT)
-			.expect("buffer overflow");
-		text_vga::put_slice_iter(window);
-		text_vga::put_cursor(self.cursor.y, self.cursor.x);
+	pub fn sync_window_start(&mut self, y: usize) {
+		self.window_start =
+			usize::checked_sub(text_vga::WIDTH * y, text_vga::WINDOW_SIZE).unwrap_or_default();
 	}
 
 	pub fn adjust_window_start(&mut self, dy: isize) {
@@ -114,7 +127,12 @@ impl Console {
 
 impl IConsole for Console {
 	fn draw(&self) {
-		self._draw();
+		let window = self
+			.buf
+			.window(self.window_start, text_vga::WIDTH * text_vga::HEIGHT)
+			.expect("buffer overflow");
+		text_vga::put_slice_iter(window);
+		text_vga::put_cursor(self.cursor.y, self.cursor.x);
 	}
 
 	fn update(&mut self, ev: &KeyboardEvent, record: &KeyRecord) {
