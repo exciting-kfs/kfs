@@ -1,5 +1,3 @@
-use core::fmt;
-
 #[macro_export]
 macro_rules! printkln {
 	($($arg:tt)*) => {

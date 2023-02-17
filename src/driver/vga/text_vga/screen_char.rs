@@ -17,3 +17,9 @@ impl Char {
 		Self::styled(Attr::default(), b'\0')
 	}
 }
+
+impl Default for Char {
+	fn default() -> Self {
+		Self::empty()
+	}
+}

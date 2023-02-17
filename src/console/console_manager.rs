@@ -1,11 +1,16 @@
+pub mod console;
+mod cursor;
+mod key_record;
+mod readonly_console;
+
+use console::{Console, IConsole};
+use key_record::KeyRecord;
+use readonly_console::ReadOnlyConsole;
+
 use crate::input::key_event::{Code, Key, KeyState};
 use crate::input::keyboard::KeyboardEvent;
-
+use crate::text_vga::WINDOW_SIZE;
 use crate::util::LazyInit;
-
-use super::console::{Console, IConsole};
-use super::key_record::KeyRecord;
-use super::readonly_console::ReadOnlyConsole;
 
 use core::array;
 
@@ -28,7 +33,7 @@ impl ConsoleManager {
 			foreground: 1,
 			read_only_on: false,
 			read_only: ReadOnlyConsole::new(),
-			console: array::from_fn(|_| Console::new()),
+			console: array::from_fn(|_| Console::buffer_reserved(WINDOW_SIZE)),
 		}
 	}
 
@@ -105,13 +110,13 @@ use core::fmt;
 
 impl fmt::Write for ConsoleManager {
 	fn write_str(&mut self, s: &str) -> fmt::Result {
-		unsafe { self.dmesg().write_buf(s.as_bytes()) }
+		self.dmesg().write_buf(s.as_bytes());
 		Ok(())
 	}
 
 	fn write_char(&mut self, c: char) -> fmt::Result {
 		let buf = [c as u8];
-		unsafe { self.dmesg().write_buf(&buf) }
+		self.dmesg().write_buf(&buf);
 		Ok(())
 	}
 }
