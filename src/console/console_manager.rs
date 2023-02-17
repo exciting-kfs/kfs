@@ -47,7 +47,6 @@ impl ConsoleManager {
 	}
 
 	pub fn panic(&mut self, kbd_ev: KeyboardEvent) {
-		unsafe { DMESG.flush() };
 		self.read_only.update(&kbd_ev, &self.key_record);
 		self.read_only.draw();
 	}
@@ -99,5 +98,20 @@ impl ConsoleManager {
 		} else {
 			CONSOLE_COUNTS
 		}
+	}
+}
+
+use core::fmt;
+
+impl fmt::Write for ConsoleManager {
+	fn write_str(&mut self, s: &str) -> fmt::Result {
+		unsafe { self.dmesg().write_buf(s.as_bytes()) }
+		Ok(())
+	}
+
+	fn write_char(&mut self, c: char) -> fmt::Result {
+		let buf = [c as u8];
+		unsafe { self.dmesg().write_buf(&buf) }
+		Ok(())
 	}
 }

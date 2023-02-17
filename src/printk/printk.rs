@@ -1,18 +1,4 @@
-use crate::console::ConsoleManager;
 use core::fmt;
-
-impl fmt::Write for ConsoleManager {
-	fn write_str(&mut self, s: &str) -> fmt::Result {
-		unsafe { self.dmesg().write_buf(s.as_bytes()) }
-		Ok(())
-	}
-
-	fn write_char(&mut self, c: char) -> fmt::Result {
-		let buf = [c as u8];
-		unsafe { self.dmesg().write_buf(&buf) }
-		Ok(())
-	}
-}
 
 #[macro_export]
 macro_rules! printkln {

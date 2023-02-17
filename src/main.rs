@@ -17,7 +17,10 @@ use text_vga::{Attr as VGAAttr, Char as VGAChar, Color};
 
 use console::CONSOLE_MANAGER;
 
-use input::keyboard::Keyboard;
+use input::{
+	key_event::{Code, KeyState},
+	keyboard::{Keyboard, KeyboardEvent},
+};
 
 use collection::{Window, WrapQueue};
 
@@ -35,7 +38,7 @@ fn panic_handler_impl(_info: &PanicInfo) -> ! {
 	let mut keyboard = Keyboard::new();
 	loop {
 		if let Some(event) = keyboard.get_keyboard_event() {
-			unsafe { CONSOLE_MANAGER.panic(event) }
+			unsafe { CONSOLE_MANAGER.get().panic(event) }
 		}
 	}
 }
@@ -50,19 +53,14 @@ pub extern "C" fn kernel_entry() -> ! {
 
 	let mut keyboard = Keyboard::new();
 
-	// let mut queue = WrapQueue::<VGAChar, 2000>::from_fn(|idx| VGAChar::new((idx % 10) as u8 + b'0'));
-
-	// queue.extend(2000);
-
-	// let view = queue.view(0, 2000).expect("plz");
-
 	text_vga::clear();
 	text_vga::enable_cursor(0, 11);
 
-	// text_vga::put_slice_iter(view);
-
 	loop {
 		if let Some(event) = keyboard.get_keyboard_event() {
+			if b'`' == event.ascii {
+				panic!("I hate backtick!!!");
+			}
 			text_vga::putc(24, 79, cyan);
 			unsafe { CONSOLE_MANAGER.get().update(event) };
 		}
