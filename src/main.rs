@@ -7,22 +7,33 @@ mod input;
 mod printk;
 mod raw_io;
 
-use core::arch::asm;
 use core::panic::PanicInfo;
 
 use driver::vga::text_vga;
 
-use text_vga::Attr as VGAAttr;
-use text_vga::Char as VGAChar;
-use text_vga::Color;
+use text_vga::{Attr as VGAAttr, Char as VGAChar, Color};
 
 use console::CONSOLE_MANAGER;
+
 use input::keyboard::Keyboard;
 
 #[panic_handler]
 fn panic_handler_impl(_info: &PanicInfo) -> ! {
-	unsafe { asm!("mov eax, 0x2f65", "mov [0xb8000], eax") }
-	loop {}
+	if let Some(location) = _info.location() {
+		printkln!(
+			"PANIC: {}: ({}, {})",
+			location.file(),
+			location.line(),
+			location.column()
+		);
+	}
+
+	let mut keyboard = Keyboard::new();
+	loop {
+		if let Some(event) = keyboard.get_keyboard_event() {
+			unsafe { CONSOLE_MANAGER.panic(event) }
+		}
+	}
 }
 
 #[no_mangle]
