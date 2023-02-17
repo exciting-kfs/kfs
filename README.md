@@ -2,9 +2,19 @@
 
 ## Dependencies
 
+### build kernel binary
 - cargo / rustc (nightly)
-- qemu
+- nasm 
+
+### build rescue image
 - grub2 (compiled with CC_TARGET=i686-elf-gcc)
+- xorriso
+
+### run with qemu
+- qemu
+
+### debug
+- lldb
 
 ## Configure
 
@@ -32,4 +42,9 @@ $ make rescue
 ### run rescue image with qemu
 ```shell
 $ make run
+```
+
+### debug
+```shell
+$ make debug
 ```
