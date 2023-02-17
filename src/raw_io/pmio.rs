@@ -7,7 +7,6 @@ pub struct Port {
 }
 
 impl Port {
-
 	pub const fn new(port: u16) -> Self {
 		Port { port }
 	}

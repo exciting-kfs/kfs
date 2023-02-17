@@ -1,12 +1,12 @@
 #![no_std]
 #![no_main]
 
+mod collection;
 mod console;
 mod driver;
 mod input;
 mod printk;
 mod raw_io;
-mod collection;
 mod util;
 
 use core::panic::PanicInfo;
@@ -20,7 +20,6 @@ use console::CONSOLE_MANAGER;
 use input::keyboard::Keyboard;
 
 use collection::{Window, WrapQueue};
-
 
 #[panic_handler]
 fn panic_handler_impl(_info: &PanicInfo) -> ! {
