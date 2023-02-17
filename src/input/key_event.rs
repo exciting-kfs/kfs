@@ -13,7 +13,7 @@
 ///
 /// otherwise. value is some random value greater than 127(max valid ascii code).
 #[repr(u8)]
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Code {
 	None = 0x00,
 	SingleQuote = 0x27,
@@ -128,7 +128,7 @@ pub enum Code {
 /// Variant for `Modifier` keys
 ///
 /// represent either key is placed at left side or right side.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum ModVar {
 	Left,
 	Right,
@@ -140,7 +140,7 @@ pub enum ModVar {
 ///
 /// - `Regular`: key is **not** placed on keypad.
 /// - 'Keypad': key is placed on keypad.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum PrintVar {
 	Regular,
 	Keypad,
@@ -154,7 +154,7 @@ pub enum PrintVar {
 /// - `Toggle`: keys which can be toggled. (capslock, numlock, scrlk)
 /// - `Media`: keys which used for media control (play, stop, ...)
 /// - `Acpi`: keys which related to power control (pause, sleep, ...)
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Key {
 	Unknown,
 	Modifier(Code, ModVar),
@@ -165,7 +165,7 @@ pub enum Key {
 	Acpi(Code),
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum KeyState {
 	Pressed,
 	Released,
@@ -189,7 +189,7 @@ impl From<bool> for KeyState {
 	}
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct KeyEvent {
 	pub state: KeyState,
 	pub key: Key,
