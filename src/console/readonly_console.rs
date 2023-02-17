@@ -28,7 +28,7 @@ impl ReadOnlyConsole {
 
 		ReadOnlyConsole {
 			inner,
-			w_cursor: Cursor { y: 0, x: 0 },
+			w_cursor: Cursor::new(0, 0),
 		}
 	}
 
