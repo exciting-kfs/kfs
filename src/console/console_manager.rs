@@ -1,13 +1,15 @@
 use crate::input::key_event::{Code, Key, KeyState};
 use crate::input::keyboard::KeyboardEvent;
 
-use crate::printk::DMESG;
+use crate::util::LazyInit;
 
 use super::console::{Console, IConsole};
 use super::key_record::KeyRecord;
 use super::readonly_console::ReadOnlyConsole;
 
-pub static mut CONSOLE_MANAGER: ConsoleManager = ConsoleManager::new();
+use core::array;
+
+pub static mut CONSOLE_MANAGER: LazyInit<ConsoleManager> = LazyInit::new(ConsoleManager::new);
 
 const CONSOLE_COUNTS: usize = 4;
 
@@ -20,13 +22,13 @@ pub struct ConsoleManager {
 }
 
 impl ConsoleManager {
-	pub const fn new() -> Self {
+	pub fn new() -> Self {
 		ConsoleManager {
 			key_record: KeyRecord::new(),
 			foreground: 1,
 			read_only_on: false,
 			read_only: ReadOnlyConsole::new(),
-			console: [Console::new(); 4],
+			console: array::from_fn(|_| Console::new()),
 		}
 	}
 
@@ -45,7 +47,6 @@ impl ConsoleManager {
 	}
 
 	pub fn panic(&mut self, kbd_ev: KeyboardEvent) {
-		unsafe { DMESG.flush() };
 		self.read_only.update(&kbd_ev, &self.key_record);
 		self.read_only.draw();
 	}
@@ -86,7 +87,6 @@ impl ConsoleManager {
 		} else if control && printable == Code::Minus {
 			self.read_only_on = true;
 			self.key_record.printable = Code::None;
-			unsafe { DMESG.flush() };
 		}
 	}
 
@@ -98,5 +98,20 @@ impl ConsoleManager {
 		} else {
 			CONSOLE_COUNTS
 		}
+	}
+}
+
+use core::fmt;
+
+impl fmt::Write for ConsoleManager {
+	fn write_str(&mut self, s: &str) -> fmt::Result {
+		unsafe { self.dmesg().write_buf(s.as_bytes()) }
+		Ok(())
+	}
+
+	fn write_char(&mut self, c: char) -> fmt::Result {
+		let buf = [c as u8];
+		unsafe { self.dmesg().write_buf(&buf) }
+		Ok(())
 	}
 }

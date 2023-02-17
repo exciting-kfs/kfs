@@ -1,11 +1,13 @@
 #![no_std]
 #![no_main]
 
+mod collection;
 mod console;
 mod driver;
 mod input;
 mod printk;
 mod raw_io;
+mod util;
 
 use core::panic::PanicInfo;
 
@@ -15,7 +17,12 @@ use text_vga::{Attr as VGAAttr, Char as VGAChar, Color};
 
 use console::CONSOLE_MANAGER;
 
-use input::keyboard::Keyboard;
+use input::{
+	key_event::{Code, KeyState},
+	keyboard::{Keyboard, KeyboardEvent},
+};
+
+use collection::{Window, WrapQueue};
 
 #[panic_handler]
 fn panic_handler_impl(_info: &PanicInfo) -> ! {
@@ -31,7 +38,7 @@ fn panic_handler_impl(_info: &PanicInfo) -> ! {
 	let mut keyboard = Keyboard::new();
 	loop {
 		if let Some(event) = keyboard.get_keyboard_event() {
-			unsafe { CONSOLE_MANAGER.panic(event) }
+			unsafe { CONSOLE_MANAGER.get().panic(event) }
 		}
 	}
 }
@@ -51,8 +58,11 @@ pub extern "C" fn kernel_entry() -> ! {
 
 	loop {
 		if let Some(event) = keyboard.get_keyboard_event() {
+			if b'`' == event.ascii {
+				panic!("I hate backtick!!!");
+			}
 			text_vga::putc(24, 79, cyan);
-			unsafe { CONSOLE_MANAGER.update(event) };
+			unsafe { CONSOLE_MANAGER.get().update(event) };
 		}
 		text_vga::putc(24, 79, magenta);
 		for _ in 0..50000 {}
