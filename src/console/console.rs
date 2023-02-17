@@ -13,30 +13,6 @@ pub const BUFFER_WIDTH: usize = 80;
 
 const BUFFER_SIZE: usize = BUFFER_HEIGHT * BUFFER_WIDTH;
 
-//////////////////////////////////////////////////////////////////////
-
-trait ExpectC {
-	type Unwrap;
-
-	fn expect_c(self, ch: u8) -> Self::Unwrap;
-}
-
-impl<T> ExpectC for Option<T> {
-	type Unwrap = T;
-	fn expect_c(self, ch: u8) -> Self::Unwrap {
-
-		match self {
-			None => {
-				text_vga::putc(1, 0, VGAChar::new(ch));
-				panic!();
-			},
-			Some(v) => v,
-		}
-	}
-}
-
-//////////////////////////////////////////////////////////////////////
-
 pub trait IConsole {
 	fn update(&mut self, ev: &KeyboardEvent, record: &KeyRecord);
 	fn draw(&self);
@@ -53,7 +29,7 @@ impl Console {
 	pub fn new() -> Self {
 		let mut buf = WrapQueue::from_fn(|_| VGAChar::new(b'\0'));
 
-		buf.extend(BUFFER_SIZE);
+		buf.extend(text_vga::WIDTH * text_vga::HEIGHT);
 
 		Console {
 			buf,
@@ -68,11 +44,10 @@ impl Console {
 	}
 
 	pub fn put_char_cursor(&mut self, c: u8, pos: Cursor) {
-		// self.buf.push()
 		let mut window = self
 			.buf
 			.window_mut(self.window_start, text_vga::WIDTH * text_vga::HEIGHT)
-			.expect_c(b'P');
+			.expect("buffer overflow");
 
 		let ch = VGAChar::styled(self.attr, c);
 
@@ -86,7 +61,7 @@ impl Console {
 	pub fn change_color(&mut self, color: Code) {
 		self.attr = VGAAttr::form_u8(color as u8);
 
-		for i in 0..BUFFER_SIZE {
+		for i in 0..self.buf.size() {
 			let ch = self.buf.at_mut(i).unwrap();
 			*ch = VGAChar::styled(self.attr, (ch.0 & 0xff) as u8);
 		}
@@ -119,42 +94,21 @@ impl Console {
 		let window = self
 			.buf
 			.window(self.window_start, text_vga::WIDTH * text_vga::HEIGHT)
-			.expect_c(b'D');
+			.expect("buffer overflow");
 		text_vga::put_slice_iter(window);
 		text_vga::put_cursor(self.cursor.y, self.cursor.x);
 	}
 
 	pub fn adjust_window_start(&mut self, dy: isize) {
 		let orig = self.window_start as isize;
-		
 		let delta = dy * text_vga::WIDTH as isize;
-
-		let max_window_start = (BUFFER_SIZE - text_vga::HEIGHT * text_vga::WIDTH) as isize;
+		let window_size = (text_vga::HEIGHT * text_vga::WIDTH) as isize;
+		let max_window_start = (BUFFER_SIZE as isize - window_size) as isize;
 
 		self.window_start = (orig + delta).clamp(0, max_window_start) as usize;
 
-		// let vga_height: isize = text_vga::HEIGHT as isize;
-		// let buf_height: isize = BUFFER_HEIGHT as isize;
-		// let mut vga_top: isize = self.vga_top as isize;
-		// let s = self.buf_top as isize;
-		// let e = s - vga_height + 1 + buf_height;
-		// let top;
-
-		// if vga_top < s {
-		// 	vga_top += buf_height;
-		// }
-
-		// let y = dy + vga_top as isize;
-
-		// if dy < 0 && y < s {
-		// 	top = s;
-		// } else if dy > 0 && y >= e {
-		// 	top = e - 1;
-		// } else {
-		// 	top = y;
-		// }
-
-		// self.vga_top = top as usize % BUFFER_HEIGHT;
+		let overflow = (self.window_start as isize + window_size) - self.buf.size() as isize;
+		(0..overflow).for_each(|_| self.buf.push(text_vga::Char::styled(self.attr, b'\0')));
 	}
 }
 
@@ -194,7 +148,7 @@ impl IConsole for Console {
 			self.move_cursor(Code::ArrowRight);
 		}
 
-		// ㄷㄷ
+		// FIXME hmm....
 		static mut I: usize = 0;
 
 		printkln!("kernel_entry: {}", I);

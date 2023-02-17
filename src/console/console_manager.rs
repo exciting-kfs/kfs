@@ -1,8 +1,6 @@
 use crate::input::key_event::{Code, Key, KeyState};
 use crate::input::keyboard::KeyboardEvent;
 
-use crate::printk::DMESG;
-
 use crate::util::LazyInit;
 
 use super::console::{Console, IConsole};
@@ -10,7 +8,6 @@ use super::key_record::KeyRecord;
 use super::readonly_console::ReadOnlyConsole;
 
 use core::array;
-
 
 pub static mut CONSOLE_MANAGER: LazyInit<ConsoleManager> = LazyInit::new(ConsoleManager::new);
 
@@ -91,7 +88,6 @@ impl ConsoleManager {
 		} else if control && printable == Code::Minus {
 			self.read_only_on = true;
 			self.key_record.printable = Code::None;
-			unsafe { DMESG.flush() };
 		}
 	}
 

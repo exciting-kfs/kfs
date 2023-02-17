@@ -1,7 +1,12 @@
-use crate::{input::{
-	key_event::{Code, Key, KeyState},
-	keyboard::KeyboardEvent,
-}, driver::vga::text_vga};
+use crate::printkln;
+
+use crate::{
+	driver::vga::text_vga::{self, Char as VGAChar},
+	input::{
+		key_event::{Code, Key, KeyState},
+		keyboard::KeyboardEvent,
+	},
+};
 
 use super::{
 	console::{Console, IConsole, BUFFER_HEIGHT, BUFFER_WIDTH},
@@ -16,36 +21,58 @@ pub struct ReadOnlyConsole {
 
 impl ReadOnlyConsole {
 	pub fn new() -> Self {
+		let mut inner = Console::new();
+
+		let size = inner.buf.size();
+		inner.buf.extend(BUFFER_HEIGHT * BUFFER_WIDTH - size);
+
 		ReadOnlyConsole {
-			inner: Console::new(),
-			w_cursor: Cursor::new(0, 0),
+			inner,
+			w_cursor: Cursor { y: 0, x: 0 },
 		}
 	}
 
-	pub fn write_buf(&mut self, buf: &[u8], len: usize) {
-		for i in 0..len {
-			if self.endl(buf[i]) {
+	pub fn write_buf(&mut self, buf: &[u8]) {
+		for ch in buf {
+			let ch = *ch;
+
+			if ch == b'\n' {
+				self.endl();
 				continue;
 			}
-			self.inner.put_char_cursor(buf[i], self.w_cursor);
+
+			if self.w_cursor.x >= BUFFER_WIDTH {
+				self.endl();
+			}
+
+			let ch = VGAChar::styled(self.inner.attr, ch);
+
+			*self
+				.inner
+				.buf
+				.at_mut(self.w_cursor.y * BUFFER_WIDTH + self.w_cursor.x)
+				.unwrap() = ch;
+
 			self.w_cursor.x += 1;
 		}
+
+		self.inner.window_start = usize::checked_sub(
+			text_vga::WIDTH * (self.w_cursor.y + 1),
+			text_vga::WIDTH * text_vga::HEIGHT,
+		)
+		.unwrap_or_default();
 	}
 
-	fn endl(&mut self, b: u8) -> bool {
-		if b == b'\n' || (self.w_cursor.x >= BUFFER_WIDTH) {
-			self.w_cursor.x = 0;
-			self.w_cursor.y += 1;
-			if self.w_cursor.y >= text_vga::HEIGHT {
-				for _ in 0..text_vga::WIDTH {
-					self.inner.buf.push(text_vga::Char::styled(self.inner.attr, b'\0'));
-				}
-				self.w_cursor.y = text_vga::HEIGHT - 1;
-				self.inner.adjust_window_start(1);
+	pub fn endl(&mut self) {
+		self.w_cursor.y += 1;
+		self.w_cursor.x = 0;
+
+		if self.w_cursor.y >= BUFFER_HEIGHT {
+			self.w_cursor.y -= 1;
+			for _ in 0..BUFFER_WIDTH {
+				self.inner.buf.push(VGAChar::styled(self.inner.attr, b'\0'));
 			}
-			return b == b'\n';
 		}
-		false
 	}
 }
 
@@ -67,7 +94,13 @@ impl IConsole for ReadOnlyConsole {
 				| Code::PageDown => self.inner.move_cursor(c),
 				_ => {}
 			}
-		} else if record.alt {
+		}
+
+		if let Code::None = record.printable {
+			return;
+		}
+
+		if record.alt {
 			self.inner.change_color(record.printable);
 		}
 	}

@@ -42,7 +42,7 @@ impl Cursor {
 
 		self.x = x as usize;
 		self.y = y as usize;
-		
+
 		ret
 	}
 
