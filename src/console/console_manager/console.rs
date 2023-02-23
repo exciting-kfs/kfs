@@ -1,13 +1,11 @@
 use super::cursor::{Cursor, MoveResult};
-use super::key_record::KeyRecord;
 
 use crate::collection::WrapQueue;
 use crate::driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar};
 use crate::input::{
-	key_event::{Code, Key, KeyState},
+	key_event::{Code, CursorCode, KeyKind},
 	keyboard::KeyboardEvent,
 };
-use crate::printkln;
 
 pub const BUFFER_HEIGHT: usize = 100;
 pub const BUFFER_WIDTH: usize = 80;
@@ -15,7 +13,7 @@ pub const BUFFER_WIDTH: usize = 80;
 pub const BUFFER_SIZE: usize = BUFFER_HEIGHT * BUFFER_WIDTH;
 
 pub trait IConsole {
-	fn update(&mut self, ev: &KeyboardEvent, record: &KeyRecord);
+	fn update(&mut self, ev: &KeyboardEvent);
 	fn draw(&self);
 }
 
@@ -84,22 +82,21 @@ impl Console {
 		}
 	}
 
-	pub fn move_cursor(&mut self, code: Code) {
+	pub fn move_cursor(&mut self, code: CursorCode) {
 		let home = -(self.cursor.x as isize);
 		let end = (BUFFER_WIDTH - self.cursor.x - 1) as isize;
 		let up = -(text_vga::HEIGHT as isize) + 1;
 		let down = text_vga::HEIGHT as isize - 1;
 
 		let res = match code {
-			Code::Home => self.cursor.relative_move(0, home),
-			Code::ArrowUp => self.cursor.relative_move(-1, 0),
-			Code::PageUp => self.cursor.relative_move(up, 0),
-			Code::ArrowLeft => self.cursor.relative_move(0, -1),
-			Code::ArrowRight => self.cursor.relative_move(0, 1),
-			Code::End => self.cursor.relative_move(0, end),
-			Code::ArrowDown => self.cursor.relative_move(1, 0),
-			Code::PageDown => self.cursor.relative_move(down, 0),
-			_ => MoveResult::Pass,
+			CursorCode::Up => self.cursor.relative_move(-1, 0),
+			CursorCode::Down => self.cursor.relative_move(1, 0),
+			CursorCode::Left => self.cursor.relative_move(0, -1),
+			CursorCode::Right => self.cursor.relative_move(0, 1),
+			CursorCode::PageUp => self.cursor.relative_move(up, 0),
+			CursorCode::PageDown => self.cursor.relative_move(down, 0),
+			CursorCode::Home => self.cursor.relative_move(0, home),
+			CursorCode::End => self.cursor.relative_move(0, end),
 		};
 
 		if let MoveResult::AdjustWindowStart(dy) = res {
@@ -135,43 +132,27 @@ impl IConsole for Console {
 		text_vga::put_cursor(self.cursor.y, self.cursor.x);
 	}
 
-	fn update(&mut self, ev: &KeyboardEvent, record: &KeyRecord) {
-		if let (Key::Control(c), KeyState::Pressed) = (ev.key, ev.state) {
-			match c {
-				Code::Home
-				| Code::ArrowUp
-				| Code::PageUp
-				| Code::ArrowLeft
-				| Code::ArrowRight
-				| Code::End
-				| Code::ArrowDown
-				| Code::PageDown => self.move_cursor(c),
-				Code::Delete => self.delete_char(),
-				Code::Backspace => {
-					self.move_cursor(Code::ArrowLeft);
-					self.delete_char();
-				}
-				_ => {}
-			}
-		}
-
-		if let Code::None = record.printable {
+	fn update(&mut self, ev: &KeyboardEvent) {
+		if !ev.event.pressed() {
 			return;
 		}
 
-		if record.alt {
-			self.change_color(record.printable);
-		} else {
-			self.put_char(ev.ascii);
-			self.move_cursor(Code::ArrowRight);
+		match ev.event.identify() {
+			KeyKind::Printable(_) => {
+				self.put_char(ev.ascii);
+				self.move_cursor(CursorCode::Right);
+			}
+			KeyKind::Cursor(c) => self.move_cursor(c),
+			_ => (),
 		}
 
-		// FIXME hmm....
-		static mut I: usize = 0;
-
-		printkln!("kernel_entry: {}", I);
-		unsafe {
-			I += 1;
+		match ev.event.key {
+			Code::Delete => self.delete_char(),
+			Code::Backspace => {
+				self.move_cursor(CursorCode::Left);
+				self.delete_char();
+			}
+			_ => (),
 		}
 	}
 }

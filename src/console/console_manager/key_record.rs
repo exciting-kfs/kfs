@@ -11,7 +11,7 @@ impl KeyRecord {
 		KeyRecord {
 			control: false,
 			alt: false,
-			printable: Code::None,
+			printable: Code::Unknown,
 		}
 	}
 }

@@ -7,7 +7,7 @@ use console::{Console, IConsole};
 use key_record::KeyRecord;
 use readonly_console::ReadOnlyConsole;
 
-use crate::input::key_event::{Code, Key, KeyState};
+use crate::input::key_event::{Code, KeyEvent, KeyKind};
 use crate::input::keyboard::KeyboardEvent;
 use crate::text_vga::WINDOW_SIZE;
 use crate::util::LazyInit;
@@ -19,7 +19,6 @@ pub static mut CONSOLE_MANAGER: LazyInit<ConsoleManager> = LazyInit::new(Console
 const CONSOLE_COUNTS: usize = 4;
 
 pub struct ConsoleManager {
-	key_record: KeyRecord,
 	foreground: usize,
 	read_only_on: bool,
 	read_only: ReadOnlyConsole,
@@ -29,7 +28,6 @@ pub struct ConsoleManager {
 impl ConsoleManager {
 	pub fn new() -> Self {
 		ConsoleManager {
-			key_record: KeyRecord::new(),
 			foreground: 1,
 			read_only_on: false,
 			read_only: ReadOnlyConsole::new(),
@@ -38,21 +36,18 @@ impl ConsoleManager {
 	}
 
 	pub fn update(&mut self, kbd_ev: KeyboardEvent) {
-		self.record_key(&kbd_ev);
-		self.select_console();
-
 		if self.read_only_on {
-			self.read_only.update(&kbd_ev, &self.key_record);
+			self.read_only.update(&kbd_ev);
 			self.read_only.draw();
 		} else {
 			let console = &mut self.console[self.foreground];
-			console.update(&kbd_ev, &self.key_record);
+			console.update(&kbd_ev);
 			console.draw();
 		}
 	}
 
 	pub fn panic(&mut self, kbd_ev: KeyboardEvent) {
-		self.read_only.update(&kbd_ev, &self.key_record);
+		self.read_only.update(&kbd_ev);
 		self.read_only.draw();
 	}
 
@@ -60,40 +55,24 @@ impl ConsoleManager {
 		&mut self.read_only
 	}
 
-	fn record_key(&mut self, kbd_ev: &KeyboardEvent) {
-		let is_pressed = kbd_ev.state == KeyState::Pressed;
+	// fn select_console(&mut self) {
+	// 	let printable = self.key_record.printable;
+	// 	let control = self.key_record.control;
 
-		match kbd_ev.key {
-			Key::Printable(c, _) => {
-				self.key_record.printable = if is_pressed { c } else { Code::None }
-			}
-			Key::Modifier(c, _) => match c {
-				Code::Control => self.key_record.control = is_pressed,
-				Code::Alt => self.key_record.alt = is_pressed,
-				_ => {}
-			},
-			_ => {}
-		}
-	}
+	// 	if let Code::None = printable {
+	// 		return;
+	// 	}
 
-	fn select_console(&mut self) {
-		let printable = self.key_record.printable;
-		let control = self.key_record.control;
-
-		if let Code::None = printable {
-			return;
-		}
-
-		let num = self.is_console_index(printable);
-		if control && num <= CONSOLE_COUNTS - 1 {
-			self.read_only_on = false;
-			self.foreground = num as usize;
-			self.key_record.printable = Code::None;
-		} else if control && printable == Code::Minus {
-			self.read_only_on = true;
-			self.key_record.printable = Code::None;
-		}
-	}
+	// 	let num = self.is_console_index(printable);
+	// 	if control && num <= CONSOLE_COUNTS - 1 {
+	// 		self.read_only_on = false;
+	// 		self.foreground = num as usize;
+	// 		self.key_record.printable = Code::None;
+	// 	} else if control && printable == Code::Minus {
+	// 		self.read_only_on = true;
+	// 		self.key_record.printable = Code::None;
+	// 	}
+	// }
 
 	fn is_console_index(&self, code: Code) -> usize {
 		let code = code as usize;

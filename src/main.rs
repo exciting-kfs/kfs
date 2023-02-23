@@ -61,10 +61,14 @@ pub extern "C" fn kernel_entry() -> ! {
 			if b'`' == event.ascii {
 				panic!("I hate backtick!!!");
 			}
+			printkln!(
+				"key is {:?}, pressed={}",
+				event.event.key,
+				event.event.pressed()
+			);
 			text_vga::putc(24, 79, cyan);
 			unsafe { CONSOLE_MANAGER.get().update(event) };
 		}
 		text_vga::putc(24, 79, magenta);
-		for _ in 0..50000 {}
 	}
 }

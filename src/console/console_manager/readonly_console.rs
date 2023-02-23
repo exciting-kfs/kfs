@@ -1,12 +1,8 @@
-use crate::input::{
-	key_event::{Code, Key, KeyState},
-	keyboard::KeyboardEvent,
-};
+use crate::input::{key_event::KeyKind, keyboard::KeyboardEvent};
 
 use super::{
 	console::{Console, IConsole, BUFFER_HEIGHT, BUFFER_SIZE, BUFFER_WIDTH},
 	cursor::Cursor,
-	key_record::KeyRecord,
 };
 
 pub struct ReadOnlyConsole {
@@ -60,27 +56,13 @@ impl IConsole for ReadOnlyConsole {
 		self.inner.draw();
 	}
 
-	fn update(&mut self, ev: &KeyboardEvent, record: &KeyRecord) {
-		if let (Key::Control(c), KeyState::Pressed) = (ev.key, ev.state) {
-			match c {
-				Code::Home
-				| Code::ArrowUp
-				| Code::PageUp
-				| Code::ArrowLeft
-				| Code::ArrowRight
-				| Code::End
-				| Code::ArrowDown
-				| Code::PageDown => self.inner.move_cursor(c),
-				_ => {}
-			}
-		}
-
-		if let Code::None = record.printable {
+	fn update(&mut self, ev: &KeyboardEvent) {
+		if !ev.event.pressed() {
 			return;
 		}
 
-		if record.alt {
-			self.inner.change_color(record.printable);
+		if let KeyKind::Cursor(c) = ev.event.identify() {
+			self.inner.move_cursor(c);
 		}
 	}
 }
