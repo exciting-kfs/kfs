@@ -121,6 +121,25 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 		self.extend(1)
 	}
 
+	pub fn pop(&mut self) -> Option<T>
+	where
+		T: Copy,
+	{
+		if self.empty() {
+			return None;
+		}
+
+		let value = self.data[self.head];
+		self.head = Self::circular_next(self.head);
+
+		self.state = match self.tail == self.head {
+			true => State::Empty,
+			false => State::Avail,
+		};
+
+		Some(value)
+	}
+
 	pub fn window<'a>(&'a self, start: usize, size: usize) -> Option<Window<&'a [T], CAPACITY>> {
 		if size == 0 {
 			return None;

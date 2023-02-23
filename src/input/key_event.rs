@@ -274,6 +274,20 @@ pub enum KeyKind {
 	Control(ControlCode),
 }
 
+impl Key {
+	pub fn as_code(&self) -> Code {
+		match self {
+			Key::Modifier(c, ..) => *c,
+			Key::Printable(c, ..) => *c,
+			Key::Control(c) => *c,
+			Key::Toggle(c) => *c,
+			Key::Media(c) => *c,
+			Key::Acpi(c) => *c,
+			_ => unreachable!("unknown key"),
+		}
+	}
+}
+
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum KeyState {
 	Pressed,
