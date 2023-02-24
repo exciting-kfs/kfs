@@ -11,9 +11,11 @@ fi
 mkfifo $SERIAL
 
 scripts/rescue.sh && qemu-system-i386	\
- -boot d								\
- -vga std								\
- -cdrom rescue.iso						\
- -monitor stdio							\
+ -boot d				\
+ -vga std				\
+ -cdrom rescue.iso			\
+ -monitor stdio				\
+ -bios bios.bin				\
+ -m 4096M				\
  -serial pipe:$SERIAL
 

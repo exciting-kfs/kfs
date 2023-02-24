@@ -1,13 +1,8 @@
-%define STACK_SIZE 0x400000 ; 4MB
-
-section .stack
-global stack_init
-    resb STACK_SIZE
-stack_init:
-
 section .text
 extern kernel_entry
+extern gdt_init
 global kernel_init
+global enter_rust_code
 
 for_stacktrace:
     call kernel_init

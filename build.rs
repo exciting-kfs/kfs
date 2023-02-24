@@ -2,7 +2,7 @@ use glob::glob;
 use nasm_rs;
 
 const LINKER_SCRIPT: &str = "src/linker.ld";
-static NASM_FLAGS: &[&str] = &["-felf"];
+static NASM_FLAGS: &[&str] = &["-felf", "-Isrc/init"];
 const LIB_NAME: &str = "init";
 
 /* Cargo Book, Rustc Book,

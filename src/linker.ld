@@ -1,19 +1,22 @@
 ENTRY(kernel_init)
 
 EXTERN(multiboot2_header_start)
+EXTERN(gdt)
 
 SECTIONS {
-	. = 1M;
+	/* . = 0x800;
+	.gdt : {
+		KEEP(*(.gdt))
+	} */
 
+	. = 1M;
 	.boot : ALIGN(64) {
 		KEEP(*(.multiboot2_header))
 	}
 
-    	.text : {
+	. = 2M;
+	.text : {
 		*(.text .text.*)
 	}
 
- 	.stack : ALIGN(16) {
-		*(.stack)
-   	}
 }
