@@ -4,19 +4,17 @@
 //!  - save pressed key state
 //!  - key repeat rate / threshold
 
-use super::key_event::{Code, KeyEvent};
+use super::key_event::{Code, KeyEvent, KeyKind};
 use crate::driver::ps2::keyboard::get_key_event;
-
-pub static mut KEYBOARD: Keyboard = Keyboard::new();
 
 #[derive(Default)]
 pub struct Keyboard {
-	state: [u32; 8], // 256bit
+	state: [u32; 8], // 256bit (at least bigger then u8::MAX)
 }
 
 impl Keyboard {
 	pub const fn new() -> Self {
-		Self::default() // false, false, false ...
+		Keyboard{ state: [0; 8] } // false, false, false ...
 	}
 
 	/// 키보드에서 키 하나를 입력받고, 상태를 저장한 후, 받은 키를 반환한다.
@@ -44,10 +42,27 @@ impl Keyboard {
 		}
 	}
 
+	/// 현재 키  `code` 가 눌린 상태인지 검사
 	pub fn pressed(&self, code: Code) -> bool {
 		let (arr, bit) = Self::bit_index(code as u8);
 
 		(self.state[arr] & (1 << bit)) != 0
+	}
+
+	pub fn shift_pressed(&self) -> bool {
+		self.pressed(Code::LShift) || self.pressed(Code::RShift)
+	}
+
+	pub fn gui_pressed(&self) -> bool {
+		self.pressed(Code::LGui) || self.pressed(Code::RGui)
+	}
+
+	pub fn control_pressed(&self) -> bool {
+		self.pressed(Code::LControl) || self.pressed(Code::LControl)
+	}
+
+	pub fn alt_pressed(&self) -> bool {
+		self.pressed(Code::LAlt) || self.pressed(Code::RAlt)
 	}
 
 	fn bit_index(idx: u8) -> (usize, usize) {
@@ -72,20 +87,23 @@ impl Keyboard {
 		self.state[arr] ^= 1 << bit;
 	}
 
-	fn change_key_state(&mut self, event: KeyEvent) {
-		let code = event.key.as_code();
+	pub fn change_key_state(&mut self, event: KeyEvent) {
+		let code = event.key;
 
 		// pause doesn't have press / release state.
 		if let Code::Pause = code {
 			return;
 		}
 
-		if let Key::Toggle(..) = event.key {
-			self.toggle_state_at(code as u8);
+		if let KeyKind::Toggle(..) = event.identify() {
+			if event.pressed() {
+				self.toggle_state_at(code as u8);
+			}
 		} else {
-			match event.state {
-				KeyState::Pressed => self.set_state_at(code as u8),
-				KeyState::Released => self.clear_state_at(code as u8),
+			if event.pressed() {
+				self.set_state_at(code as u8);
+			} else {
+				self.clear_state_at(code as u8);
 			}
 		}
 	}

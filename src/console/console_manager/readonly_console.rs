@@ -1,5 +1,3 @@
-use crate::input::{key_event::KeyKind, keyboard::KeyboardEvent};
-
 use super::{
 	console::{Console, IConsole, BUFFER_HEIGHT, BUFFER_SIZE, BUFFER_WIDTH},
 	cursor::Cursor,
@@ -56,13 +54,15 @@ impl IConsole for ReadOnlyConsole {
 		self.inner.draw();
 	}
 
-	fn update(&mut self, ev: &KeyboardEvent) {
-		if !ev.event.pressed() {
-			return;
-		}
+	fn update(&mut self, ascii: &[u8]) {}
 
-		if let KeyKind::Cursor(c) = ev.event.identify() {
-			self.inner.move_cursor(c);
-		}
-	}
+	// fn update(&mut self, ev: &KeyboardEvent) {
+	// 	if !ev.event.pressed() {
+	// 		return;
+	// 	}
+
+	// 	if let KeyKind::Cursor(c) = ev.event.identify() {
+	// 		self.inner.move_cursor(c);
+	// 	}
+	// }
 }

@@ -2,10 +2,7 @@ use super::cursor::{Cursor, MoveResult};
 
 use crate::collection::WrapQueue;
 use crate::driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar};
-use crate::input::{
-	key_event::{Code, CursorCode, KeyKind},
-	keyboard::KeyboardEvent,
-};
+use crate::input::key_event::{Code, CursorCode};
 
 pub const BUFFER_HEIGHT: usize = 100;
 pub const BUFFER_WIDTH: usize = 80;
@@ -13,11 +10,24 @@ pub const BUFFER_WIDTH: usize = 80;
 pub const BUFFER_SIZE: usize = BUFFER_HEIGHT * BUFFER_WIDTH;
 
 pub trait IConsole {
-	fn update(&mut self, ev: &KeyboardEvent);
+	fn update(&mut self, ascii: &[u8]);
 	fn draw(&self);
 }
 
+enum AsciiEscape {
+	Start,
+	Escape,
+
+	Function,
+	Csi,
+
+	PageUp,
+	PageDown,
+	Delete,
+}
+
 pub struct Console {
+	state: AsciiEscape,
 	buf: WrapQueue<VGAChar, BUFFER_SIZE>,
 	window_start: usize,
 	cursor: Cursor,
@@ -29,6 +39,7 @@ impl Console {
 		let buf = WrapQueue::from_fn(|_| VGAChar::new(b'\0'));
 
 		Console {
+			state: AsciiEscape::Start,
 			buf,
 			window_start: 0,
 			cursor: Cursor::new(0, 0),
@@ -41,6 +52,7 @@ impl Console {
 		buf.reserve(n);
 
 		Console {
+			state: AsciiEscape::Start,
 			buf,
 			window_start: 0,
 			cursor: Cursor::new(0, 0),
@@ -120,6 +132,150 @@ impl Console {
 		let overflow = (self.window_start as isize + window_size) - self.buf.size() as isize;
 		(0..overflow).for_each(|_| self.buf.push(text_vga::Char::styled(self.attr, b'\0')));
 	}
+
+	// yeah.. i know... i will refactor it ASAP. for now it's just for test.
+
+	fn parse_start(&mut self, c: u8) {
+		if c.is_ascii_graphic() {
+			self.put_char(c);
+			self.move_cursor(CursorCode::Right);
+			return;
+		}
+
+		if c == b'\n' {
+			self.move_cursor(CursorCode::Home);
+			self.move_cursor(CursorCode::Down);
+			return;
+		}
+
+		if c == b'\x7f' {
+			self.delete_char();
+			self.move_cursor(CursorCode::Left);
+			return;
+		}
+
+		if c == b'\x1b' {
+			self.state = AsciiEscape::Escape;
+			return;
+		}
+	}
+
+	fn parse_esc(&mut self, c: u8) {
+		if c == b'[' {
+			self.state = AsciiEscape::Csi;
+			return;
+		}
+
+		if c == b'O' {
+			self.state = AsciiEscape::Function;
+			return;
+		}
+
+		// unknown escape sequence
+		self.state = AsciiEscape::Start;
+	}
+
+	fn dumb_puti(&mut self, n: u8) {
+		if n == 0 {
+			return;
+		}
+
+		let c = (n % 10) + b'0';
+
+		self.dumb_puti(n / 10);
+
+		self.put_char(c);
+		self.move_cursor(CursorCode::Right);
+	}
+
+	fn parse_fn(&mut self, c: u8) {
+		if b'P' <= c && c <= b'[' {
+			let offset = c - b'P' + 1;
+
+			self.put_char(b'F');
+			self.move_cursor(CursorCode::Right);
+
+			self.dumb_puti(offset);
+		}
+
+		self.state = AsciiEscape::Start;
+	}
+
+	fn parse_csi(&mut self, c: u8) {
+		if c == b'A' {
+			self.move_cursor(CursorCode::Up);
+			self.state = AsciiEscape::Start;
+			return;
+		}
+
+		if c == b'B' {
+			self.move_cursor(CursorCode::Down);
+			self.state = AsciiEscape::Start;
+			return;
+		}
+
+		if c == b'C' {
+			self.move_cursor(CursorCode::Right);
+			self.state = AsciiEscape::Start;
+			return;
+		}
+
+		if c == b'D' {
+			self.move_cursor(CursorCode::Left);
+			self.state = AsciiEscape::Start;
+			return;
+		}
+
+		if c == b'H' {
+			self.move_cursor(CursorCode::Home);
+			self.state = AsciiEscape::Start;
+			return;
+		}
+
+		if c == b'F' {
+			self.move_cursor(CursorCode::End);
+			self.state = AsciiEscape::Start;
+			return;
+		}
+
+		if c == b'5' {
+			self.state = AsciiEscape::PageUp;
+			return;
+		}
+
+		if c == b'6' {
+			self.state = AsciiEscape::PageDown;
+			return;
+		}
+
+		if c == b'3' {
+			self.state = AsciiEscape::Delete;
+			return;
+		}
+
+		self.state = AsciiEscape::Start;
+	}
+
+	fn parse_pgdn(&mut self, c: u8) {
+		if c == b'~' {
+			self.move_cursor(CursorCode::PageDown);
+		}
+		self.state = AsciiEscape::Start;
+	}
+
+	fn parse_pgup(&mut self, c: u8) {
+		if c == b'~' {
+			self.move_cursor(CursorCode::PageUp);
+		}
+		self.state = AsciiEscape::Start;
+	}
+
+	fn parse_del(&mut self, c: u8) {
+		if c == b'~' {
+			self.delete_char();
+		}
+		self.state = AsciiEscape::Start;
+	}
 }
 
 impl IConsole for Console {
@@ -132,27 +288,17 @@ impl IConsole for Console {
 		text_vga::put_cursor(self.cursor.y, self.cursor.x);
 	}
 
-	fn update(&mut self, ev: &KeyboardEvent) {
-		if !ev.event.pressed() {
-			return;
-		}
-
-		match ev.event.identify() {
-			KeyKind::Printable(_) => {
-				self.put_char(ev.ascii);
-				self.move_cursor(CursorCode::Right);
+	fn update(&mut self, ascii: &[u8]) {
+		for c in ascii {
+			match self.state {
+				AsciiEscape::Start => self.parse_start(*c),
+				AsciiEscape::Escape => self.parse_esc(*c),
+				AsciiEscape::Function => self.parse_fn(*c),
+				AsciiEscape::Csi => self.parse_csi(*c),
+				AsciiEscape::PageUp => self.parse_pgup(*c),
+				AsciiEscape::PageDown => self.parse_pgdn(*c),
+				AsciiEscape::Delete => self.parse_del(*c),
 			}
-			KeyKind::Cursor(c) => self.move_cursor(c),
-			_ => (),
-		}
-
-		match ev.event.key {
-			Code::Delete => self.delete_char(),
-			Code::Backspace => {
-				self.move_cursor(CursorCode::Left);
-				self.delete_char();
-			}
-			_ => (),
 		}
 	}
 }

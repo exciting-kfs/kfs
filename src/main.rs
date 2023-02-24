@@ -19,7 +19,7 @@ use console::CONSOLE_MANAGER;
 
 use input::{
 	key_event::{Code, KeyState},
-	keyboard::{Keyboard, KeyboardEvent},
+	keyboard::Keyboard,
 };
 
 use collection::{Window, WrapQueue};
@@ -58,16 +58,12 @@ pub extern "C" fn kernel_entry() -> ! {
 
 	loop {
 		if let Some(event) = keyboard.get_keyboard_event() {
-			if b'`' == event.ascii {
-				panic!("I hate backtick!!!");
-			}
-			printkln!(
-				"key is {:?}, pressed={}",
-				event.event.key,
-				event.event.pressed()
-			);
+			printkln!("key is {:?}, pressed={}", event.key, event.pressed());
 			text_vga::putc(24, 79, cyan);
-			unsafe { CONSOLE_MANAGER.get().update(event) };
+			unsafe {
+				CONSOLE_MANAGER.get().update(event);
+				CONSOLE_MANAGER.get().draw();
+			};
 		}
 		text_vga::putc(24, 79, magenta);
 	}

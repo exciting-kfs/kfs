@@ -1,3 +1,4 @@
+mod ascii;
 mod console_manager;
 
 pub use console_manager::console::BUFFER_HEIGHT;
