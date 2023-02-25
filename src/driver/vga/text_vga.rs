@@ -6,7 +6,7 @@ pub use attr::Attr;
 pub use color::Color;
 pub use screen_char::Char;
 
-use crate::raw_io::pmio::Port;
+use crate::io::pmio::Port;
 use core::ptr;
 
 pub const WIDTH: usize = 80;

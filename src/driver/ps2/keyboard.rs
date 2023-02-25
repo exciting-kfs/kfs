@@ -1,6 +1,6 @@
 use super::control::{test_status_now, Status};
 use crate::input::key_event::{Code, KeyEvent, KeyState};
-use crate::raw_io::pmio::Port;
+use crate::io::pmio::Port;
 
 static KEYBOARD_PORT: Port = Port::new(0x60);
 

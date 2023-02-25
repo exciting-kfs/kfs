@@ -5,8 +5,8 @@ mod collection;
 mod console;
 mod driver;
 mod input;
+mod io;
 mod printk;
-mod raw_io;
 mod util;
 
 use core::panic::PanicInfo;
