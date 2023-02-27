@@ -161,8 +161,10 @@ impl Console {
 	}
 
 	fn handle_text(&mut self, ch: u8) {
-		if let Ok(_) = self.cursor.check_rel(0, 1) {
-			self.put_char(ch);
+		self.put_char(ch);
+		if let Err(_) = self.cursor.check_rel(0, 1) {
+			self.handle_ctl(LF);
+		} else {
 			self.cursor.move_rel_partial(0, 1);
 		}
 	}

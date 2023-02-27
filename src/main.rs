@@ -10,13 +10,13 @@ mod printk;
 mod subroutine;
 mod util;
 
-use core::panic::PanicInfo;
+use core::{fmt::Write, panic::PanicInfo};
 
 use driver::vga::text_vga;
 
 use text_vga::{Attr as VGAAttr, Char as VGAChar, Color};
 
-use console::CONSOLE_MANAGER;
+use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
 
 use input::{
 	key_event::{Code, KeyState},
@@ -26,23 +26,12 @@ use input::{
 use collection::{Window, WrapQueue};
 
 #[panic_handler]
-fn panic_handler_impl(_info: &PanicInfo) -> ! {
-	if let Some(location) = _info.location() {
-		printkln!(
-			"PANIC: {}: ({}, {})",
-			location.file(),
-			location.line(),
-			location.column()
-		);
-	}
+fn panic_handler_impl(info: &PanicInfo) -> ! {
+	unsafe { CONSOLE_MANAGER.get().set_foreground(CONSOLE_COUNTS - 1) };
 
-	let mut keyboard = Keyboard::new();
+	printk_panic!("{}", info);
 
-	loop {
-		if let Some(event) = keyboard.get_keyboard_event() {
-			unsafe { CONSOLE_MANAGER.get().panic(event) }
-		}
-	}
+	loop {}
 }
 
 #[no_mangle]
@@ -59,9 +48,9 @@ pub extern "C" fn kernel_entry() -> ! {
 	loop {
 		if let Some(event) = unsafe { KEYBOARD.get_keyboard_event() } {
 			if event.key == Code::Backtick && event.pressed() {
+				static mut I: usize = 0;
 				unsafe {
-					static mut I: usize = 0;
-					printkln!("\x1b[41mBACKTICK PRESSED {I} TIMES!!\x1b[49m");
+					pr_warn!("BACKTICK PRESSED {} TIMES!!", I);
 					I += 1;
 				}
 			}

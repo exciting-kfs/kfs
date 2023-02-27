@@ -19,7 +19,7 @@ use core::array;
 
 pub static mut CONSOLE_MANAGER: LazyInit<ConsoleManager> = LazyInit::new(ConsoleManager::new);
 
-const CONSOLE_COUNTS: usize = 4;
+pub const CONSOLE_COUNTS: usize = 4;
 
 pub struct ConsoleManager {
 	foreground: usize,
@@ -49,7 +49,11 @@ impl ConsoleManager {
 
 		if let KeyKind::Function(v) = ev.identify() {
 			let idx = v.index() as usize;
-			self.set_foreground(idx);
+
+			if idx < CONSOLE_COUNTS {
+				self.foreground = idx;
+				return;
+			}
 		}
 
 		self.cons[self.foreground].update(ev.key);
@@ -63,11 +67,6 @@ impl ConsoleManager {
 		if idx < CONSOLE_COUNTS {
 			self.foreground = idx;
 		}
-	}
-
-	pub fn panic(&mut self, ev: KeyEvent) {
-		// self.read_only.update(ev);
-		// self.read_only.draw();
 	}
 
 	pub fn dmesg(&mut self) -> &mut ConsoleChain {
