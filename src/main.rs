@@ -7,6 +7,7 @@ mod driver;
 mod input;
 mod io;
 mod printk;
+mod subroutine;
 mod util;
 
 use core::panic::PanicInfo;
@@ -19,7 +20,7 @@ use console::CONSOLE_MANAGER;
 
 use input::{
 	key_event::{Code, KeyState},
-	keyboard::Keyboard,
+	keyboard::{Keyboard, KEYBOARD},
 };
 
 use collection::{Window, WrapQueue};
@@ -36,6 +37,7 @@ fn panic_handler_impl(_info: &PanicInfo) -> ! {
 	}
 
 	let mut keyboard = Keyboard::new();
+
 	loop {
 		if let Some(event) = keyboard.get_keyboard_event() {
 			unsafe { CONSOLE_MANAGER.get().panic(event) }
@@ -51,14 +53,14 @@ pub extern "C" fn kernel_entry() -> ! {
 		b'\0',
 	);
 
-	let mut keyboard = Keyboard::new();
-
 	text_vga::clear();
 	text_vga::enable_cursor(0, 11);
 
 	loop {
-		if let Some(event) = keyboard.get_keyboard_event() {
-			printkln!("key is {:?}, pressed={}", event.key, event.pressed());
+		if let Some(event) = unsafe { KEYBOARD.get_keyboard_event() } {
+			if event.key == Code::Backtick && event.pressed() {
+				printkln!("\x1b[41mBACKTICK PRESSED!!\x1b[49m");
+			}
 			text_vga::putc(24, 79, cyan);
 			unsafe {
 				CONSOLE_MANAGER.get().update(event);

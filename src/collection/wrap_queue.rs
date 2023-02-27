@@ -27,6 +27,18 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 		}
 	}
 
+	pub const fn with(value: T) -> Self
+	where
+		T: Copy,
+	{
+		Self {
+			data: [value; CAPACITY],
+			head: 0,
+			tail: 0,
+			state: State::Empty,
+		}
+	}
+
 	fn translate_idx(&self, idx: usize) -> Option<usize> {
 		if idx >= self.size() {
 			None

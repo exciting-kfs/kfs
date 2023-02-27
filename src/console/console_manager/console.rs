@@ -1,8 +1,10 @@
+use super::ascii::{self, constants::*, Ascii, AsciiParser};
 use super::cursor::{Cursor, MoveResult};
 
 use crate::collection::WrapQueue;
-use crate::driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar};
+use crate::driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use crate::input::key_event::{Code, CursorCode};
+use crate::printkln;
 
 pub const BUFFER_HEIGHT: usize = 100;
 pub const BUFFER_WIDTH: usize = 80;
@@ -14,37 +16,17 @@ pub trait IConsole {
 	fn draw(&self);
 }
 
-enum AsciiEscape {
-	Start,
-	Escape,
-
-	Function,
-	Csi,
-
-	PageUp,
-	PageDown,
-	Delete,
-}
-
 pub struct Console {
-	state: AsciiEscape,
 	buf: WrapQueue<VGAChar, BUFFER_SIZE>,
 	window_start: usize,
 	cursor: Cursor,
 	attr: VGAAttr,
+	parser: AsciiParser,
 }
 
 impl Console {
 	pub fn new() -> Self {
-		let buf = WrapQueue::from_fn(|_| VGAChar::new(b'\0'));
-
-		Console {
-			state: AsciiEscape::Start,
-			buf,
-			window_start: 0,
-			cursor: Cursor::new(0, 0),
-			attr: VGAAttr::default(),
-		}
+		Self::buffer_reserved(0)
 	}
 
 	pub fn buffer_reserved(n: usize) -> Self {
@@ -52,11 +34,11 @@ impl Console {
 		buf.reserve(n);
 
 		Console {
-			state: AsciiEscape::Start,
 			buf,
 			window_start: 0,
 			cursor: Cursor::new(0, 0),
 			attr: VGAAttr::default(),
+			parser: AsciiParser::new(),
 		}
 	}
 
@@ -85,13 +67,20 @@ impl Console {
 		self.put_char(b'\0');
 	}
 
-	pub fn change_color(&mut self, color: Code) {
-		self.attr = VGAAttr::form_u8(color as u8);
+	fn set_fg_color(&mut self, color: Color) {
+		self.attr.set_fg(color);
+	}
 
-		for i in 0..self.buf.size() {
-			let ch = self.buf.at_mut(i).unwrap();
-			*ch = VGAChar::styled(self.attr, (ch.0 & 0xff) as u8);
-		}
+	fn set_bg_color(&mut self, color: Color) {
+		self.attr.set_bg(color);
+	}
+
+	fn reset_fg_color(&mut self) {
+		self.attr.reset_fg();
+	}
+
+	fn reset_bg_color(&mut self) {
+		self.attr.reset_bg();
 	}
 
 	pub fn move_cursor(&mut self, code: CursorCode) {
@@ -133,148 +122,82 @@ impl Console {
 		(0..overflow).for_each(|_| self.buf.push(text_vga::Char::styled(self.attr, b'\0')));
 	}
 
-	// yeah.. i know... i will refactor it ASAP. for now it's just for test.
-
-	fn parse_start(&mut self, c: u8) {
-		if c.is_ascii_graphic() {
-			self.put_char(c);
-			self.move_cursor(CursorCode::Right);
-			return;
-		}
-
-		if c == b'\n' {
-			self.move_cursor(CursorCode::Home);
-			self.move_cursor(CursorCode::Down);
-			return;
-		}
-
-		if c == b'\x7f' {
-			self.delete_char();
-			self.move_cursor(CursorCode::Left);
-			return;
-		}
-
-		if c == b'\x1b' {
-			self.state = AsciiEscape::Escape;
-			return;
-		}
-	}
-
-	fn parse_esc(&mut self, c: u8) {
-		if c == b'[' {
-			self.state = AsciiEscape::Csi;
-			return;
-		}
-
-		if c == b'O' {
-			self.state = AsciiEscape::Function;
-			return;
-		}
-
-		// unknown escape sequence
-		self.state = AsciiEscape::Start;
-	}
-
-	fn dumb_puti(&mut self, n: u8) {
-		if n == 0 {
-			return;
-		}
-
-		let c = (n % 10) + b'0';
-
-		self.dumb_puti(n / 10);
-
-		self.put_char(c);
+	fn handle_text(&mut self, ch: u8) {
+		self.put_char(ch);
 		self.move_cursor(CursorCode::Right);
 	}
 
-	fn parse_fn(&mut self, c: u8) {
-		if b'P' <= c && c <= b'[' {
-			let offset = c - b'P' + 1;
-
-			self.put_char(b'F');
-			self.move_cursor(CursorCode::Right);
-
-			self.dumb_puti(offset);
+	fn handle_ctl(&mut self, ctl: u8) {
+		// TODO: FF HT VT
+		match ctl {
+			BS | DEL => {
+				self.move_cursor(CursorCode::Left);
+				self.delete_char();
+			}
+			CR | LF => {
+				self.move_cursor(CursorCode::Home);
+				self.move_cursor(CursorCode::Down);
+			}
+			_ => (),
 		}
-
-		self.state = AsciiEscape::Start;
 	}
 
-	fn parse_csi(&mut self, c: u8) {
-		if c == b'A' {
-			self.move_cursor(CursorCode::Up);
-			self.state = AsciiEscape::Start;
-			return;
+	fn handle_color(&mut self, color: u8) {
+		match color {
+			FG_BLACK => self.set_fg_color(Color::Black),
+			FG_RED => self.set_fg_color(Color::Red),
+			FG_GREEN => self.set_fg_color(Color::Green),
+			FG_BROWN => self.set_fg_color(Color::Brown),
+			FG_BLUE => self.set_fg_color(Color::Blue),
+			FG_MAGENTA => self.set_fg_color(Color::Magenta),
+			FG_CYAN => self.set_fg_color(Color::Cyan),
+			FG_WHITE => self.set_fg_color(Color::White),
+			FG_DEFAULT => self.reset_fg_color(),
+			BG_BLACK => self.set_bg_color(Color::Black),
+			BG_RED => self.set_bg_color(Color::Red),
+			BG_GREEN => self.set_bg_color(Color::Green),
+			BG_BROWN => self.set_bg_color(Color::Brown),
+			BG_BLUE => self.set_bg_color(Color::Blue),
+			BG_MAGENTA => self.set_bg_color(Color::Magenta),
+			BG_CYAN => self.set_bg_color(Color::Cyan),
+			BG_WHITE => self.set_bg_color(Color::White),
+			BG_DEFAULT => self.reset_bg_color(),
+			_ => (),
 		}
-
-		if c == b'B' {
-			self.move_cursor(CursorCode::Down);
-			self.state = AsciiEscape::Start;
-			return;
-		}
-
-		if c == b'C' {
-			self.move_cursor(CursorCode::Right);
-			self.state = AsciiEscape::Start;
-			return;
-		}
-
-		if c == b'D' {
-			self.move_cursor(CursorCode::Left);
-			self.state = AsciiEscape::Start;
-			return;
-		}
-
-		if c == b'H' {
-			self.move_cursor(CursorCode::Home);
-			self.state = AsciiEscape::Start;
-			return;
-		}
-
-		if c == b'F' {
-			self.move_cursor(CursorCode::End);
-			self.state = AsciiEscape::Start;
-			return;
-		}
-
-		if c == b'5' {
-			self.state = AsciiEscape::PageUp;
-			return;
-		}
-
-		if c == b'6' {
-			self.state = AsciiEscape::PageDown;
-			return;
-		}
-
-		if c == b'3' {
-			self.state = AsciiEscape::Delete;
-			return;
-		}
-
-		self.state = AsciiEscape::Start;
 	}
 
-	fn parse_pgdn(&mut self, c: u8) {
-		if c == b'~' {
-			self.move_cursor(CursorCode::PageDown);
+	pub fn write(&mut self, c: u8) {
+		if let Some(v) = self.parser.parse(c) {
+			match v {
+				Ascii::Text(ch) => self.handle_text(ch),
+				Ascii::Control(ctl) => self.handle_ctl(ctl),
+				Ascii::CtlSeq(p, k) => self.handle_ctlseq(p, k),
+			}
+			self.parser.reset();
 		}
-		self.state = AsciiEscape::Start;
 	}
 
-	fn parse_pgup(&mut self, c: u8) {
-		if c == b'~' {
-			self.move_cursor(CursorCode::PageUp);
+	fn handle_key(&mut self, key: u8) {
+		match key {
+			3 => self.delete_char(),
+			5 => self.move_cursor(CursorCode::PageUp),
+			6 => self.move_cursor(CursorCode::PageDown),
+			_ => (),
 		}
-		self.state = AsciiEscape::Start;
 	}
 
-	fn parse_del(&mut self, c: u8) {
-		if c == b'~' {
-			self.delete_char();
+	fn handle_ctlseq(&mut self, param: u8, kind: u8) {
+		match kind {
+			b'~' => self.handle_key(param),
+			b'A' => self.move_cursor(CursorCode::Up),
+			b'B' => self.move_cursor(CursorCode::Down),
+			b'C' => self.move_cursor(CursorCode::Right),
+			b'D' => self.move_cursor(CursorCode::Left),
+			b'H' => self.move_cursor(CursorCode::Home),
+			b'F' => self.move_cursor(CursorCode::End),
+			b'm' => self.handle_color(param),
+			_ => (),
 		}
-		self.state = AsciiEscape::Start;
 	}
 }
 
@@ -290,15 +213,7 @@ impl IConsole for Console {
 
 	fn update(&mut self, ascii: &[u8]) {
 		for c in ascii {
-			match self.state {
-				AsciiEscape::Start => self.parse_start(*c),
-				AsciiEscape::Escape => self.parse_esc(*c),
-				AsciiEscape::Function => self.parse_fn(*c),
-				AsciiEscape::Csi => self.parse_csi(*c),
-				AsciiEscape::PageUp => self.parse_pgup(*c),
-				AsciiEscape::PageDown => self.parse_pgdn(*c),
-				AsciiEscape::Delete => self.parse_del(*c),
-			}
+			self.write(*c);
 		}
 	}
 }

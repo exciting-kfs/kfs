@@ -7,6 +7,8 @@
 use super::key_event::{Code, KeyEvent, KeyKind};
 use crate::driver::ps2::keyboard::get_key_event;
 
+pub static mut KEYBOARD: Keyboard = Keyboard::new();
+
 #[derive(Default)]
 pub struct Keyboard {
 	state: [u32; 8], // 256bit (at least bigger then u8::MAX)
@@ -14,7 +16,7 @@ pub struct Keyboard {
 
 impl Keyboard {
 	pub const fn new() -> Self {
-		Keyboard{ state: [0; 8] } // false, false, false ...
+		Keyboard { state: [0; 8] } // false, false, false ...
 	}
 
 	/// 키보드에서 키 하나를 입력받고, 상태를 저장한 후, 받은 키를 반환한다.
