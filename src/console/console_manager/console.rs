@@ -1,15 +1,18 @@
 use super::ascii::{self, constants::*, Ascii, AsciiParser};
-use super::cursor::{Cursor, MoveResult};
+use super::cursor::{Cursor, Result as CursorResult};
 
 use crate::collection::WrapQueue;
 use crate::driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use crate::input::key_event::{Code, CursorCode};
 use crate::printkln;
 
-pub const BUFFER_HEIGHT: usize = 100;
-pub const BUFFER_WIDTH: usize = 80;
-
+use crate::driver::vga::text_vga::{HEIGHT as WINDOW_HEIGHT, WIDTH as WINDOW_WIDTH, WINDOW_SIZE};
+pub const BUFFER_HEIGHT: usize = WINDOW_HEIGHT * 4;
+pub const BUFFER_WIDTH: usize = WINDOW_WIDTH;
 pub const BUFFER_SIZE: usize = BUFFER_HEIGHT * BUFFER_WIDTH;
+
+type ConsoleCursor = Cursor<WINDOW_HEIGHT, WINDOW_WIDTH>;
+type ConsoleBuffer = WrapQueue<VGAChar, BUFFER_SIZE>;
 
 pub trait IConsole {
 	fn update(&mut self, ascii: &[u8]);
@@ -17,9 +20,9 @@ pub trait IConsole {
 }
 
 pub struct Console {
-	buf: WrapQueue<VGAChar, BUFFER_SIZE>,
+	buf: ConsoleBuffer,
 	window_start: usize,
-	cursor: Cursor,
+	cursor: ConsoleCursor,
 	attr: VGAAttr,
 	parser: AsciiParser,
 }
@@ -36,7 +39,7 @@ impl Console {
 		Console {
 			buf,
 			window_start: 0,
-			cursor: Cursor::new(0, 0),
+			cursor: Cursor::new(),
 			attr: VGAAttr::default(),
 			parser: AsciiParser::new(),
 		}
@@ -45,26 +48,25 @@ impl Console {
 	pub fn put_char(&mut self, ch: u8) {
 		let mut window = self
 			.buf
-			.window_mut(self.window_start, text_vga::WIDTH * text_vga::HEIGHT)
+			.window_mut(self.window_start, WINDOW_WIDTH * WINDOW_HEIGHT)
 			.expect("buffer overflow");
 
 		let ch = VGAChar::styled(self.attr, ch);
-
 		window[self.cursor.to_idx()] = ch;
 	}
 
-	pub fn put_char_absolute(&mut self, ch: u8, pos: &Cursor) {
-		let ch = VGAChar::styled(self.attr, ch);
-		*self.buf.at_mut(pos.y * BUFFER_WIDTH + pos.x).unwrap() = ch;
-	}
+	// pub fn put_char_absolute(&mut self, ch: u8, pos: &ConsoleCursor) {
+	// 	let ch = VGAChar::styled(self.attr, ch);
+	// 	*self.buf.at_mut(pos.y * BUFFER_WIDTH + pos.x).unwrap() = ch;
+	// }
 
 	pub fn put_empty_line(&mut self) {
-		let ch = VGAChar::styled(self.attr, b'\0');
+		let ch = VGAChar::styled(self.attr, b' ');
 		self.buf.push_n(ch, BUFFER_WIDTH);
 	}
 
 	pub fn delete_char(&mut self) {
-		self.put_char(b'\0');
+		self.put_char(b' ');
 	}
 
 	fn set_fg_color(&mut self, color: Color) {
@@ -83,31 +85,62 @@ impl Console {
 		self.attr.reset_bg();
 	}
 
-	pub fn move_cursor(&mut self, code: CursorCode) {
-		let home = -(self.cursor.x as isize);
-		let end = (BUFFER_WIDTH - self.cursor.x - 1) as isize;
-		let up = -(text_vga::HEIGHT as isize) + 1;
-		let down = text_vga::HEIGHT as isize - 1;
+	// TODO: fn form_feed(&mut self) {}
 
-		let res = match code {
-			CursorCode::Up => self.cursor.relative_move(-1, 0),
-			CursorCode::Down => self.cursor.relative_move(1, 0),
-			CursorCode::Left => self.cursor.relative_move(0, -1),
-			CursorCode::Right => self.cursor.relative_move(0, 1),
-			CursorCode::PageUp => self.cursor.relative_move(up, 0),
-			CursorCode::PageDown => self.cursor.relative_move(down, 0),
-			CursorCode::Home => self.cursor.relative_move(0, home),
-			CursorCode::End => self.cursor.relative_move(0, end),
+	fn line_feed(&mut self, lines: usize) {
+		let minimum_buf_size = self.window_start + WINDOW_SIZE + BUFFER_WIDTH * lines;
+
+		let extend_size = match self.buf.full() {
+			true => BUFFER_WIDTH * lines,
+			false => minimum_buf_size
+				.checked_sub(self.buf.size())
+				.unwrap_or_default(),
 		};
+		let need_window_move = !self.buf.full();
 
-		if let MoveResult::AdjustWindowStart(dy) = res {
-			self.adjust_window_start(dy)
+		if extend_size > 0 {
+			self.buf
+				.push_n(VGAChar::styled(self.attr, b' '), extend_size);
+		}
+
+		if need_window_move {
+			self.window_start += extend_size;
 		}
 	}
 
-	pub fn sync_window_start(&mut self, y: usize) {
-		self.window_start =
-			usize::checked_sub(text_vga::WIDTH * y, text_vga::WINDOW_SIZE).unwrap_or_default();
+	fn reverse_line_feed(&mut self, lines: usize) {
+		self.window_start = self
+			.window_start
+			.checked_sub(BUFFER_WIDTH * lines)
+			.unwrap_or_default();
+	}
+
+	fn carriage_return(&mut self) {
+		self.cursor.move_abs_x(0).unwrap();
+	}
+
+	fn cursor_left(&mut self, n: u8) {
+		self.cursor.move_rel_partial(0, -(n.max(1) as isize));
+	}
+
+	fn cursor_right(&mut self, n: u8) {
+		self.cursor.move_rel_partial(0, n.max(1) as isize);
+	}
+
+	fn cursor_down(&mut self, n: u8) {
+		self.cursor.move_rel_partial(-(n.max(1) as isize), 0);
+	}
+
+	fn cursor_up(&mut self, n: u8) {
+		self.cursor.move_rel_partial(n.max(1) as isize, 0);
+	}
+
+	fn cursor_home(&mut self) {
+		self.cursor.move_abs_x(0).unwrap();
+	}
+
+	fn cursor_end(&mut self) {
+		self.cursor.move_abs_x(BUFFER_WIDTH as isize - 1).unwrap();
 	}
 
 	pub fn adjust_window_start(&mut self, dy: isize) {
@@ -123,20 +156,28 @@ impl Console {
 	}
 
 	fn handle_text(&mut self, ch: u8) {
-		self.put_char(ch);
-		self.move_cursor(CursorCode::Right);
+		if let Ok(_) = self.cursor.check_rel(0, 1) {
+			self.put_char(ch);
+			self.cursor.move_rel_partial(0, 1);
+		}
 	}
 
 	fn handle_ctl(&mut self, ctl: u8) {
 		// TODO: FF HT VT
 		match ctl {
-			BS | DEL => {
-				self.move_cursor(CursorCode::Left);
-				self.delete_char();
+			BS => {
+				if let Ok(_) = self.cursor.check_rel(0, -1) {
+					self.delete_char();
+					self.cursor.move_rel_partial(0, -1);
+				}
 			}
 			CR | LF => {
-				self.move_cursor(CursorCode::Home);
-				self.move_cursor(CursorCode::Down);
+				if let Err(_) = self.cursor.check_rel(1, 0) {
+					self.line_feed(1);
+				} else {
+					self.cursor.move_rel_partial(1, 0);
+				}
+				self.carriage_return();
 			}
 			_ => (),
 		}
@@ -180,8 +221,8 @@ impl Console {
 	fn handle_key(&mut self, key: u8) {
 		match key {
 			3 => self.delete_char(),
-			5 => self.move_cursor(CursorCode::PageUp),
-			6 => self.move_cursor(CursorCode::PageDown),
+			5 => self.reverse_line_feed(WINDOW_HEIGHT / 2),
+			6 => self.line_feed(WINDOW_HEIGHT / 2),
 			_ => (),
 		}
 	}
@@ -189,15 +230,15 @@ impl Console {
 	fn handle_ctlseq(&mut self, param: u8, kind: u8) {
 		match kind {
 			b'~' => self.handle_key(param),
-			b'A' => self.move_cursor(CursorCode::Up),
-			b'B' => self.move_cursor(CursorCode::Down),
-			b'C' => self.move_cursor(CursorCode::Right),
-			b'D' => self.move_cursor(CursorCode::Left),
-			b'H' => self.move_cursor(CursorCode::Home),
-			b'F' => self.move_cursor(CursorCode::End),
+			b'A' => self.cursor_up(param),
+			b'B' => self.cursor_down(param),
+			b'C' => self.cursor_right(param),
+			b'D' => self.cursor_left(param),
+			b'H' => self.cursor_home(),
+			b'F' => self.cursor_end(),
 			b'm' => self.handle_color(param),
 			_ => (),
-		}
+		};
 	}
 }
 
@@ -208,7 +249,7 @@ impl IConsole for Console {
 			.window(self.window_start, text_vga::WIDTH * text_vga::HEIGHT)
 			.expect("buffer overflow");
 		text_vga::put_slice_iter(window);
-		text_vga::put_cursor(self.cursor.y, self.cursor.x);
+		text_vga::put_cursor(self.cursor.to_idx());
 	}
 
 	fn update(&mut self, ascii: &[u8]) {

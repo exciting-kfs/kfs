@@ -12,7 +12,7 @@ use core::ptr;
 pub const WIDTH: usize = 80;
 pub const HEIGHT: usize = 25;
 pub const WINDOW_SIZE: usize = WIDTH * HEIGHT;
-const MMIO_ADDR: *mut Char = 0xb8000 as *mut Char; // TODO: use 2d array type
+const MMIO_ADDR: *mut Char = 0xb8000 as *mut Char;
 
 static INDEX_PORT: Port = Port::new(0x03d4);
 static DATA_PORT: Port = Port::new(0x03d5);
@@ -64,8 +64,7 @@ pub fn enable_cursor(start: usize, end: usize) {
 	DATA_PORT.write_byte(end);
 }
 
-pub fn put_cursor(y: usize, x: usize) {
-	let offset = offset_count(y, x);
+pub fn put_cursor(offset: usize) {
 	let low = offset & 0xff;
 	let high = (offset >> 8) & 0xff;
 

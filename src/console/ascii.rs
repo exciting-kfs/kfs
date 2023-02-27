@@ -98,7 +98,7 @@ impl AsciiParser {
 	}
 
 	fn parse_start(&mut self, c: u8) -> Option<Ascii> {
-		if b' ' <= c && c <= b'~' {
+		if b' ' <= c && c <= 127 {
 			Some(Ascii::Text(c))
 		} else if c == ESC {
 			self.state = State::Escape;
