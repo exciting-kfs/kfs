@@ -39,7 +39,7 @@ dump-header:
 
 debug :
 	scripts/debug.sh &
-	rust-lldb $(KERNEL_BIN)                    \
-		--one-line 'gdb-remote localhost:1234' \
-		--one-line 'b kernel_init'             \
+	rust-lldb $(KERNEL_BIN)                    	\
+		--one-line 'gdb-remote localhost:1234'	\
+		--one-line 'b kernel_init'		\
 		--one-line 'c'

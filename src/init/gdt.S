@@ -1,5 +1,3 @@
-%include "segment_descriptor.S"
-
 SEG_KERNEL_CODE equ 0x8
 SEG_KERNEL_DATA equ 0x10
 SEG_KERNEL_STACK equ 0x18
