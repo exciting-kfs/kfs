@@ -62,6 +62,11 @@ fn is_ctlseq_terminator(c: u8) -> bool {
 	0x40 <= c && c <= 0x7f
 }
 
+/// very simple ascii escape sequence parser.
+/// this only recognizes
+///  - Text: normal ascii characters
+///  - Control: c0 or maybe 8bit c1
+///  - CtlSeq: escape sequence started by `CSI`("\x1b[") with single parameter.
 impl AsciiParser {
 	pub const fn new() -> Self {
 		Self {
@@ -71,6 +76,12 @@ impl AsciiParser {
 		}
 	}
 
+	/// continue or start parsing process.
+	/// invalid sequence is silently ignored.
+	///
+	/// Even after `Some(x)` is returned, internal state is not automatically reset.
+	/// So, in order to keep parsing properly,
+	/// you have to call `reset()` after each `Some(x)` return.
 	pub fn parse(&mut self, c: u8) -> Option<Ascii> {
 		if self.buf.full() {
 			self.reset();
@@ -85,6 +96,7 @@ impl AsciiParser {
 		}
 	}
 
+	/// reset internal buffer and state.
 	pub fn reset(&mut self) {
 		while !self.buf.empty() {
 			self.buf.pop();
@@ -93,6 +105,7 @@ impl AsciiParser {
 		self.param = 0;
 	}
 
+	/// inspect internal buffer
 	pub fn as_mut_buf(&mut self) -> &mut WrapQueue<u8, 16> {
 		&mut self.buf
 	}

@@ -17,6 +17,10 @@ use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
 use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use input::{key_event::Code, keyboard::KEYBOARD};
 
+/// very simple panic handler.
+/// that just print panic infomation and fall into infinity loop.
+///
+/// we should make sure no more `panic!()` from here.
 #[panic_handler]
 fn panic_handler_impl(info: &PanicInfo) -> ! {
 	unsafe { CONSOLE_MANAGER.get().set_foreground(CONSOLE_COUNTS - 1) };

@@ -1,3 +1,9 @@
+//! Simple fixed-size circular queue.
+//!
+//! very similar to std::collections::VecDeque
+//! but in out-of-space case,
+//! this buffer will be overwrite data from olderest one.
+
 use core::ops::{Index, IndexMut};
 
 #[derive(PartialEq)]
@@ -15,6 +21,7 @@ pub struct WrapQueue<T, const N: usize> {
 }
 
 impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
+	/// construct new wrap_queue with value returned by `FnMut cb`
 	pub fn from_fn<F>(cb: F) -> Self
 	where
 		F: FnMut(usize) -> T,
@@ -27,6 +34,7 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 		}
 	}
 
+	/// construct new wrap_queue contain N copies of `value`
 	pub const fn with(value: T) -> Self
 	where
 		T: Copy,
@@ -39,6 +47,7 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 		}
 	}
 
+	/// translate linear index to discrete index.
 	fn translate_idx(&self, idx: usize) -> Option<usize> {
 		if idx >= self.size() {
 			None
@@ -47,6 +56,7 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 		}
 	}
 
+	/// calculate occupied size
 	pub fn size(&self) -> usize {
 		match self.state {
 			State::Full => CAPACITY,
@@ -81,6 +91,7 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 		self.state == State::Full
 	}
 
+	/// access data by linear index.
 	pub fn at_mut(&mut self, idx: usize) -> Option<&mut T> {
 		self.translate_idx(idx).map(|i| &mut self.data[i])
 	}
@@ -89,6 +100,7 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 		self.translate_idx(idx).map(|i| &self.data[i])
 	}
 
+	/// push `n` copies of `item`
 	pub fn push_n(&mut self, item: T, n: usize)
 	where
 		T: Copy,
@@ -98,6 +110,7 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 		}
 	}
 
+	/// push data `n` times with default constructed value.
 	pub fn reserve(&mut self, n: usize)
 	where
 		T: Default,
@@ -113,6 +126,7 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 		}
 	}
 
+	/// extend buffer but not initialize that space.
 	fn extend(&mut self, n: usize) {
 		for _ in 0..n {
 			if self.full() {
@@ -152,6 +166,7 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 		Some(value)
 	}
 
+	/// create slice of wrap_queue.
 	pub fn window<'a>(&'a self, start: usize, size: usize) -> Option<Window<&'a [T], CAPACITY>> {
 		if size == 0 {
 			return None;
@@ -187,6 +202,7 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 	}
 }
 
+/// sliced part of wrap_queue.
 pub struct Window<T, const N: usize> {
 	head: usize,
 	tail: usize,
@@ -221,6 +237,7 @@ impl<'a, T, const CAPACITY: usize> IndexMut<usize> for Window<&'a mut [T], CAPAC
 	}
 }
 
+/// create iterator of linearly alligned wrap_queue's raw memory representation.
 impl<'a, T, const N: usize> IntoIterator for Window<&'a [T], N> {
 	type Item = &'a [T];
 	type IntoIter = core::array::IntoIter<Self::Item, 2>;

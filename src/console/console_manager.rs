@@ -1,3 +1,5 @@
+//! Manage various consoles.
+
 pub mod console;
 pub mod cursor;
 
@@ -22,6 +24,12 @@ pub struct ConsoleManager {
 }
 
 impl ConsoleManager {
+	/// Create new manager with pre-defined work consoles.
+	///
+	/// you can switch between consoles with F1 ~ F4 key.
+	///
+	/// console 0, 1, 2 is is simple echo console.
+	/// and console 3 is kernel message buffer.
 	pub fn new() -> Self {
 		ConsoleManager {
 			foreground: 0,
@@ -37,6 +45,7 @@ impl ConsoleManager {
 		}
 	}
 
+	/// update console with new key event.
 	pub fn update(&mut self, ev: KeyEvent) {
 		if !ev.pressed() {
 			return;
@@ -58,12 +67,14 @@ impl ConsoleManager {
 		self.cons[self.foreground].draw();
 	}
 
+	/// change foreground console.
 	pub fn set_foreground(&mut self, idx: usize) {
 		if idx < CONSOLE_COUNTS {
 			self.foreground = idx;
 		}
 	}
 
+	/// get console for kernel message buffer.
 	pub fn dmesg(&mut self) -> &mut ConsoleChain {
 		&mut self.cons[CONSOLE_COUNTS - 1]
 	}
@@ -72,6 +83,7 @@ impl ConsoleManager {
 use core::fmt;
 
 impl fmt::Write for ConsoleManager {
+	/// console format writer implementation.
 	fn write_str(&mut self, s: &str) -> fmt::Result {
 		let dmesg = self.dmesg();
 

@@ -1,13 +1,22 @@
+//! Basic character-by-character I/O
+
+/// readable object
 pub trait Read<T> {
 	fn read_one(&mut self) -> Option<T>;
 }
 
+/// writable object
 pub trait Write<T> {
 	fn write_one(&mut self, data: T);
 }
 
+/// readable and writeable.
+/// you can think this trait as from type `I` to type `O` converter
 pub trait RW<I, O>: Write<I> + Read<O> {}
 
+/// chain two different RW object.
+/// input(`I`) -> obj(`src`) -> intermediate(`M`) -> output(`O`)
+/// so chain is also RW<I, O>
 pub struct Chain<'a, I, M, O> {
 	src: &'a mut dyn RW<I, M>,
 	dst: &'a mut dyn RW<M, O>,

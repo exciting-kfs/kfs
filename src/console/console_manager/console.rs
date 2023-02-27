@@ -1,3 +1,17 @@
+//! Manage console screen buffer and interpret ascii text / control sequences.
+//!
+//! #### implemented control sequences
+//!		- CSI s: save current cursor position.
+//! 	- CSI u: restore last saved cursor position.
+//! 	- CSI N A: move cursor up `N` times.
+//! 	- CSI N B: move cursor down `N` times.
+//! 	- CSI N C: move cursor right `N` times.
+//! 	- CSI N D: move cursor left `N` times.
+//! 	- CSI H: move cursor to begining.
+//! 	- CSI F: move cursor to end.
+//! 	- CSI N m: alter character display properties. (see console/ascii)
+//! 	- CSI N ~: pc style extra keys. (see driver/tty)
+
 use super::ascii::{constants::*, Ascii, AsciiParser};
 use super::cursor::Cursor;
 
@@ -27,6 +41,7 @@ impl Console {
 		Self::buffer_reserved(0)
 	}
 
+	/// construct new console with buffer reserved.
 	pub fn buffer_reserved(n: usize) -> Self {
 		let mut buf = WrapQueue::from_fn(|_| VGAChar::new(b' '));
 		buf.reserve(n);
@@ -42,7 +57,30 @@ impl Console {
 		}
 	}
 
-	pub fn put_char(&mut self, ch: u8) {
+	/// general character I/O interface
+	pub fn write(&mut self, c: u8) {
+		if let Some(v) = self.parser.parse(c) {
+			match v {
+				Ascii::Text(ch) => self.handle_text(ch),
+				Ascii::Control(ctl) => self.handle_ctl(ctl),
+				Ascii::CtlSeq(p, k) => self.handle_ctlseq(p, k),
+			}
+			self.parser.reset();
+		}
+	}
+
+	/// draw current buffer to screen.
+	pub fn draw(&self) {
+		let window = self
+			.buf
+			.window(self.window_start, WINDOW_SIZE)
+			.expect("buffer overflow");
+		text_vga::put_slice_iter(window);
+		text_vga::put_cursor(self.cursor.to_idx());
+	}
+
+	/// put character at current cursor
+	fn put_char(&mut self, ch: u8) {
 		let mut window = self
 			.buf
 			.window_mut(self.window_start, WINDOW_SIZE)
@@ -52,7 +90,7 @@ impl Console {
 		window[self.cursor.to_idx()] = ch;
 	}
 
-	pub fn delete_char(&mut self) {
+	fn delete_char(&mut self) {
 		self.put_char(b' ');
 	}
 
@@ -74,6 +112,7 @@ impl Console {
 
 	// TODO: fn form_feed(&mut self) {}
 
+	/// perform line-feed. if there is no enough room left in buffer, then extend.
 	fn line_feed(&mut self, lines: usize) {
 		let minimum_buf_size = self.window_start + WINDOW_SIZE + BUFFER_WIDTH * lines;
 
@@ -93,6 +132,7 @@ impl Console {
 			(self.window_start + BUFFER_WIDTH * lines).min(BUFFER_SIZE - WINDOW_SIZE);
 	}
 
+	/// move window up.
 	fn line_up(&mut self, lines: usize) {
 		self.window_start = self
 			.window_start
@@ -100,6 +140,9 @@ impl Console {
 			.unwrap_or_default();
 	}
 
+	/// move window down.
+	/// unlikely `line_feed()` this doesn't extend buffer.
+	/// so window can't go down beyond end of buffer.
 	fn line_down(&mut self, lines: usize) {
 		self.window_start =
 			(self.window_start + BUFFER_WIDTH * lines).min(self.buf.size() - WINDOW_SIZE);
@@ -143,6 +186,7 @@ impl Console {
 		self.window_start = self.window_start_backup;
 	}
 
+	/// print normal ascii character.
 	fn handle_text(&mut self, ch: u8) {
 		self.put_char(ch);
 		if let Err(_) = self.cursor.check_rel(0, 1) {
@@ -152,6 +196,7 @@ impl Console {
 		}
 	}
 
+	/// print specific ascii c0 character.
 	fn handle_ctl(&mut self, ctl: u8) {
 		// TODO: FF HT VT
 		match ctl {
@@ -173,6 +218,7 @@ impl Console {
 		}
 	}
 
+	/// change color of text.
 	fn handle_color(&mut self, color: u8) {
 		match color {
 			FG_BLACK => self.set_fg_color(Color::Black),
@@ -197,17 +243,7 @@ impl Console {
 		}
 	}
 
-	pub fn write(&mut self, c: u8) {
-		if let Some(v) = self.parser.parse(c) {
-			match v {
-				Ascii::Text(ch) => self.handle_text(ch),
-				Ascii::Control(ctl) => self.handle_ctl(ctl),
-				Ascii::CtlSeq(p, k) => self.handle_ctlseq(p, k),
-			}
-			self.parser.reset();
-		}
-	}
-
+	/// handle pc style extra keys (pgup, pgdn, del, ...)
 	fn handle_key(&mut self, key: u8) {
 		match key {
 			3 => self.delete_char(),
@@ -217,6 +253,7 @@ impl Console {
 		}
 	}
 
+	/// handle ascii control escape sequences
 	fn handle_ctlseq(&mut self, param: u8, kind: u8) {
 		match kind {
 			b'~' => self.handle_key(param),
@@ -231,14 +268,5 @@ impl Console {
 			b'u' => self.cursor_restore(),
 			_ => (),
 		};
-	}
-
-	pub fn draw(&self) {
-		let window = self
-			.buf
-			.window(self.window_start, WINDOW_SIZE)
-			.expect("buffer overflow");
-		text_vga::put_slice_iter(window);
-		text_vga::put_cursor(self.cursor.to_idx());
 	}
 }

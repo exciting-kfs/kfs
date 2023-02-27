@@ -1,3 +1,6 @@
+//! Translate key code to ascii code
+//! and do basic line discipline.
+
 use crate::input::key_event::*;
 use crate::input::keyboard::KEYBOARD;
 
