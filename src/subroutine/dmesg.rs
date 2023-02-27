@@ -57,14 +57,16 @@ impl Write<u8> for Dmesg {
 			None => return,
 		};
 
-		if let Ascii::CtlSeq(_, kind) = ascii {
-			self.user_ready = match kind {
-				b'A' => true,
-				b'B' => true,
-				b'C' => true,
-				b'D' => true,
-				b'H' => true,
-				b'F' => true,
+		if let Ascii::CtlSeq(param, kind) = ascii {
+			self.user_ready = match (param, kind) {
+				(_, b'A') => true,
+				(_, b'B') => true,
+				(_, b'C') => true,
+				(_, b'D') => true,
+				(_, b'H') => true,
+				(_, b'F') => true,
+				(5, b'~') => true,
+				(6, b'~') => true,
 				_ => false,
 			}
 		}

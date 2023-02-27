@@ -85,15 +85,7 @@ impl fmt::Write for ConsoleManager {
 			unsafe { DMESG.write(*byte) }
 			dmesg.flush();
 		}
-		self.draw();
-		Ok(())
-	}
 
-	fn write_char(&mut self, c: char) -> fmt::Result {
-		let dmesg = self.dmesg();
-
-		unsafe { DMESG.write(c as u8) }
-		dmesg.flush();
 		self.draw();
 		Ok(())
 	}

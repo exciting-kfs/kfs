@@ -59,7 +59,11 @@ pub extern "C" fn kernel_entry() -> ! {
 	loop {
 		if let Some(event) = unsafe { KEYBOARD.get_keyboard_event() } {
 			if event.key == Code::Backtick && event.pressed() {
-				printkln!("\x1b[41mBACKTICK PRESSED!!\x1b[49m");
+				unsafe {
+					static mut I: usize = 0;
+					printkln!("\x1b[41mBACKTICK PRESSED {I} TIMES!!\x1b[49m");
+					I += 1;
+				}
 			}
 			text_vga::putc(24, 79, cyan);
 			unsafe {

@@ -12,7 +12,7 @@ pub enum Direction {
 
 pub type Result<T> = core::result::Result<T, Direction>;
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Cursor<const H: usize, const W: usize> {
 	y: isize,
 	x: isize,
@@ -33,12 +33,12 @@ impl<const HEIGHT: usize, const WIDTH: usize> Cursor<HEIGHT, WIDTH> {
 	}
 
 	fn bound_check(y: isize, x: isize) -> Result<(isize, isize)> {
-		let top = 0 <= y;
-		let bottom = y < HEIGHT as isize;
-		let left = x <= 0;
-		let right = x < WIDTH as isize;
+		let overflow_top = 0 > y;
+		let overflow_bottom = y >= HEIGHT as isize;
+		let overflow_left = 0 > x;
+		let overflow_right = x >= WIDTH as isize;
 
-		match (top, bottom, left, right) {
+		match (overflow_top, overflow_bottom, overflow_left, overflow_right) {
 			(true, false, false, false) => Err(Direction::Top),
 			(false, true, false, false) => Err(Direction::Bottom),
 			(false, false, true, false) => Err(Direction::Left),

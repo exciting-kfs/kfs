@@ -4,7 +4,7 @@ use super::cursor::{Cursor, Result as CursorResult};
 use crate::collection::WrapQueue;
 use crate::driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use crate::input::key_event::{Code, CursorCode};
-use crate::printkln;
+use crate::printk;
 
 use crate::driver::vga::text_vga::{HEIGHT as WINDOW_HEIGHT, WIDTH as WINDOW_WIDTH, WINDOW_SIZE};
 pub const BUFFER_HEIGHT: usize = WINDOW_HEIGHT * 4;
@@ -22,7 +22,9 @@ pub trait IConsole {
 pub struct Console {
 	buf: ConsoleBuffer,
 	window_start: usize,
+	window_start_backup: usize,
 	cursor: ConsoleCursor,
+	cursor_backup: ConsoleCursor,
 	attr: VGAAttr,
 	parser: AsciiParser,
 }
@@ -33,13 +35,15 @@ impl Console {
 	}
 
 	pub fn buffer_reserved(n: usize) -> Self {
-		let mut buf = WrapQueue::from_fn(|_| VGAChar::new(b'\0'));
+		let mut buf = WrapQueue::from_fn(|_| VGAChar::new(b' '));
 		buf.reserve(n);
 
 		Console {
 			buf,
 			window_start: 0,
+			window_start_backup: 0,
 			cursor: Cursor::new(),
+			cursor_backup: Cursor::new(),
 			attr: VGAAttr::default(),
 			parser: AsciiParser::new(),
 		}
@@ -48,7 +52,7 @@ impl Console {
 	pub fn put_char(&mut self, ch: u8) {
 		let mut window = self
 			.buf
-			.window_mut(self.window_start, WINDOW_WIDTH * WINDOW_HEIGHT)
+			.window_mut(self.window_start, WINDOW_SIZE)
 			.expect("buffer overflow");
 
 		let ch = VGAChar::styled(self.attr, ch);
@@ -96,23 +100,26 @@ impl Console {
 				.checked_sub(self.buf.size())
 				.unwrap_or_default(),
 		};
-		let need_window_move = !self.buf.full();
 
 		if extend_size > 0 {
 			self.buf
 				.push_n(VGAChar::styled(self.attr, b' '), extend_size);
 		}
 
-		if need_window_move {
-			self.window_start += extend_size;
-		}
+		self.window_start =
+			(self.window_start + BUFFER_WIDTH * lines).min(BUFFER_SIZE - WINDOW_SIZE);
 	}
 
-	fn reverse_line_feed(&mut self, lines: usize) {
+	fn line_up(&mut self, lines: usize) {
 		self.window_start = self
 			.window_start
 			.checked_sub(BUFFER_WIDTH * lines)
 			.unwrap_or_default();
+	}
+
+	fn line_down(&mut self, lines: usize) {
+		self.window_start =
+			(self.window_start + BUFFER_WIDTH * lines).min(self.buf.size() - WINDOW_SIZE);
 	}
 
 	fn carriage_return(&mut self) {
@@ -128,11 +135,11 @@ impl Console {
 	}
 
 	fn cursor_down(&mut self, n: u8) {
-		self.cursor.move_rel_partial(-(n.max(1) as isize), 0);
+		self.cursor.move_rel_partial(n.max(1) as isize, 0);
 	}
 
 	fn cursor_up(&mut self, n: u8) {
-		self.cursor.move_rel_partial(n.max(1) as isize, 0);
+		self.cursor.move_rel_partial(-(n.max(1) as isize), 0);
 	}
 
 	fn cursor_home(&mut self) {
@@ -143,16 +150,14 @@ impl Console {
 		self.cursor.move_abs_x(BUFFER_WIDTH as isize - 1).unwrap();
 	}
 
-	pub fn adjust_window_start(&mut self, dy: isize) {
-		let orig = self.window_start as isize;
-		let delta = dy * text_vga::WIDTH as isize;
-		let window_size = (text_vga::HEIGHT * text_vga::WIDTH) as isize;
-		let max_window_start = (BUFFER_SIZE as isize - window_size) as isize;
+	fn cursor_save(&mut self) {
+		self.cursor_backup = self.cursor.clone();
+		self.window_start_backup = self.window_start;
+	}
 
-		self.window_start = (orig + delta).clamp(0, max_window_start) as usize;
-
-		let overflow = (self.window_start as isize + window_size) - self.buf.size() as isize;
-		(0..overflow).for_each(|_| self.buf.push(text_vga::Char::styled(self.attr, b'\0')));
+	fn cursor_restore(&mut self) {
+		self.cursor = self.cursor_backup.clone();
+		self.window_start = self.window_start_backup;
 	}
 
 	fn handle_text(&mut self, ch: u8) {
@@ -221,8 +226,8 @@ impl Console {
 	fn handle_key(&mut self, key: u8) {
 		match key {
 			3 => self.delete_char(),
-			5 => self.reverse_line_feed(WINDOW_HEIGHT / 2),
-			6 => self.line_feed(WINDOW_HEIGHT / 2),
+			5 => self.line_up(WINDOW_HEIGHT / 2),
+			6 => self.line_down(WINDOW_HEIGHT / 2),
 			_ => (),
 		}
 	}
@@ -237,6 +242,8 @@ impl Console {
 			b'H' => self.cursor_home(),
 			b'F' => self.cursor_end(),
 			b'm' => self.handle_color(param),
+			b's' => self.cursor_save(),
+			b'u' => self.cursor_restore(),
 			_ => (),
 		};
 	}
@@ -246,7 +253,7 @@ impl IConsole for Console {
 	fn draw(&self) {
 		let window = self
 			.buf
-			.window(self.window_start, text_vga::WIDTH * text_vga::HEIGHT)
+			.window(self.window_start, WINDOW_SIZE)
 			.expect("buffer overflow");
 		text_vga::put_slice_iter(window);
 		text_vga::put_cursor(self.cursor.to_idx());

@@ -3,14 +3,9 @@ macro_rules! printkln {
 	($($arg:tt)*) => {
 		use core::fmt::Write;
 		unsafe {
-			let (res1, res2) = (
-				$crate::console::CONSOLE_MANAGER.get().write_fmt(core::format_args!($($arg)*)),
-				$crate::console::CONSOLE_MANAGER.get().write_char(b'\n' as char),
-			);
-
-			if let (Err(_), Err(_)) =  (res1, res2){
-				panic!("printk failed");
-			}
+				$crate::console::CONSOLE_MANAGER.get().write_str("\x1b[u").unwrap();
+				$crate::console::CONSOLE_MANAGER.get().write_fmt(core::format_args!($($arg)*)).unwrap();
+				$crate::console::CONSOLE_MANAGER.get().write_str("\n\x1b[s").unwrap();
 		}
 	};
 }
@@ -20,10 +15,9 @@ macro_rules! printk {
 	($($arg:tt)*) => {
 		use core::fmt::Write;
 		unsafe {
-			let res = $crate::console::CONSOLE_MANAGER.get().write_fmt(core::format_args!($($arg)*));
-			if let Err(_) = res {
-				panic!("printk failed");
-			}
+			$crate::console::CONSOLE_MANAGER.get().write_str("\x1b[u").unwrap();
+			$crate::console::CONSOLE_MANAGER.get().write_fmt(core::format_args!($($arg)*)).unwrap();
+			$crate::console::CONSOLE_MANAGER.get().write_str("\x1b[s").unwrap();
 		}
 	};
 }

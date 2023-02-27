@@ -3,6 +3,7 @@ use super::console_manager::console::{
 };
 
 use crate::driver::tty::TTY;
+use crate::driver::vga::text_vga::WINDOW_SIZE;
 use crate::input::key_event::{Code, KeyEvent, KeyKind};
 use crate::io::character::{Read, Write, RW};
 
@@ -15,7 +16,7 @@ pub struct ConsoleChain {
 impl ConsoleChain {
 	pub fn new(subroutine: &'static mut dyn RW<u8, u8>, echo: bool) -> Self {
 		Self {
-			console: Console::buffer_reserved(BUFFER_SIZE),
+			console: Console::buffer_reserved(WINDOW_SIZE),
 			tty: TTY::new(echo),
 			subroutine,
 		}
@@ -54,33 +55,3 @@ impl ConsoleChain {
 		self.console.draw();
 	}
 }
-
-// pub fn write_buf(&mut self, buf: &[u8]) {
-// 	for ch in buf {
-// 		let ch = *ch;
-
-// 		if ch == b'\n' {
-// 			self.endl();
-// 			continue;
-// 		}
-
-// 		if self.w_pos.x >= BUFFER_WIDTH {
-// 			self.endl();
-// 		}
-
-// 		self.console.put_char_absolute(ch, &self.w_pos);
-// 		self.w_pos.x += 1;
-// 	}
-
-// 	self.console.sync_window_start(self.w_pos.y + 1)
-// }
-
-// pub fn endl(&mut self) {
-// 	self.w_pos.y += 1;
-// 	self.w_pos.x = 0;
-
-// 	if self.w_pos.y >= BUFFER_HEIGHT {
-// 		self.w_pos.y -= 1;
-// 		self.console.put_empty_line();
-// 	}
-// }
