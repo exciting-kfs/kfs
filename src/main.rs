@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![allow(dead_code)]
 
 mod collection;
 mod console;
@@ -10,20 +11,11 @@ mod printk;
 mod subroutine;
 mod util;
 
-use core::{fmt::Write, panic::PanicInfo};
-
-use driver::vga::text_vga;
-
-use text_vga::{Attr as VGAAttr, Char as VGAChar, Color};
+use core::panic::PanicInfo;
 
 use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
-
-use input::{
-	key_event::{Code, KeyState},
-	keyboard::{Keyboard, KEYBOARD},
-};
-
-use collection::{Window, WrapQueue};
+use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
+use input::{key_event::Code, keyboard::KEYBOARD};
 
 #[panic_handler]
 fn panic_handler_impl(info: &PanicInfo) -> ! {

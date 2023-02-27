@@ -71,8 +71,8 @@ fn convert(code: Code) -> Option<&'static [u8]> {
 		KeyKind::Keypad(code) => convert_keypad(code),
 		KeyKind::Cursor(code) => convert_cursor(code),
 		KeyKind::Control(code) => convert_control(code),
-		KeyKind::Modifier(code) => None,
-		KeyKind::Toggle(code) => None,
+		KeyKind::Modifier(..) => None,
+		KeyKind::Toggle(..) => None,
 	}
 }
 

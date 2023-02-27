@@ -60,7 +60,7 @@ impl Keyboard {
 	}
 
 	pub fn control_pressed(&self) -> bool {
-		self.pressed(Code::LControl) || self.pressed(Code::LControl)
+		self.pressed(Code::LControl) || self.pressed(Code::RControl)
 	}
 
 	pub fn alt_pressed(&self) -> bool {

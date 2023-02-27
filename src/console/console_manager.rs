@@ -1,21 +1,16 @@
 pub mod console;
 pub mod cursor;
 
-use console::{Console, IConsole};
+use core::array;
 
 use super::ascii;
 use super::console_chain::ConsoleChain;
 
-use crate::input::key_event::{Code, KeyEvent, KeyKind};
-
+use crate::input::key_event::{KeyEvent, KeyKind};
 use crate::io::character::RW;
 use crate::subroutine::dmesg::DMESG;
 use crate::subroutine::shell::SHELL;
-
-use crate::text_vga::WINDOW_SIZE;
 use crate::util::LazyInit;
-
-use core::array;
 
 pub static mut CONSOLE_MANAGER: LazyInit<ConsoleManager> = LazyInit::new(ConsoleManager::new);
 

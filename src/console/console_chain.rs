@@ -1,11 +1,9 @@
-use super::console_manager::console::{
-	Console, IConsole, BUFFER_HEIGHT, BUFFER_SIZE, BUFFER_WIDTH,
-};
+use super::console_manager::console::Console;
 
 use crate::driver::tty::TTY;
 use crate::driver::vga::text_vga::WINDOW_SIZE;
-use crate::input::key_event::{Code, KeyEvent, KeyKind};
-use crate::io::character::{Read, Write, RW};
+use crate::input::key_event::Code;
+use crate::io::character::RW;
 
 pub struct ConsoleChain {
 	console: Console,

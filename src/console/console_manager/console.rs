@@ -1,10 +1,8 @@
-use super::ascii::{self, constants::*, Ascii, AsciiParser};
-use super::cursor::{Cursor, Result as CursorResult};
+use super::ascii::{constants::*, Ascii, AsciiParser};
+use super::cursor::Cursor;
 
 use crate::collection::WrapQueue;
 use crate::driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
-use crate::input::key_event::{Code, CursorCode};
-use crate::printk;
 
 use crate::driver::vga::text_vga::{HEIGHT as WINDOW_HEIGHT, WIDTH as WINDOW_WIDTH, WINDOW_SIZE};
 pub const BUFFER_HEIGHT: usize = WINDOW_HEIGHT * 4;
@@ -13,11 +11,6 @@ pub const BUFFER_SIZE: usize = BUFFER_HEIGHT * BUFFER_WIDTH;
 
 type ConsoleCursor = Cursor<WINDOW_HEIGHT, WINDOW_WIDTH>;
 type ConsoleBuffer = WrapQueue<VGAChar, BUFFER_SIZE>;
-
-pub trait IConsole {
-	fn update(&mut self, ascii: &[u8]);
-	fn draw(&self);
-}
 
 pub struct Console {
 	buf: ConsoleBuffer,
@@ -57,16 +50,6 @@ impl Console {
 
 		let ch = VGAChar::styled(self.attr, ch);
 		window[self.cursor.to_idx()] = ch;
-	}
-
-	// pub fn put_char_absolute(&mut self, ch: u8, pos: &ConsoleCursor) {
-	// 	let ch = VGAChar::styled(self.attr, ch);
-	// 	*self.buf.at_mut(pos.y * BUFFER_WIDTH + pos.x).unwrap() = ch;
-	// }
-
-	pub fn put_empty_line(&mut self) {
-		let ch = VGAChar::styled(self.attr, b' ');
-		self.buf.push_n(ch, BUFFER_WIDTH);
 	}
 
 	pub fn delete_char(&mut self) {
@@ -249,21 +232,13 @@ impl Console {
 			_ => (),
 		};
 	}
-}
 
-impl IConsole for Console {
-	fn draw(&self) {
+	pub fn draw(&self) {
 		let window = self
 			.buf
 			.window(self.window_start, WINDOW_SIZE)
 			.expect("buffer overflow");
 		text_vga::put_slice_iter(window);
 		text_vga::put_cursor(self.cursor.to_idx());
-	}
-
-	fn update(&mut self, ascii: &[u8]) {
-		for c in ascii {
-			self.write(*c);
-		}
 	}
 }

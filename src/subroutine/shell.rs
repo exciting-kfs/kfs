@@ -10,7 +10,7 @@ impl Read<u8> for Shell {
 }
 
 impl Write<u8> for Shell {
-	fn write_one(&mut self, data: u8) {}
+	fn write_one(&mut self, _: u8) {}
 }
 
 impl RW<u8, u8> for Shell {}
