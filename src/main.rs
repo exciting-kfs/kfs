@@ -31,11 +31,11 @@ fn panic_handler_impl(info: &PanicInfo) -> ! {
 }
 
 #[no_mangle]
-pub extern "C" fn kernel_entry() -> ! {
-	let cyan = VGAChar::styled(VGAAttr::new(false, Color::Cyan, false, Color::Cyan), b'\0');
+pub extern "C" fn kernel_entry(_boot_info: *const u32, _magic: u32) -> ! {
+	let cyan = VGAChar::styled(VGAAttr::new(false, Color::Cyan, false, Color::Cyan), b' ');
 	let magenta = VGAChar::styled(
 		VGAAttr::new(false, Color::Magenta, false, Color::Magenta),
-		b'\0',
+		b' ',
 	);
 
 	text_vga::clear();

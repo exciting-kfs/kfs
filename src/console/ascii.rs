@@ -31,7 +31,7 @@ pub mod constants {
 
 use constants::*;
 
-use crate::collection::WrapQueue;
+use crate::{collection::WrapQueue, pr_warn};
 
 #[derive(Debug)]
 pub enum Ascii {
@@ -136,7 +136,6 @@ impl AsciiParser {
 				.param
 				.checked_mul(10)
 				.and_then(|x| x.checked_add(c - b'0'));
-
 			match value {
 				Some(x) => self.param = x,
 				None => return self.handle_invaild(c),

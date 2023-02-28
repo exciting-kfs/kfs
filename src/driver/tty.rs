@@ -111,7 +111,7 @@ fn convert_cursor(code: CursorCode) -> Option<&'static [u8]> {
 
 fn convert_control(code: ControlCode) -> Option<&'static [u8]> {
 	match code {
-		ControlCode::Backspace => Some(b"\x7f"),
+		ControlCode::Backspace => Some(b"\x08"),
 		ControlCode::Delete => Some(b"\x1b[3~"),
 		ControlCode::Tab => Some(b"\t"),
 		ControlCode::Enter => Some(b"\n"),

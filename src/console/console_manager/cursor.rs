@@ -1,5 +1,7 @@
 //! Console Cursor
 
+use crate::pr_warn;
+
 #[derive(Debug)]
 pub enum Direction {
 	Top,
@@ -65,26 +67,28 @@ impl<const HEIGHT: usize, const WIDTH: usize> Cursor<HEIGHT, WIDTH> {
 		self.y = y;
 	}
 
-	/// if possible, move cursor relatively.
-	pub fn move_rel(&mut self, dy: isize, dx: isize) -> Result<()> {
-		let (y, x) = Self::bound_check(self.y + dy, self.x + dx)?;
-
-		self.do_move(y, x);
-
-		Ok(())
+	/// move cursor relatively.
+	pub fn move_rel_y(&mut self, dy: isize) {
+		self.y = (self.y + dy).clamp(0, HEIGHT as isize - 1);
 	}
 
-	/// move cursor relatively. if new point is OOB, then move partially.
-	pub fn move_rel_partial(&mut self, dy: isize, dx: isize) {
-		self.do_move(
-			(self.y + dy).clamp(0, HEIGHT as isize - 1),
-			(self.x + dx).clamp(0, WIDTH as isize - 1),
-		);
-	}
+	pub fn move_rel_x(&mut self, dx: isize) {
+		self.x += dx;
+		self.y += self.x / WIDTH as isize;
 
-	/// check relative move is possible.
-	pub fn check_rel(&mut self, dy: isize, dx: isize) -> Result<()> {
-		Self::bound_check(self.y + dy, self.x + dx).map(|_| ())
+		self.x %= WIDTH as isize;
+		if self.x < 0 {
+			self.y -= 1;
+			self.x += WIDTH as isize;
+		}
+
+		if self.y < 0 {
+			self.y = 0;
+			self.x = 0;
+		} else if HEIGHT as isize <= self.y {
+			self.y = HEIGHT as isize - 1;
+			self.x = WIDTH as isize - 1;
+		}
 	}
 
 	/// if possible, move cursor absolutely.
@@ -106,8 +110,17 @@ impl<const HEIGHT: usize, const WIDTH: usize> Cursor<HEIGHT, WIDTH> {
 		self.move_abs(y, self.x)
 	}
 
+	/// check relative move is possible.
+	pub fn check_rel(&mut self, dy: isize, dx: isize) -> Result<()> {
+		Self::bound_check(self.y + dy, self.x + dx).map(|_| ())
+	}
+
 	/// convert 2d coordinate into 1d offset.
 	pub fn to_idx(&self) -> usize {
 		(self.y as usize) * WIDTH + (self.x as usize)
+	}
+
+	pub fn to_tuple(&self) -> (usize, usize) {
+		(self.y as usize, self.x as usize)
 	}
 }

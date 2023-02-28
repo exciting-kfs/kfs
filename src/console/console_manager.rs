@@ -35,7 +35,7 @@ impl ConsoleManager {
 			foreground: 0,
 			cons: array::from_fn(|i| {
 				let (task, echo) = if (i + 1) < CONSOLE_COUNTS {
-					(unsafe { &mut SHELL[i] as &mut dyn RW<u8, u8> }, true)
+					(unsafe { &mut SHELL[i] as &mut dyn RW<u8, u8> }, i % 2 == 1)
 				} else {
 					(unsafe { &mut DMESG as &mut dyn RW<u8, u8> }, false)
 				};

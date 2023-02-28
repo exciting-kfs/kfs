@@ -153,27 +153,28 @@ impl Console {
 	}
 
 	fn cursor_left(&mut self, n: u8) {
-		self.cursor.move_rel_partial(0, -(n.max(1) as isize));
+		self.cursor.move_rel_x(-(n.max(1) as isize))
 	}
 
 	fn cursor_right(&mut self, n: u8) {
-		self.cursor.move_rel_partial(0, n.max(1) as isize);
+		self.cursor.move_rel_x(n.max(1) as isize);
 	}
 
 	fn cursor_down(&mut self, n: u8) {
-		self.cursor.move_rel_partial(n.max(1) as isize, 0);
+		self.cursor.move_rel_y(n.max(1) as isize);
 	}
 
 	fn cursor_up(&mut self, n: u8) {
-		self.cursor.move_rel_partial(-(n.max(1) as isize), 0);
+		self.cursor.move_rel_y(-(n.max(1) as isize));
 	}
 
 	fn cursor_home(&mut self) {
-		self.cursor.move_abs_x(0).unwrap();
+		self.cursor.move_abs(0, 0).unwrap();
 	}
 
 	fn cursor_end(&mut self) {
-		self.cursor.move_abs_x(BUFFER_WIDTH as isize - 1).unwrap();
+		self.cursor.move_abs_x(0).unwrap();
+		self.cursor.move_rel_y(-1);
 	}
 
 	fn cursor_save(&mut self) {
@@ -192,7 +193,7 @@ impl Console {
 		if let Err(_) = self.cursor.check_rel(0, 1) {
 			self.handle_ctl(LF);
 		} else {
-			self.cursor.move_rel_partial(0, 1);
+			self.cursor.move_rel_x(1);
 		}
 	}
 
@@ -201,16 +202,14 @@ impl Console {
 		// TODO: FF HT VT
 		match ctl {
 			BS => {
-				if let Ok(_) = self.cursor.check_rel(0, -1) {
-					self.delete_char();
-					self.cursor.move_rel_partial(0, -1);
-				}
+				self.cursor.move_rel_x(-1);
+				self.delete_char();
 			}
 			CR | LF => {
 				if let Err(_) = self.cursor.check_rel(1, 0) {
 					self.line_feed(1);
 				} else {
-					self.cursor.move_rel_partial(1, 0);
+					self.cursor.move_rel_y(1);
 				}
 				self.carriage_return();
 			}

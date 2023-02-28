@@ -87,21 +87,21 @@ macro_rules! fmt_with {
 
     (HANDLE WITH($($x:tt)+) $(WITH($($xs:tt)+))* FMT($fmt:expr)) => {
         concat!(
-            fmt_with!(WITH($($x)+)),
-            fmt_with!(HANDLE $(WITH($($xs)+))* FMT($fmt)),
-            fmt_with!(END($($x)+))
+            $crate::fmt_with!(WITH($($x)+)),
+            $crate::fmt_with!(HANDLE $(WITH($($xs)+))* FMT($fmt)),
+            $crate::fmt_with!(END($($x)+))
         )
     };
 
 	($(WITH($($xs:tt)+))* FMT($fmt:expr)) => {
-        fmt_with!($(WITH($($xs)+))* FMT($fmt,))
+        $crate::fmt_with!($(WITH($($xs)+))* FMT($fmt,))
     };
 
     ($(WITH($($xs:tt)+))* FMT($fmt:expr, $($args:tt)*)) => {
         core::format_args!(
 			concat!(
 				"\x1b[u",
-				fmt_with!(HANDLE $(WITH($($xs)+))* FMT($fmt)),
+				$crate::fmt_with!(HANDLE $(WITH($($xs)+))* FMT($fmt)),
 				"\x1b[s"
 			),
 			$($args)*
@@ -113,5 +113,19 @@ use crate::console::CONSOLE_MANAGER;
 use core::fmt::{Arguments, Result, Write};
 
 pub fn __printk(arg: Arguments<'_>) -> Result {
-	unsafe { CONSOLE_MANAGER.get().write_fmt(arg) }
+	static mut LOCK: bool = false;
+
+	if unsafe { LOCK } {
+		Ok(())
+	} else {
+		unsafe {
+			LOCK = true;
+		}
+		let result = unsafe { CONSOLE_MANAGER.get().write_fmt(arg) };
+		unsafe {
+			LOCK = false;
+		}
+
+		result
+	}
 }
