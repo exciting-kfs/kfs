@@ -1,70 +1,61 @@
 #![no_std]
 #![no_main]
+#![allow(dead_code)]
 
 mod collection;
 mod console;
 mod driver;
 mod input;
+mod io;
 mod printk;
-mod raw_io;
+mod subroutine;
 mod util;
 
 use core::panic::PanicInfo;
 
-use driver::vga::text_vga;
+use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
+use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
+use input::{key_event::Code, keyboard::KEYBOARD};
 
-use text_vga::{Attr as VGAAttr, Char as VGAChar, Color};
-
-use console::CONSOLE_MANAGER;
-
-use input::{
-	key_event::{Code, KeyState},
-	keyboard::{Keyboard, KeyboardEvent},
-};
-
-use collection::{Window, WrapQueue};
-
+/// very simple panic handler.
+/// that just print panic infomation and fall into infinity loop.
+///
+/// we should make sure no more `panic!()` from here.
 #[panic_handler]
-fn panic_handler_impl(_info: &PanicInfo) -> ! {
-	if let Some(location) = _info.location() {
-		printkln!(
-			"PANIC: {}: ({}, {})",
-			location.file(),
-			location.line(),
-			location.column()
-		);
-	}
+fn panic_handler_impl(info: &PanicInfo) -> ! {
+	unsafe { CONSOLE_MANAGER.get().set_foreground(CONSOLE_COUNTS - 1) };
 
-	let mut keyboard = Keyboard::new();
-	loop {
-		if let Some(event) = keyboard.get_keyboard_event() {
-			unsafe { CONSOLE_MANAGER.get().panic(event) }
-		}
-	}
+	printk_panic!("{}", info);
+
+	loop {}
 }
 
 #[no_mangle]
-pub extern "C" fn kernel_entry() -> ! {
-	let cyan = VGAChar::styled(VGAAttr::new(false, Color::Cyan, false, Color::Cyan), b'\0');
+pub extern "C" fn kernel_entry(_boot_info: *const u32, _magic: u32) -> ! {
+	let cyan = VGAChar::styled(VGAAttr::new(false, Color::Cyan, false, Color::Cyan), b' ');
 	let magenta = VGAChar::styled(
 		VGAAttr::new(false, Color::Magenta, false, Color::Magenta),
-		b'\0',
+		b' ',
 	);
-
-	let mut keyboard = Keyboard::new();
 
 	text_vga::clear();
 	text_vga::enable_cursor(0, 11);
 
 	loop {
-		if let Some(event) = keyboard.get_keyboard_event() {
-			if b'`' == event.ascii {
-				panic!("I hate backtick!!!");
+		if let Some(event) = unsafe { KEYBOARD.get_keyboard_event() } {
+			if event.key == Code::Backtick && event.pressed() {
+				static mut I: usize = 0;
+				unsafe {
+					pr_warn!("BACKTICK PRESSED {} TIMES!!", I);
+					I += 1;
+				}
 			}
 			text_vga::putc(24, 79, cyan);
-			unsafe { CONSOLE_MANAGER.get().update(event) };
+			unsafe {
+				CONSOLE_MANAGER.get().update(event);
+				CONSOLE_MANAGER.get().draw();
+			};
 		}
 		text_vga::putc(24, 79, magenta);
-		for _ in 0..50000 {}
 	}
 }

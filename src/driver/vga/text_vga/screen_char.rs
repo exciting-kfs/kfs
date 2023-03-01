@@ -14,7 +14,7 @@ impl Char {
 	}
 
 	pub fn empty() -> Self {
-		Self::styled(Attr::default(), b'\0')
+		Self::styled(Attr::default(), b' ')
 	}
 }
 

@@ -1,122 +1,98 @@
+//! Manage various consoles.
+
 pub mod console;
-mod cursor;
-mod key_record;
-mod readonly_console;
-
-use console::{Console, IConsole};
-use key_record::KeyRecord;
-use readonly_console::ReadOnlyConsole;
-
-use crate::input::key_event::{Code, Key, KeyState};
-use crate::input::keyboard::KeyboardEvent;
-use crate::text_vga::WINDOW_SIZE;
-use crate::util::LazyInit;
+pub mod cursor;
 
 use core::array;
 
+use super::ascii;
+use super::console_chain::ConsoleChain;
+
+use crate::input::key_event::{KeyEvent, KeyKind};
+use crate::io::character::RW;
+use crate::subroutine::dmesg::DMESG;
+use crate::subroutine::shell::SHELL;
+use crate::util::LazyInit;
+
 pub static mut CONSOLE_MANAGER: LazyInit<ConsoleManager> = LazyInit::new(ConsoleManager::new);
 
-const CONSOLE_COUNTS: usize = 4;
+pub const CONSOLE_COUNTS: usize = 4;
 
 pub struct ConsoleManager {
-	key_record: KeyRecord,
 	foreground: usize,
-	read_only_on: bool,
-	read_only: ReadOnlyConsole,
-	console: [Console; CONSOLE_COUNTS],
+	cons: [ConsoleChain; CONSOLE_COUNTS],
 }
 
 impl ConsoleManager {
+	/// Create new manager with pre-defined work consoles.
+	///
+	/// you can switch between consoles with F1 ~ F4 key.
+	///
+	/// console 0, 1, 2 is is simple echo console.
+	/// and console 3 is kernel message buffer.
 	pub fn new() -> Self {
 		ConsoleManager {
-			key_record: KeyRecord::new(),
-			foreground: 1,
-			read_only_on: false,
-			read_only: ReadOnlyConsole::new(),
-			console: array::from_fn(|_| Console::buffer_reserved(WINDOW_SIZE)),
+			foreground: 0,
+			cons: array::from_fn(|i| {
+				let (task, echo) = if (i + 1) < CONSOLE_COUNTS {
+					(unsafe { &mut SHELL[i] as &mut dyn RW<u8, u8> }, i % 2 == 1)
+				} else {
+					(unsafe { &mut DMESG as &mut dyn RW<u8, u8> }, false)
+				};
+
+				ConsoleChain::new(task, echo)
+			}),
 		}
 	}
 
-	pub fn update(&mut self, kbd_ev: KeyboardEvent) {
-		self.record_key(&kbd_ev);
-		self.select_console();
-
-		if self.read_only_on {
-			self.read_only.update(&kbd_ev, &self.key_record);
-			self.read_only.draw();
-		} else {
-			let console = &mut self.console[self.foreground];
-			console.update(&kbd_ev, &self.key_record);
-			console.draw();
-		}
-	}
-
-	pub fn panic(&mut self, kbd_ev: KeyboardEvent) {
-		self.read_only.update(&kbd_ev, &self.key_record);
-		self.read_only.draw();
-	}
-
-	pub fn dmesg(&mut self) -> &mut ReadOnlyConsole {
-		&mut self.read_only
-	}
-
-	fn record_key(&mut self, kbd_ev: &KeyboardEvent) {
-		let is_pressed = kbd_ev.state == KeyState::Pressed;
-
-		match kbd_ev.key {
-			Key::Printable(c, _) => {
-				self.key_record.printable = if is_pressed { c } else { Code::None }
-			}
-			Key::Modifier(c, _) => match c {
-				Code::Control => self.key_record.control = is_pressed,
-				Code::Alt => self.key_record.alt = is_pressed,
-				_ => {}
-			},
-			_ => {}
-		}
-	}
-
-	fn select_console(&mut self) {
-		let printable = self.key_record.printable;
-		let control = self.key_record.control;
-
-		if let Code::None = printable {
+	/// update console with new key event.
+	pub fn update(&mut self, ev: KeyEvent) {
+		if !ev.pressed() {
 			return;
 		}
 
-		let num = self.is_console_index(printable);
-		if control && num <= CONSOLE_COUNTS - 1 {
-			self.read_only_on = false;
-			self.foreground = num as usize;
-			self.key_record.printable = Code::None;
-		} else if control && printable == Code::Minus {
-			self.read_only_on = true;
-			self.key_record.printable = Code::None;
+		if let KeyKind::Function(v) = ev.identify() {
+			let idx = v.index() as usize;
+
+			if idx < CONSOLE_COUNTS {
+				self.foreground = idx;
+				return;
+			}
+		}
+
+		self.cons[self.foreground].update(ev.key);
+	}
+
+	pub fn draw(&self) {
+		self.cons[self.foreground].draw();
+	}
+
+	/// change foreground console.
+	pub fn set_foreground(&mut self, idx: usize) {
+		if idx < CONSOLE_COUNTS {
+			self.foreground = idx;
 		}
 	}
 
-	fn is_console_index(&self, code: Code) -> usize {
-		let code = code as usize;
-		let n0 = Code::N0 as usize;
-		if code >= n0 {
-			code - n0
-		} else {
-			CONSOLE_COUNTS
-		}
+	/// get console for kernel message buffer.
+	pub fn dmesg(&mut self) -> &mut ConsoleChain {
+		&mut self.cons[CONSOLE_COUNTS - 1]
 	}
 }
 
 use core::fmt;
 
 impl fmt::Write for ConsoleManager {
+	/// console format writer implementation.
 	fn write_str(&mut self, s: &str) -> fmt::Result {
-		self.dmesg().write_buf(s.as_bytes());
-		Ok(())
-	}
+		let dmesg = self.dmesg();
 
-	fn write_char(&mut self, c: char) -> fmt::Result {
-		let buf = [c as u8];
-		self.dmesg().write_buf(&buf);
+		for byte in s.as_bytes() {
+			unsafe { DMESG.write(*byte) }
+			dmesg.flush();
+		}
+
+		self.draw();
 		Ok(())
 	}
 }
