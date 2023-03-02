@@ -10,6 +10,11 @@ global kernel_init
 
 kernel_init:
     mov esp, init_stack
+    mov ebp, esp
+    push kernel_init
+    push ebp
+    mov ebp, esp
+    
     push eax
     push ebx
     mov al, 0xa7

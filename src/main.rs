@@ -10,8 +10,10 @@ mod io;
 mod printk;
 mod subroutine;
 mod util;
+mod backtrace;
 
 use core::panic::PanicInfo;
+use backtrace::Backtrace;
 
 use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
 use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
@@ -37,6 +39,23 @@ pub extern "C" fn kernel_entry(_boot_info: *const u32, _magic: u32) -> ! {
 		VGAAttr::new(false, Color::Magenta, false, Color::Magenta),
 		b' ',
 	);
+
+	let b = Backtrace::new();
+
+	// let boot_info = unsafe { multiboot2::load(_boot_info as usize).unwrap() };
+	// let elf_section_tag = boot_info.elf_sections_tag().unwrap();
+	// let elf_section_iter = elf_section_tag.sections();
+	// for section in elf_section_iter {
+	// 	if section.name() == ".symtab" {
+	// 		pr_info!("{} : {:?} : {:#x} : {}", section.name(), section.section_type(), section.start_address(), section.size());
+	// 	}
+	// 	if section.name() == ".strtab" {
+	// 		pr_info!("{} : {:?} : {:#x} : {}", section.name(), section.section_type(), section.start_address(), section.size());
+	// 	}
+	// 	if section.name() == ".shstrtab" {
+	// 		pr_info!("{} : {:?} : {:#x} : {}", section.name(), section.section_type(), section.start_address(), section.size());
+	// 	}
+	// }
 
 	text_vga::clear();
 	text_vga::enable_cursor(0, 11);
