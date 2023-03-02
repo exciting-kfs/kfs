@@ -10,8 +10,7 @@ use super::console_chain::ConsoleChain;
 
 use crate::input::key_event::{KeyEvent, KeyKind};
 use crate::io::character::RW;
-use crate::subroutine::dmesg::DMESG;
-use crate::subroutine::shell::SHELL;
+use crate::subroutine::{DMESG, RAW, SHELL};
 use crate::util::LazyInit;
 
 pub static mut CONSOLE_MANAGER: LazyInit<ConsoleManager> = LazyInit::new(ConsoleManager::new);
@@ -28,19 +27,25 @@ impl ConsoleManager {
 	///
 	/// you can switch between consoles with F1 ~ F4 key.
 	///
-	/// console 0, 1, 2 is is simple echo console.
-	/// and console 3 is kernel message buffer.
+	/// console
+	/// 	- 0 => simple shell
+	/// 	- 1 => raw console (echo on)
+	///     - 2 => raw console (echo off)
+	/// 	- 3 => kernel message buffer
 	pub fn new() -> Self {
 		ConsoleManager {
 			foreground: 0,
 			cons: array::from_fn(|i| {
-				let (task, echo) = if (i + 1) < CONSOLE_COUNTS {
-					(unsafe { &mut SHELL[i] as &mut dyn RW<u8, u8> }, i % 2 == 1)
-				} else {
-					(unsafe { &mut DMESG as &mut dyn RW<u8, u8> }, false)
+				let (sub, echo) = unsafe {
+					match i {
+						0 => (&mut SHELL as &mut dyn RW<u8, u8>, false),
+						1 => (&mut RAW[0] as &mut dyn RW<u8, u8>, true),
+						2 => (&mut RAW[1] as &mut dyn RW<u8, u8>, false),
+						3 => (&mut DMESG as &mut dyn RW<u8, u8>, false),
+						_ => unreachable!("mismatch console count"),
+					}
 				};
-
-				ConsoleChain::new(task, echo)
+				ConsoleChain::new(sub, echo)
 			}),
 		}
 	}

@@ -16,10 +16,20 @@ impl Char {
 	pub fn empty() -> Self {
 		Self::styled(Attr::default(), b' ')
 	}
+
+	pub fn into_u8(self) -> u8 {
+		(self.0 & (u8::MAX as u16 - 1)) as u8
+	}
 }
 
 impl Default for Char {
 	fn default() -> Self {
 		Self::empty()
+	}
+}
+
+impl From<Char> for u8 {
+	fn from(value: Char) -> Self {
+		value.into_u8()
 	}
 }

@@ -9,8 +9,19 @@
 //! 	- CSI N D: move cursor left `N` times.
 //! 	- CSI H: move cursor to begining.
 //! 	- CSI F: move cursor to end.
+//! 	- CSI N G: move cursor to column `N`.
+//! 	- CSI N J: erase `screen`
+//! 		- N = 0 => cursor to end
+//! 		- N = 1 => begin to cursor
+//! 		- N = 2 => entire screen then move cursor to (0,0)
+//! 	- CSI N K: erase `line`
+//! 		- N = 0 => cursor to end
+//! 		- N = 1 => begin to cursor
+//! 		- N = 2 => entire line
 //! 	- CSI N m: alter character display properties. (see console/ascii)
 //! 	- CSI N ~: pc style extra keys. (see driver/tty)
+
+use core::ops::Range;
 
 use super::ascii::{constants::*, Ascii, AsciiParser};
 use super::cursor::Cursor;
@@ -76,7 +87,7 @@ impl Console {
 			.window(self.window_start, WINDOW_SIZE)
 			.expect("buffer overflow");
 		text_vga::put_slice_iter(window);
-		text_vga::put_cursor(self.cursor.to_idx());
+		text_vga::put_cursor(self.cursor.into_flat());
 	}
 
 	/// put character at current cursor
@@ -87,7 +98,23 @@ impl Console {
 			.expect("buffer overflow");
 
 		let ch = VGAChar::styled(self.attr, ch);
-		window[self.cursor.to_idx()] = ch;
+		window[self.cursor.into_flat()] = ch;
+	}
+
+	fn is_line_continued(&mut self) -> bool {
+		let window = self
+			.buf
+			.window_mut(self.window_start, WINDOW_SIZE)
+			.expect("buffer overflow");
+
+		let (y, _) = self.cursor.to_tuple();
+		if y < 1 {
+			return false;
+		}
+
+		let last_char = window[y * BUFFER_WIDTH - 1].into_u8();
+
+		last_char == b'\0'
 	}
 
 	fn delete_char(&mut self) {
@@ -149,31 +176,43 @@ impl Console {
 	}
 
 	fn carriage_return(&mut self) {
-		self.cursor.move_abs_x(0).unwrap();
+		self.cursor.move_abs_x(0);
 	}
 
 	fn cursor_left(&mut self, n: u8) {
-		self.cursor.move_rel_x(-(n.max(1) as isize))
+		let mut left: isize = n.max(1) as isize;
+
+		if let Err(_) = self.cursor.check_rel(0, -left) {
+			while 0 < left && self.is_line_continued() {
+				let count = left.min(BUFFER_WIDTH as isize);
+				self.cursor.move_rel_wrap_x(-(count + 1));
+				left -= count;
+			}
+		}
+		self.cursor.move_rel_x(-left);
 	}
 
 	fn cursor_right(&mut self, n: u8) {
 		self.cursor.move_rel_x(n.max(1) as isize);
+		self.cursor.fixup_line_end();
 	}
 
 	fn cursor_down(&mut self, n: u8) {
 		self.cursor.move_rel_y(n.max(1) as isize);
+		self.cursor.fixup_line_end();
 	}
 
 	fn cursor_up(&mut self, n: u8) {
 		self.cursor.move_rel_y(-(n.max(1) as isize));
+		self.cursor.fixup_line_end();
 	}
 
 	fn cursor_home(&mut self) {
-		self.cursor.move_abs(0, 0).unwrap();
+		self.cursor.move_abs(0, 0);
 	}
 
 	fn cursor_end(&mut self) {
-		self.cursor.move_abs_x(0).unwrap();
+		self.cursor.move_abs_x(0);
 		self.cursor.move_rel_y(-1);
 	}
 
@@ -187,14 +226,59 @@ impl Console {
 		self.window_start = self.window_start_backup;
 	}
 
+	fn cursor_set_col(&mut self, param: u8) {
+		self.cursor.move_abs_x(param as isize);
+	}
+
+	fn erase_by_iterater<I>(&mut self, it: I)
+	where
+		I: IntoIterator<Item = usize>,
+	{
+		let mut win = self.buf.window_mut(self.window_start, WINDOW_SIZE).unwrap();
+
+		for offset in it {
+			win[offset] = VGAChar::styled(self.attr, b' ');
+		}
+	}
+
+	fn line_erase(&mut self, param: u8) {
+		let (y, x) = self.cursor.to_tuple();
+
+		let (b, e) = match param {
+			0 => (x, (BUFFER_WIDTH - 2)),
+			1 => (0, x),
+			2 => (0, (BUFFER_WIDTH - 2)),
+			_ => return,
+		};
+
+		self.erase_by_iterater((y * BUFFER_WIDTH + b)..=(y * BUFFER_WIDTH + e));
+	}
+
+	fn screen_erase(&mut self, param: u8) {
+		let (y, x) = self.cursor.to_tuple();
+
+		let rng = match param {
+			0 => 0..=(y * ),
+			1 => 0..=x,
+			2 => 0..=(BUFFER_WIDTH - 2),
+			_ => return,
+		};
+
+		let mut win = self.buf.window_mut(self.window_start, WINDOW_SIZE).unwrap();
+
+		for offset in rng {
+			win[y * BUFFER_WIDTH + offset] = VGAChar::styled(self.attr, b' ');
+		}
+	}
+
 	/// print normal ascii character.
 	fn handle_text(&mut self, ch: u8) {
-		self.put_char(ch);
 		if let Err(_) = self.cursor.check_rel(0, 1) {
+			self.put_char(b'\0');
 			self.handle_ctl(LF);
-		} else {
-			self.cursor.move_rel_x(1);
 		}
+		self.put_char(ch);
+		self.cursor.move_rel_x(1);
 	}
 
 	/// print specific ascii c0 character.
@@ -202,8 +286,15 @@ impl Console {
 		// TODO: FF HT VT
 		match ctl {
 			BS => {
-				self.cursor.move_rel_x(-1);
-				self.delete_char();
+				if let Err(_) = self.cursor.check_rel(0, -1) {
+					if self.is_line_continued() {
+						self.cursor.move_rel_wrap_x(-2);
+						self.delete_char();
+					}
+				} else {
+					self.cursor.move_rel_x(-1);
+					self.delete_char();
+				}
 			}
 			CR | LF => {
 				if let Err(_) = self.cursor.check_rel(1, 0) {

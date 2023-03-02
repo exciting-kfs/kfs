@@ -131,7 +131,7 @@ enum State {
 
 type Buffer = WrapQueue<u8, 256>;
 
-pub static mut SHELL: [Shell; 3] = [Shell::new(), Shell::new(), Shell::new()];
+pub static mut SHELL: Shell = Shell::new();
 pub struct Shell {
 	state: State,
 	line_buffer: LineBuffer<256>,
