@@ -11,25 +11,26 @@ section .text.gdt
 extern enter_rust_code
 global gdt_init
 gdt_init:
-	mov eax, cr0
-	xor eax, 0x01	; turn off PE flag
-	mov cr0, eax	; enter real mode
+	mov ecx, cr0
+	xor ecx, 0x01	; turn off PE flag
+	mov cr0, ecx	; enter real mode
 
 	lgdt [GDTR]
 
-	mov eax, cr0
-	or eax, 0x01	; turn on PE flag
-	mov cr0, eax	; enter protected mode
+	mov ecx, cr0
+	or ecx, 0x01	; turn on PE flag
+	mov cr0, ecx	; enter protected mode
 
-	mov eax, SEG_KERNEL_DATA
-	mov ds, eax
-	mov es, eax
-	mov fs, eax
-	mov gs, eax
+	mov ecx, SEG_KERNEL_DATA
+	mov ds, ecx
+	mov es, ecx
+	mov fs, ecx
+	mov gs, ecx
 
-	mov eax, SEG_KERNEL_STACK
-	mov ss, eax
+	mov ecx, SEG_KERNEL_STACK
+	mov ss, ecx
 
 	mov esp, 0x9fffe0
-
+	mov ebp, esp
+	
 	jmp SEG_KERNEL_CODE:enter_rust_code

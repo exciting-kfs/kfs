@@ -7,12 +7,13 @@ global enter_rust_code
 for_stacktrace:
     call kernel_init
 kernel_init:
-    mov esp, stack_init
-    mov ebp, esp
+    jmp gdt_init
+
+enter_rust_code:
     push kernel_init
     push ebp
     mov ebp, esp
-    
+
     push eax
     push ebx
     mov al, 0xa7
