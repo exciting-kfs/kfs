@@ -3,18 +3,24 @@ mod stackframe_iter;
 mod register;
 mod stack_dump;
 mod symtab;
+mod strtab;
 
+use multiboot2::BootInformation;
+use multiboot2::ElfSection;
 pub use stack_dump::StackDump;
 
 use symtab::Symtab;
 
+use crate::backtrace::symtab::SymtabEntry;
 use crate::pr_info;
 use crate::BOOT_INFO;
 
+use self::strtab::Strtab;
+
 pub struct Backtrace {
     stack: StackDump,
-    symtab: *const Symtab,
-    strtab: *const u8
+    symtab: Option<Symtab>,
+    strtab: Option<Strtab>
 }
 
 impl Backtrace {
@@ -27,35 +33,64 @@ impl Backtrace {
         }
     }
 
-    pub fn print_trace(self) {
-        for frame in self.stack {
-            pr_info!("{:?}: {:?}", frame.base_ptr, frame.fn_addr);
+    pub fn print_trace(&self) {
+        for (idx, frame) in self.stack.iter().enumerate() {
+            let name = self.find_name(frame.fn_addr);
+            pr_info!("frame #{}: {:?}: {:?}", idx, frame.fn_addr, name);
         }
+    }
+
+    fn find_name(&self, fn_addr: *const usize) -> &'static str {
+        let index = self.symtab.as_ref()
+            .map(|sym| sym.get_name_index(fn_addr)).flatten();
+        let name = self.strtab.as_ref()
+            .map(|str| str.get_name(index)).flatten();
+        name.unwrap_or_default()
     }
 }
 
-fn get_tables() -> (*const Symtab, *const u8) {
+fn get_tables() -> (Option<Symtab>, Option<Strtab>) {
     let boot_info = unsafe {
-        let bi_addr = match BOOT_INFO {
-            Some(bi_addr) => bi_addr,
-            None => panic!("There is no boot information!")
-        };
-        multiboot2::load(bi_addr as usize).expect("invalid address or format")
+        let bi_addr = BOOT_INFO.expect("boot information: not existed");
+        multiboot2::load(bi_addr as usize).expect("boot information: invalid address or format")
     };
+
+    let (symtab, strtab) = get_sections(boot_info);
+    let symtab = symtab.map(|section| {
+        let addr = section.start_address() as *const SymtabEntry;
+        let count =  section.size() as usize / core::mem::size_of::<SymtabEntry>();
+        Symtab::new(addr, count)
+    });
+    let strtab = strtab.map(|section| {
+        Strtab::new(section.start_address() as *const u8)
+    });
+
+    (symtab, strtab)
+}
+
+fn get_sections(boot_info: BootInformation) -> (Option<ElfSection>, Option<ElfSection>) {
 
     let elf_section_tag = boot_info.elf_sections_tag().unwrap();
 	let elf_section_iter = elf_section_tag.sections();
-    let mut symtab = 0;
-    let mut strtab = 0;
+    
+    let mut symtab = None;
+    let mut strtab = None;
 	for section in elf_section_iter {
 		if section.name() == ".symtab" {
-            pr_info!("SYMTAB: {:#x}", section.start_address());
-            symtab = section.start_address();
+            symtab = Some(section);
 		}
 		else if section.name() == ".strtab" {
-            pr_info!("STRTAB: {:#x}", section.start_address());
-            strtab = section.start_address();
+            strtab = Some(section);
 		}
 	}
-    (symtab as *const Symtab, strtab as *const u8)
+    (symtab, strtab)
+}
+
+#[macro_export]
+macro_rules! print_stacktrace {
+    () => {
+        let dump = StackDump::new();
+        let bt = Backtrace::new(dump);
+        bt.print_trace();   
+    };
 }

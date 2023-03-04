@@ -16,9 +16,23 @@ impl StackDump {
 
         StackDump { begin: bp }
     }
+
+    pub fn iter(&self) -> StackframeIter {
+        self.into_iter()
+    }
 }
 
 impl IntoIterator for StackDump {
+    type IntoIter = StackframeIter;
+    type Item = Stackframe;
+    fn into_iter(self) -> Self::IntoIter {
+        StackframeIter {
+            base_ptr: self.begin
+        }
+    }
+}
+
+impl IntoIterator for &StackDump {
     type IntoIter = StackframeIter;
     type Item = Stackframe;
     fn into_iter(self) -> Self::IntoIter {

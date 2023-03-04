@@ -44,12 +44,10 @@ pub fn kernel_entry(_boot_info: *const u32, _magic: u32) -> ! {
 		b' ',
 	);
 
-	let dump = StackDump::new();
-	let bt = Backtrace::new(dump);
-	bt.print_trace();
-
 	text_vga::clear();
 	text_vga::enable_cursor(0, 11);
+
+	print_stacktrace!();
 
 	loop {
 		if let Some(event) = unsafe { KEYBOARD.get_keyboard_event() } {

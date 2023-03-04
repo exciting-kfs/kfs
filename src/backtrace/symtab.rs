@@ -1,4 +1,28 @@
 pub struct Symtab {
+    addr: *const SymtabEntry,
+    count: usize
+}
+
+impl Symtab {
+    pub fn new(addr: *const SymtabEntry, count: usize) -> Self {
+        Symtab { addr, count }
+    }
+
+    pub fn get_name_index(&self, fn_addr: *const usize) -> Option<isize> {
+        let mut ret = None;
+        unsafe {
+            for c in 0..self.count {
+                let entry = &*self.addr.offset(c as isize);
+                if entry.st_value == fn_addr as u32 {
+                    ret = Some(entry.st_name as isize)
+                }
+            }
+        }
+        ret
+    }
+}
+
+pub struct SymtabEntry {
     st_name: u32,
     st_value: u32,
     st_size: u32,
