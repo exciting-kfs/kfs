@@ -13,11 +13,11 @@ mod util;
 mod backtrace;
 
 use core::panic::PanicInfo;
-use backtrace::Backtrace;
 
 use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
 use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use input::{key_event::Code, keyboard::KEYBOARD};
+use backtrace::{StackDump, Backtrace};
 
 /// very simple panic handler.
 /// that just print panic infomation and fall into infinity loop.
@@ -32,30 +32,21 @@ fn panic_handler_impl(info: &PanicInfo) -> ! {
 	loop {}
 }
 
+pub static mut BOOT_INFO: Option<*const u32> = None;
+
 #[no_mangle]
-pub extern "C" fn kernel_entry(_boot_info: *const u32, _magic: u32) -> ! {
+pub fn kernel_entry(_boot_info: *const u32, _magic: u32) -> ! {
+	unsafe { BOOT_INFO = Some(_boot_info) };
+
 	let cyan = VGAChar::styled(VGAAttr::new(false, Color::Cyan, false, Color::Cyan), b' ');
 	let magenta = VGAChar::styled(
 		VGAAttr::new(false, Color::Magenta, false, Color::Magenta),
 		b' ',
 	);
 
-	let b = Backtrace::new();
-
-	// let boot_info = unsafe { multiboot2::load(_boot_info as usize).unwrap() };
-	// let elf_section_tag = boot_info.elf_sections_tag().unwrap();
-	// let elf_section_iter = elf_section_tag.sections();
-	// for section in elf_section_iter {
-	// 	if section.name() == ".symtab" {
-	// 		pr_info!("{} : {:?} : {:#x} : {}", section.name(), section.section_type(), section.start_address(), section.size());
-	// 	}
-	// 	if section.name() == ".strtab" {
-	// 		pr_info!("{} : {:?} : {:#x} : {}", section.name(), section.section_type(), section.start_address(), section.size());
-	// 	}
-	// 	if section.name() == ".shstrtab" {
-	// 		pr_info!("{} : {:?} : {:#x} : {}", section.name(), section.section_type(), section.start_address(), section.size());
-	// 	}
-	// }
+	let dump = StackDump::new();
+	let bt = Backtrace::new(dump);
+	bt.print_trace();
 
 	text_vga::clear();
 	text_vga::enable_cursor(0, 11);

@@ -1,10 +1,13 @@
 # build targets
-
 /target
 rescue.iso
+Cargo.lock
 
 # mac os finder cache
 .DS_Store
 
 # editor settings
 .vscode
+
+# temporary file
+.sw*
