@@ -1,3 +1,5 @@
+//! Backtrace
+
 mod stackframe;
 mod stackframe_iter;
 mod register;
@@ -7,15 +9,15 @@ mod strtab;
 
 use multiboot2::BootInformation;
 use multiboot2::ElfSection;
-pub use stack_dump::StackDump;
 
+use strtab::Strtab;
 use symtab::Symtab;
 
 use crate::backtrace::symtab::SymtabEntry;
 use crate::pr_info;
 use crate::BOOT_INFO;
 
-use self::strtab::Strtab;
+pub use stack_dump::StackDump;
 
 pub struct Backtrace {
     stack: StackDump,
@@ -25,7 +27,13 @@ pub struct Backtrace {
 
 impl Backtrace {
     pub fn new(stack: StackDump) -> Self {
-        let (symtab, strtab) = get_tables();
+        let boot_info = unsafe {
+            let bi_addr = BOOT_INFO.expect("boot information: not existed");
+            multiboot2::load(bi_addr as usize).expect("boot information: invalid address or format")
+        };
+
+        let (symtab, strtab) = get_sections(boot_info);
+        let (symtab, strtab) = make_tables(symtab, strtab);
         Backtrace {
             stack,
             symtab,
@@ -33,6 +41,7 @@ impl Backtrace {
         }
     }
 
+    /// Print call stack trace of StackDump.
     pub fn print_trace(&self) {
         for (idx, frame) in self.stack.iter().enumerate() {
             let name = self.find_name(frame.fn_addr);
@@ -40,6 +49,7 @@ impl Backtrace {
         }
     }
 
+    /// Find function name using Symtab and Strtab
     fn find_name(&self, fn_addr: *const usize) -> &'static str {
         let index = self.symtab.as_ref()
             .map(|sym| sym.get_name_index(fn_addr)).flatten();
@@ -49,13 +59,8 @@ impl Backtrace {
     }
 }
 
-fn get_tables() -> (Option<Symtab>, Option<Strtab>) {
-    let boot_info = unsafe {
-        let bi_addr = BOOT_INFO.expect("boot information: not existed");
-        multiboot2::load(bi_addr as usize).expect("boot information: invalid address or format")
-    };
-
-    let (symtab, strtab) = get_sections(boot_info);
+/// Make Symtab and Strtab using ELF sections.
+fn make_tables(symtab: Option<ElfSection>, strtab: Option<ElfSection>) -> (Option<Symtab>, Option<Strtab>) {
     let symtab = symtab.map(|section| {
         let addr = section.start_address() as *const SymtabEntry;
         let count =  section.size() as usize / core::mem::size_of::<SymtabEntry>();
@@ -68,6 +73,7 @@ fn get_tables() -> (Option<Symtab>, Option<Strtab>) {
     (symtab, strtab)
 }
 
+/// Get elf sections named ".symtab" and ".strtab" in multiboot2 boot information.
 fn get_sections(boot_info: BootInformation) -> (Option<ElfSection>, Option<ElfSection>) {
 
     let elf_section_tag = boot_info.elf_sections_tag().unwrap();
@@ -86,6 +92,7 @@ fn get_sections(boot_info: BootInformation) -> (Option<ElfSection>, Option<ElfSe
     (symtab, strtab)
 }
 
+/// Print call stack trace in current context.
 #[macro_export]
 macro_rules! print_stacktrace {
     () => {

@@ -1,3 +1,4 @@
+/// Symbol table in the '.symtab' section.
 pub struct Symtab {
     addr: *const SymtabEntry,
     count: usize
@@ -8,6 +9,7 @@ impl Symtab {
         Symtab { addr, count }
     }
 
+    /// Find the symtab entry and return index of name used in the strtab.
     pub fn get_name_index(&self, fn_addr: *const usize) -> Option<isize> {
         let mut ret = None;
         unsafe {
@@ -22,6 +24,7 @@ impl Symtab {
     }
 }
 
+/// Symbol table entry
 pub struct SymtabEntry {
     st_name: u32,
     st_value: u32,

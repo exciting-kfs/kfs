@@ -3,6 +3,7 @@ use super::stackframe::{
 };
 
 extern "C" {
+    /// the start address of the stack.
     fn stack_init();
 }
 

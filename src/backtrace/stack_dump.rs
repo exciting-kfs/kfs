@@ -5,6 +5,7 @@ use super::stackframe::{
     self, Stackframe
 };
 
+/// The type that holds the top most base pointer of the generated context.
 pub struct StackDump {
     begin: *const usize
 }
