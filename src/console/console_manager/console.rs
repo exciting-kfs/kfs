@@ -21,8 +21,6 @@
 //! 	- CSI N m: alter character display properties. (see console/ascii)
 //! 	- CSI N ~: pc style extra keys. (see driver/tty)
 
-use core::ops::Range;
-
 use super::ascii::{constants::*, Ascii, AsciiParser};
 use super::cursor::Cursor;
 
@@ -101,22 +99,6 @@ impl Console {
 		window[self.cursor.into_flat()] = ch;
 	}
 
-	fn is_line_continued(&mut self) -> bool {
-		let window = self
-			.buf
-			.window_mut(self.window_start, WINDOW_SIZE)
-			.expect("buffer overflow");
-
-		let (y, _) = self.cursor.to_tuple();
-		if y < 1 {
-			return false;
-		}
-
-		let last_char = window[y * BUFFER_WIDTH - 1].into_u8();
-
-		last_char == b'\0'
-	}
-
 	fn delete_char(&mut self) {
 		self.put_char(b' ');
 	}
@@ -180,16 +162,7 @@ impl Console {
 	}
 
 	fn cursor_left(&mut self, n: u8) {
-		let mut left: isize = n.max(1) as isize;
-
-		if let Err(_) = self.cursor.check_rel(0, -left) {
-			while 0 < left && self.is_line_continued() {
-				let count = left.min(BUFFER_WIDTH as isize);
-				self.cursor.move_rel_wrap_x(-(count + 1));
-				left -= count;
-			}
-		}
-		self.cursor.move_rel_x(-left);
+		self.cursor.move_rel_x(-(n.max(1) as isize));
 	}
 
 	fn cursor_right(&mut self, n: u8) {
@@ -255,26 +228,23 @@ impl Console {
 	}
 
 	fn screen_erase(&mut self, param: u8) {
-		let (y, x) = self.cursor.to_tuple();
-
 		let rng = match param {
-			0 => 0..=(y * ),
-			1 => 0..=x,
-			2 => 0..=(BUFFER_WIDTH - 2),
+			0 => 0..=self.cursor.into_flat(),
+			1 => self.cursor.into_flat()..=(WINDOW_SIZE - 1),
+			2 => 0..=(WINDOW_SIZE - 1),
 			_ => return,
 		};
 
-		let mut win = self.buf.window_mut(self.window_start, WINDOW_SIZE).unwrap();
+		self.erase_by_iterater(rng);
 
-		for offset in rng {
-			win[y * BUFFER_WIDTH + offset] = VGAChar::styled(self.attr, b' ');
+		if param == 2 {
+			self.cursor.move_abs(0, 0);
 		}
 	}
 
 	/// print normal ascii character.
 	fn handle_text(&mut self, ch: u8) {
 		if let Err(_) = self.cursor.check_rel(0, 1) {
-			self.put_char(b'\0');
 			self.handle_ctl(LF);
 		}
 		self.put_char(ch);
@@ -286,12 +256,7 @@ impl Console {
 		// TODO: FF HT VT
 		match ctl {
 			BS => {
-				if let Err(_) = self.cursor.check_rel(0, -1) {
-					if self.is_line_continued() {
-						self.cursor.move_rel_wrap_x(-2);
-						self.delete_char();
-					}
-				} else {
+				if let Ok(_) = self.cursor.check_rel(0, -1) {
 					self.cursor.move_rel_x(-1);
 					self.delete_char();
 				}
@@ -356,6 +321,9 @@ impl Console {
 			b'm' => self.handle_color(param),
 			b's' => self.cursor_save(),
 			b'u' => self.cursor_restore(),
+			b'J' => self.line_erase(param),
+			b'K' => self.screen_erase(param),
+			b'G' => self.cursor.move_abs_x(param as isize),
 			_ => (),
 		};
 	}

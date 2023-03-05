@@ -2,7 +2,6 @@ use crate::{
 	collection::WrapQueue,
 	console::{constants::*, Ascii, AsciiParser},
 	io::character::{Read, Write, RW},
-	pr_err, pr_info, printk,
 };
 
 pub struct LineBuffer<const CAP: usize> {
@@ -51,37 +50,29 @@ impl<const CAP: usize> LineBuffer<CAP> {
 		}
 	}
 
-	pub fn putc(&mut self, c: u8) -> Result<usize> {
+	pub fn putc(&mut self, c: u8) {
 		if self.full() {
-			return Err(());
+			return;
 		}
 
 		self.shift_chars(self.cursor, false);
 		self.buf[self.cursor] = c;
 		self.tail += 1;
 		self.cursor += 1;
-
-		Ok(self.cursor - 1)
 	}
 
-	pub fn delc(&mut self, left: bool) -> Result<usize> {
+	pub fn delc(&mut self, left: bool) {
 		if self.empty() {
-			return Err(());
+			return;
 		}
 
 		if left && self.cursor > 0 {
 			self.shift_chars(self.cursor, true);
 			self.cursor -= 1;
 			self.tail -= 1;
-
-			Ok(self.cursor)
 		} else if !left && self.cursor < self.tail {
 			self.shift_chars(self.cursor + 1, true);
 			self.tail -= 1;
-
-			Ok(self.cursor)
-		} else {
-			Err(())
 		}
 	}
 
@@ -134,7 +125,7 @@ type Buffer = WrapQueue<u8, 256>;
 pub static mut SHELL: Shell = Shell::new();
 pub struct Shell {
 	state: State,
-	line_buffer: LineBuffer<256>,
+	line_buffer: LineBuffer<64>,
 	write_queue: Buffer,
 	parser: AsciiParser,
 }
@@ -152,76 +143,46 @@ impl Shell {
 	}
 
 	fn write_text(&mut self, ch: u8) {
-		if let Ok(cursor) = self.line_buffer.putc(ch) {
-			self.sync_text(cursor);
-		}
+		self.line_buffer.putc(ch);
 	}
 
-	fn sync_del(&mut self, cursor: usize) {
-		let window = self.line_buffer.window_at(cursor);
-
-		self.write_queue.push(BS);
-
-		for c in window {
-			self.write_queue.push(*c);
+	fn sync_line(&mut self) {
+		self.sync_cursor(PROMPT.len() as u8);
+		self.write_const(b"\x1b[J");
+		for ch in self.line_buffer.window_at(0) {
+			self.write_queue.push(*ch);
 		}
-
-		self.write_queue.push(b' ');
-
-		for _ in 0..window.len() + 1 {
-			self.write_const(b"\x1b[D");
-		}
-
-		// while 0 < remain_move {
-		// 	let lsb = remain_move % 10;
-		// 	remain_move /= 10;
-		// 	if lsb != 0 {
-		// 		self.write_const(b"\x1b[");
-		// 		self.write_queue.push(lsb as u8 + b'0');
-		// 		self.write_queue.push(b'D');
-		// 	}
-		// }
-
-		// self.write_queue.push(BS);
+		self.sync_cursor(self.line_buffer.cursor as u8 + PROMPT.len() as u8);
 	}
 
-	fn sync_text(&mut self, cursor: usize) {
-		let window = self.line_buffer.window_at(cursor);
+	fn sync_cursor(&mut self, mut cursor: u8) {
+		let mut buf = [0, 0, 0];
+		let mut buf_cur = buf.len() - 1;
 
-		for c in window {
-			self.write_queue.push(*c);
+		loop {
+			buf[buf_cur] = cursor % 10 + b'0';
+			cursor /= 10;
+			if cursor == 0 {
+				break;
+			}
+			buf_cur -= 1;
 		}
 
-		for _ in 0..window.len() - 1 {
-			self.write_const(b"\x1b[D");
+		self.write_const(b"\x1b[");
+		for num in &buf[buf_cur..] {
+			self.write_queue.push(*num);
 		}
-		// let mut remain_move = window.len().checked_sub(1).unwrap_or_default();
-
-		// while 0 < remain_move {
-		// 	let lsb = remain_move % 10;
-		// 	remain_move /= 10;
-		// 	if lsb != 0 {
-		// 		self.write_const(b"\x1b[");
-		// 		self.write_queue.push(lsb as u8 + b'0');
-		// 		self.write_queue.push(b'D');
-		// 	}
-		// }
+		self.write_queue.push(b'G');
 	}
 
 	fn write_ctl(&mut self, c: u8) {
 		match c {
 			BS => {
-				if let Ok(cursor) = self.line_buffer.delc(true) {
-					self.sync_del(cursor);
-				}
+				self.line_buffer.delc(true);
 			}
 			CR | LF => {
 				self.write_queue.push(b'\n');
-				self.write_const(PROMPT);
-				for c in self.line_buffer.window_at(0) {
-					printk!("{}", *c as char);
-				}
-				printk!("\n");
+				self.state = State::Prompt;
 				self.line_buffer.clear();
 			}
 			_ => (),
@@ -269,6 +230,7 @@ impl Write<u8> for Shell {
 	fn write_one(&mut self, data: u8) {
 		if let State::Prompt = self.state {
 			self.write_const(PROMPT);
+			self.sync_cursor(PROMPT.len() as u8);
 			self.state = State::Sync;
 		}
 
@@ -282,7 +244,7 @@ impl Write<u8> for Shell {
 			Ascii::Control(c) => self.write_ctl(c),
 			Ascii::CtlSeq(param, kind) => self.write_ctlseq(param, kind),
 		}
-
+		self.sync_line();
 		self.parser.reset();
 	}
 }
