@@ -21,34 +21,31 @@ pub use stack_dump::StackDump;
 
 pub struct Backtrace {
 	stack: StackDump,
-	tables: Option<(Symtab, Strtab)>
+	tables: Option<(Symtab, Strtab)>,
 }
 
 impl Backtrace {
 	pub fn new(stack: StackDump) -> Self {
-		let boot_info = unsafe {
-			 BOOT_INFO.map(|bi_addr| multiboot2::load(bi_addr as usize).ok()).flatten()
-		};
+		let boot_info =
+			unsafe { BOOT_INFO.and_then(|bi_addr| multiboot2::load(bi_addr as usize).ok()) };
 
-		let tables = boot_info
-			.and_then(get_sections)
-			.and_then(make_tables);
+		let tables = boot_info.and_then(get_sections).and_then(make_tables);
 
 		Backtrace { stack, tables }
 	}
 
-    	/// Print call stack trace of StackDump.
+	/// Print call stack trace of StackDump.
 	pub fn print_trace(&self) {
 		for (idx, frame) in self.stack.iter().enumerate() {
-		let name = self.find_name(frame.fn_addr);
-		pr_info!("frame #{}: {:?}: {:?}", idx, frame.fn_addr, name);
+			let name = self.find_name(frame.fn_addr);
+			pr_info!("frame #{}: {:?}: {:?}", idx, frame.fn_addr, name);
 		}
 	}
 
 	/// Find function name using Symtab and Strtab
 	fn find_name(&self, fn_addr: *const usize) -> &'static str {
 		if let None = self.tables {
-			return ""
+			return "";
 		}
 		let (symtab, strtab) = self.tables.as_ref().unwrap();
 		let index = symtab.get_name_index(fn_addr);
@@ -58,9 +55,7 @@ impl Backtrace {
 }
 
 /// Make Symtab and Strtab using ELF sections.
-fn make_tables(
-	sections: (ElfSection, ElfSection)
-) -> Option<(Symtab, Strtab)> {
+fn make_tables(sections: (ElfSection, ElfSection)) -> Option<(Symtab, Strtab)> {
 	let (symtab, strtab) = sections;
 	let addr = symtab.start_address() as *const SymtabEntry;
 	let count = symtab.size() as usize / core::mem::size_of::<SymtabEntry>();
