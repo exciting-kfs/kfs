@@ -14,7 +14,7 @@ impl Strtab {
     pub fn get_name(&self, index: Option<isize>) -> Option<&'static str> {
         index.map(|idx| {
             let start = unsafe { self.addr.offset(idx) } as *const c_char;
-            unsafe { CStr::from_ptr(start).to_str().expect("invalid strtab or index.") }
-        })
+            unsafe { CStr::from_ptr(start).to_str().ok() }
+        }).flatten()
     }
 }
