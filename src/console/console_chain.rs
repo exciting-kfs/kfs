@@ -10,9 +10,10 @@ use crate::io::character::RW;
 /// connects KEYBOARD - TTY - SUBROUTINE - CONSOLE - VGA
 ///
 /// brief topology is
-///
+///```
 /// KEYBOARD --> TTY ---(echo)---> CONSOLE --> VGA
 ///               `--> SUBROUTINE -->`
+/// ```
 pub struct ConsoleChain {
 	console: Console,
 	tty: TTY,
@@ -33,6 +34,7 @@ impl ConsoleChain {
 	/// We have to perform I/O in depth-first.
 	/// since almost all related devices doesn't have their internal buffer.
 	pub fn update(&mut self, code: Code) {
+		self.flush();
 		self.tty.write(code);
 		self.flush_tty();
 	}

@@ -269,6 +269,11 @@ impl Console {
 				}
 				self.carriage_return();
 			}
+			FF => {
+				let (y, _) = self.cursor.to_tuple();
+				self.line_feed(y);
+				self.cursor.move_abs(0, 0);
+			}
 			_ => (),
 		}
 	}
