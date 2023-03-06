@@ -2,6 +2,7 @@
 #![no_main]
 #![allow(dead_code)]
 
+mod backtrace;
 mod collection;
 mod console;
 mod driver;
@@ -10,14 +11,12 @@ mod io;
 mod printk;
 mod subroutine;
 mod util;
-mod backtrace;
 
 use core::panic::PanicInfo;
 
 use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
 use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use input::{key_event::Code, keyboard::KEYBOARD};
-use backtrace::{StackDump, Backtrace};
 
 /// very simple panic handler.
 /// that just print panic infomation and fall into infinity loop.
@@ -44,10 +43,10 @@ pub fn kernel_entry(_boot_info: *const u32, _magic: u32) -> ! {
 		b' ',
 	);
 
+	print_stacktrace!();
+
 	text_vga::clear();
 	text_vga::enable_cursor(0, 11);
-
-	print_stacktrace!();
 
 	loop {
 		if let Some(event) = unsafe { KEYBOARD.get_keyboard_event() } {
