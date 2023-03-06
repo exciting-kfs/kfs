@@ -1,5 +1,4 @@
 # build targets
-
 /target
 rescue.iso
 
@@ -8,3 +7,6 @@ rescue.iso
 
 # editor settings
 .vscode
+
+# temporary file
+.sw*

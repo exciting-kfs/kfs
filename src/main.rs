@@ -2,6 +2,7 @@
 #![no_main]
 #![allow(dead_code)]
 
+mod backtrace;
 mod collection;
 mod console;
 mod driver;
@@ -30,13 +31,19 @@ fn panic_handler_impl(info: &PanicInfo) -> ! {
 	loop {}
 }
 
+pub static mut BOOT_INFO: Option<*const u32> = None;
+
 #[no_mangle]
-pub extern "C" fn kernel_entry(_boot_info: *const u32, _magic: u32) -> ! {
+pub fn kernel_entry(_boot_info: *const u32, _magic: u32) -> ! {
+	unsafe { BOOT_INFO = Some(_boot_info) };
+
 	let cyan = VGAChar::styled(VGAAttr::new(false, Color::Cyan, false, Color::Cyan), b' ');
 	let magenta = VGAChar::styled(
 		VGAAttr::new(false, Color::Magenta, false, Color::Magenta),
 		b' ',
 	);
+
+	print_stacktrace!();
 
 	text_vga::clear();
 	text_vga::enable_cursor(0, 11);

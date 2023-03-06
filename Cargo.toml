@@ -18,3 +18,7 @@ panic = "abort"
 [[bin]]
 name = "kernel"
 path = "src/main.rs"
+
+[dependencies]
+multiboot2 = "0.14.0"
+rustc-demangle = "0.1.21"

@@ -23,6 +23,7 @@ rescue :
 clean :
 	cargo clean
 	rm -f rescue.iso
+	rm -f .sw*
 
 dump-all:
 	objdump -D $(OBJDUMP_OPTS) $(KERNEL_BIN) $(OBJDUMP_PAGER)
