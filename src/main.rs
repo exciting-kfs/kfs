@@ -8,6 +8,7 @@ mod console;
 mod driver;
 mod input;
 mod io;
+mod multiboot2a;
 mod printk;
 mod subroutine;
 mod util;
@@ -17,6 +18,7 @@ use core::panic::PanicInfo;
 use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
 use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use input::{key_event::Code, keyboard::KEYBOARD};
+use multiboot2a::{BootInfo, BootInfoHeader};
 
 /// very simple panic handler.
 /// that just print panic infomation and fall into infinity loop.
@@ -37,7 +39,7 @@ pub static mut BOOT_INFO: usize = 0;
 const MULTIBOOT2_MAGIC: u32 = 0x36d76289;
 
 #[no_mangle]
-pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
+pub fn kernel_entry(bi_header: &'static BootInfoHeader, magic: u32) -> ! {
 	text_vga::clear();
 	text_vga::enable_cursor(0, 11);
 
@@ -51,9 +53,18 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 			MULTIBOOT2_MAGIC, magic
 		);
 	}
+	unsafe { BOOT_INFO = bi_header as *const _ as usize };
 
-	unsafe { BOOT_INFO = bi_header };
+	let bi = BootInfo::load_from_header(bi_header);
 
+	if let Some(m) = bi.mmap() {
+		for mmap in m.entries() {
+			pr_warn!("{}", mmap);
+		}
+	}
+	// for entry in bi.mmap()
+
+	panic!("err");
 	let cyan = VGAChar::styled(VGAAttr::new(false, Color::Cyan, false, Color::Cyan), b' ');
 	let magenta = VGAChar::styled(
 		VGAAttr::new(false, Color::Magenta, false, Color::Magenta),

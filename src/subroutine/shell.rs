@@ -9,6 +9,8 @@ use core::fmt::{self, Write};
 
 use core::{arch::asm, slice::from_raw_parts};
 
+use multiboot2::{ElfSection, ElfSectionsTag};
+
 pub struct LineBuffer<const CAP: usize> {
 	buf: [u8; CAP],
 	cursor: usize,
@@ -230,6 +232,7 @@ impl Shell {
 				" - halt: halt system.\n",
 				" - mem: show memory info.\n",
 				" - clear: clear output.\n",
+				" - sym: show all kernel symbols.\n"
 			),
 		)
 		.unwrap();
@@ -267,9 +270,36 @@ impl Shell {
 				mem.start_address(),
 				mem.size(),
 				mem.typ()
-			)
-			.unwrap();
+			);
 		}
+	}
+
+	fn builtin_sym_print_symbols(&mut self, section: ElfSection, sections: &ElfSectionsTag) {
+		let addr = section.start_address() as usize;
+	}
+
+	fn builtin_sym(&mut self) {
+		let boot_info = match unsafe { multiboot2::load(BOOT_INFO) } {
+			Err(e) => {
+				writeln!(self, "sym: missing multiboot2 boot info: {:?}", e).unwrap();
+				return;
+			}
+			Ok(v) => v,
+		};
+
+		let sections = match boot_info.elf_sections_tag() {
+			None => {
+				writeln!(self, "sym: missing section tag").unwrap();
+				return;
+			}
+			Some(v) => v,
+		};
+
+		// for section in sections.sections() {
+		// 	if section.name() == ".symtab" {
+		// 		self.builtin_sym_print_symbols(section);
+		// 	}
+		// }
 	}
 
 	fn execute_builtin<'a, T>(&mut self, kind: Builtin, _args: T)
@@ -280,6 +310,7 @@ impl Shell {
 			Builtin::Help => self.builtin_help(),
 			Builtin::Clear => self.builtin_clear(),
 			Builtin::Halt => self.builtin_halt(),
+			Builtin::Sym => self.builtin_help(),
 			Builtin::Mem => self.builtin_mem(),
 		}
 	}
@@ -368,6 +399,7 @@ enum Builtin {
 	Help,
 	Halt,
 	Clear,
+	Sym,
 	Mem,
 }
 
@@ -377,6 +409,7 @@ impl Builtin {
 			b"help" => Self::Help,
 			b"halt" => Self::Halt,
 			b"clear" => Self::Clear,
+			b"sym" => Self::Sym,
 			b"mem" => Self::Mem,
 			_ => return None,
 		};
