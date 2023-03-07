@@ -26,7 +26,8 @@ use input::{key_event::Code, keyboard::KEYBOARD};
 fn panic_handler_impl(info: &PanicInfo) -> ! {
 	unsafe { CONSOLE_MANAGER.get().set_foreground(CONSOLE_COUNTS - 1) };
 
-	printk_panic!("{}", info);
+	printk_panic!("{}\ncall stack (most recent call first)\n", info);
+	print_stacktrace!();
 
 	loop {}
 }
@@ -42,8 +43,6 @@ pub fn kernel_entry(_boot_info: *const u32, _magic: u32) -> ! {
 		VGAAttr::new(false, Color::Magenta, false, Color::Magenta),
 		b' ',
 	);
-
-	print_stacktrace!();
 
 	text_vga::clear();
 	text_vga::enable_cursor(0, 11);
