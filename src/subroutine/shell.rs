@@ -1,8 +1,11 @@
 use crate::{
 	collection::WrapQueue,
 	console::{constants::*, Ascii, AsciiParser},
-	io::character::{Read, Write, RW},
+	io::character::{Read as ChRead, Write as ChWrite, RW as ChRW},
+	BOOT_INFO,
 };
+
+use core::fmt::{self, Write};
 
 use core::{arch::asm, slice::from_raw_parts};
 
@@ -160,24 +163,8 @@ impl Shell {
 		self.sync_cursor(self.line_buffer.cursor as u8 + PROMPT.len() as u8);
 	}
 
-	fn sync_cursor(&mut self, mut cursor: u8) {
-		let mut buf = [0, 0, 0];
-		let mut buf_cur = buf.len() - 1;
-
-		loop {
-			buf[buf_cur] = cursor % 10 + b'0';
-			cursor /= 10;
-			if cursor == 0 {
-				break;
-			}
-			buf_cur -= 1;
-		}
-
-		self.write_const(b"\x1b[");
-		for num in &buf[buf_cur..] {
-			self.write_queue.push(*num);
-		}
-		self.write_queue.push(b'G');
+	fn sync_cursor(&mut self, cursor: u8) {
+		write!(self, "\x1b[{}G", cursor).unwrap();
 	}
 
 	fn write_ctl(&mut self, c: u8) {
@@ -235,7 +222,7 @@ impl Shell {
 	}
 
 	fn builtin_help(&mut self) {
-		fmt::Write::write_str(
+		write!(
 			self,
 			concat!(
 				"sh: minimal debug shell.\n",
@@ -243,26 +230,9 @@ impl Shell {
 				" - halt: halt system.\n",
 				" - mem: show memory info.\n",
 				" - clear: clear output.\n",
-				" - stty: set tty attribute.\n"
 			),
 		)
 		.unwrap();
-	}
-
-	fn builtin_id<'a, T>(&mut self, name: &str, args: T)
-	where
-		T: Iterator<Item = &'a [u8]>,
-	{
-		fmt::Write::write_fmt(self, format_args!("exec: {}, args: ", name)).unwrap();
-
-		for arg in args {
-			fmt::Write::write_fmt(
-				self,
-				format_args!("{} ", unsafe { core::str::from_utf8_unchecked(arg) }),
-			)
-			.unwrap();
-		}
-		self.write_const(b"\n");
 	}
 
 	fn builtin_clear(&mut self) {
@@ -273,41 +243,36 @@ impl Shell {
 		unsafe { asm!("hlt") }; // wait what?
 	}
 
-	fn builtin_mem_help(&mut self, err_msg: &str) {
-		write!(
-			self as &mut dyn fmt::Write,
-			concat!(
-				"mem: {}\n",
-				" usage: mem\n",
-				"        mem get `address`\n",
-				"        mem put `address` `value`\n",
-			),
-			err_msg
-		)
-		.unwrap();
-	}
-
-	fn builtin_mem_info(&mut self) {}
-
-	fn builtin_mem<'a, T>(&mut self, mut args: T)
-	where
-		T: Iterator<Item = &'a [u8]>,
-	{
-		let arg = match args.next() {
-			None => {
-				self.builtin_mem_info();
+	fn builtin_mem(&mut self) {
+		let boot_info = match unsafe { multiboot2::load(BOOT_INFO) } {
+			Err(e) => {
+				writeln!(self, "mem: missing multiboot2 boot info: {:?}", e).unwrap();
 				return;
 			}
-			Some(arg) => arg,
+			Ok(v) => v,
 		};
 
-		// match arg {
-		// 	b"get",
-		// 	b"put",
-		// }
+		let mmap = match boot_info.memory_map_tag() {
+			None => {
+				writeln!(self, "mem: missing memory map tag").unwrap();
+				return;
+			}
+			Some(v) => v,
+		};
+
+		for mem in mmap.all_memory_areas() {
+			writeln!(
+				self,
+				"base: {:#x}, size: {:#x}, type: {:?}",
+				mem.start_address(),
+				mem.size(),
+				mem.typ()
+			)
+			.unwrap();
+		}
 	}
 
-	fn execute_builtin<'a, T>(&mut self, kind: Builtin, args: T)
+	fn execute_builtin<'a, T>(&mut self, kind: Builtin, _args: T)
 	where
 		T: Iterator<Item = &'a [u8]>,
 	{
@@ -315,21 +280,18 @@ impl Shell {
 			Builtin::Help => self.builtin_help(),
 			Builtin::Clear => self.builtin_clear(),
 			Builtin::Halt => self.builtin_halt(),
-			Builtin::Stty => self.builtin_id("stty", args),
-			Builtin::Mem => self.builtin_id("mem", args),
+			Builtin::Mem => self.builtin_mem(),
 		}
 	}
 
 	fn builtin_not_found(&mut self, builtin: &[u8]) {
-		fmt::Write::write_fmt(
+		write!(
 			self,
-			format_args!(
-				concat!(
-					"sh: {}: no such command.\n",
-					" (try `help` to list available commands.)\n",
-				),
-				unsafe { core::str::from_utf8_unchecked(builtin) }
+			concat!(
+				"sh: {}: no such command.\n",
+				" (try `help` to list available commands.)\n",
 			),
+			unsafe { core::str::from_utf8_unchecked(builtin) }
 		)
 		.unwrap();
 	}
@@ -353,13 +315,13 @@ impl Shell {
 	}
 }
 
-impl Read<u8> for Shell {
+impl ChRead<u8> for Shell {
 	fn read_one(&mut self) -> Option<u8> {
 		self.write_queue.pop()
 	}
 }
 
-impl Write<u8> for Shell {
+impl ChWrite<u8> for Shell {
 	fn write_one(&mut self, data: u8) {
 		if let State::Prompt = self.state {
 			self.write_const(PROMPT);
@@ -391,10 +353,9 @@ impl Write<u8> for Shell {
 	}
 }
 
-impl RW<u8, u8> for Shell {}
+impl ChRW<u8, u8> for Shell {}
 
-use core::fmt;
-impl fmt::Write for Shell {
+impl Write for Shell {
 	fn write_str(&mut self, s: &str) -> fmt::Result {
 		for byte in s.bytes() {
 			self.write_queue.push(byte);
@@ -407,7 +368,6 @@ enum Builtin {
 	Help,
 	Halt,
 	Clear,
-	Stty,
 	Mem,
 }
 
@@ -417,7 +377,6 @@ impl Builtin {
 			b"help" => Self::Help,
 			b"halt" => Self::Halt,
 			b"clear" => Self::Clear,
-			b"stty" => Self::Stty,
 			b"mem" => Self::Mem,
 			_ => return None,
 		};
