@@ -40,6 +40,7 @@ const MULTIBOOT2_MAGIC: u32 = 0x36d76289;
 pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	text_vga::clear();
 	text_vga::enable_cursor(0, 11);
+	driver::serial::init_serial().expect("failed to init COM1 port");
 
 	if magic != MULTIBOOT2_MAGIC {
 		panic!(
@@ -74,6 +75,10 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 				CONSOLE_MANAGER.get().update(event);
 				CONSOLE_MANAGER.get().draw();
 			};
+		} else {
+			unsafe {
+				CONSOLE_MANAGER.get().flush_all();
+			}
 		}
 		text_vga::putc(24, 79, magenta);
 	}
