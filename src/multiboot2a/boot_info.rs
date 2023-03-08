@@ -6,6 +6,8 @@ use core::{
 	slice::from_raw_parts,
 };
 
+use crate::pr_info;
+
 #[repr(C, align(8))]
 pub struct BootInfoHeader {
 	total_size: u32,
@@ -30,7 +32,7 @@ pub struct ElfSHTag {
 	entries: PhantomData<ElfSH>,
 }
 
-#[repr(C, align(8))]
+#[repr(C, align(4))]
 pub struct ElfSH {
 	pub sh_name: u32,
 	pub sh_type: u32,
@@ -85,6 +87,10 @@ mod tag_kind {
 	pub const ELF_SECTION_HEADER: u32 = 9;
 }
 
+mod section_kind {
+	pub const SYMTAB: u32 = 0x2;
+}
+
 impl Iterator for TagIterator {
 	type Item = &'static TagHeader;
 
@@ -124,8 +130,8 @@ impl BootInfo {
 		let mut mmap: Option<&MMapTag> = None;
 		for tag_header in header.into_iter() {
 			match tag_header.kind {
-				tag_kind::ELF_SECTION_HEADER => mmap = Some(unsafe { transmute(tag_header) }),
-				tag_kind::MEMORY_MAP => elf_sh = Some(unsafe { transmute(tag_header) }),
+				tag_kind::ELF_SECTION_HEADER => elf_sh = Some(unsafe { transmute(tag_header) }),
+				tag_kind::MEMORY_MAP => mmap = Some(unsafe { transmute(tag_header) }),
 				_ => (),
 			};
 		}
@@ -180,41 +186,44 @@ impl Display for MMap {
 	}
 }
 
-// #[repr(C, align(8))]
-// pub struct ElfSHTag {
-// 	header: TagHeader,
-// 	num: u32,
-// 	entsize: u32,
-// 	shndx: u32,
-// 	entries: PhantomData<ElfSH>,
-// }
-
 impl ElfSHTag {
 	pub fn entries(&self) -> &[ElfSH] {
 		let entry_start = &self.entries as *const _ as usize as *const ElfSH;
-
 		unsafe { from_raw_parts(entry_start, self.num as usize) }
 	}
 
-	pub fn lookup_name(&self, idx: usize, offset: usize) -> Option<&str> {
+	pub fn lookup_name(&self, idx: usize, offset: isize) -> Option<&str> {
 		let sh = self.entries();
 
-		if sh.len() < idx {
+		if idx == 0 || sh.len() <= idx {
 			return None;
 		}
 
-		let shstrtab = sh[idx].sh_addr as usize + offset;
-		let cstr = unsafe { CStr::from_ptr(shstrtab as *const c_char) };
+		let strtab = sh[idx].sh_addr as usize as *const c_char;
+
+		let cstr = unsafe { CStr::from_ptr(strtab.offset(offset)) };
 
 		Some(cstr.to_str().ok()?)
 	}
 
 	pub fn section_name(&self, section: &ElfSH) -> Option<&str> {
-		self.lookup_name(self.shndx as usize, section.sh_name as usize)
+		self.lookup_name(self.shndx as usize, section.sh_name as isize)
 	}
 }
 
-// struct Elf {
-// 	entries: &[ElfSH],
-// 	name:
-// }
+#[repr(C, align(4))]
+pub struct SymtabEntry {
+	pub st_name: u32,
+	pub st_value: u32,
+	pub st_size: u32,
+	pub st_info: u8,
+	pub st_other: u8,
+	pub st_shndx: u16,
+}
+
+// Elf32_Word		st_name;
+// Elf32_Addr		st_value;
+// Elf32_Word		st_size;
+// unsigned char	st_info;
+// unsigned char	st_other;
+// Elf32_Half		st_shndx;
