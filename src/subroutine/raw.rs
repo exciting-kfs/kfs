@@ -1,9 +1,9 @@
+//! simple subroutine that just transfer input bytes into output without any modifications.
+
 use crate::io::character::{Read, Write, RW};
 
 pub static mut RAW: [Raw; 2] = [Raw::new(), Raw::new()];
 pub struct Raw(Option<u8>);
-
-const PROMPT: &[u8] = b"sh=> ";
 
 impl Raw {
 	pub const fn new() -> Self {
