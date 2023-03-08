@@ -44,7 +44,7 @@ impl ConsoleChain {
 	/// In order to avoid data loss, do flush reverse way.
 	pub fn flush(&mut self) {
 		self.flush_subroutine();
-		self.flush_tty();
+		self.flush_tty();				// TODO 설명 필요. 왜 여기서 이걸 호출?
 	}
 
 	/// draw console buffer to screen.

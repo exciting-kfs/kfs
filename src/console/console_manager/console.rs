@@ -125,18 +125,14 @@ impl Console {
 	fn line_feed(&mut self, lines: usize) {
 		let minimum_buf_size = self.window_start + WINDOW_SIZE + BUFFER_WIDTH * lines;
 
-		let extend_size = match self.buf.full() {
+		let extend_size = match self.buf.full() { // TODO 여기 이해 안됨.
 			true => BUFFER_WIDTH * lines,
 			false => minimum_buf_size
 				.checked_sub(self.buf.size())
 				.unwrap_or_default(),
 		};
 
-		if extend_size > 0 {
-			self.buf
-				.push_n(VGAChar::styled(self.attr, b' '), extend_size);
-		}
-
+		self.buf.push_n(VGAChar::styled(self.attr, b' '), extend_size);
 		self.window_start =
 			(self.window_start + BUFFER_WIDTH * lines).min(BUFFER_SIZE - WINDOW_SIZE);
 	}
@@ -228,14 +224,14 @@ impl Console {
 	}
 
 	fn screen_erase(&mut self, param: u8) {
-		let rng = match param {
+		let range = match param {
 			0 => 0..=self.cursor.into_flat(),
 			1 => self.cursor.into_flat()..=(WINDOW_SIZE - 1),
 			2 => 0..=(WINDOW_SIZE - 1),
 			_ => return,
 		};
 
-		self.erase_by_iterater(rng);
+		self.erase_by_iterater(range);
 
 		if param == 2 {
 			self.cursor.move_abs(0, 0);
@@ -262,10 +258,9 @@ impl Console {
 				}
 			}
 			CR | LF => {
-				if let Err(_) = self.cursor.check_rel(1, 0) {
-					self.line_feed(1);
-				} else {
-					self.cursor.move_rel_y(1);
+				match self.cursor.check_rel(1, 0) {
+					Err(_) => self.line_feed(1),
+					Ok(_) => self.cursor.move_rel_y(1),
 				}
 				self.carriage_return();
 			}
@@ -326,7 +321,7 @@ impl Console {
 			b'm' => self.handle_color(param),
 			b's' => self.cursor_save(),
 			b'u' => self.cursor_restore(),
-			b'J' => self.line_erase(param),
+			b'J' => self.line_erase(param),			// TODO 파일 주석에는 J와 K가 반대인 듯 한데..?
 			b'K' => self.screen_erase(param),
 			b'G' => self.cursor.move_abs_x(param as isize),
 			_ => (),

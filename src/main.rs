@@ -32,7 +32,7 @@ fn panic_handler_impl(info: &PanicInfo) -> ! {
 	loop {}
 }
 
-pub static mut BOOT_INFO: usize = 0;
+pub static mut BOOT_INFO: usize = 0; // TODO 이거 포인터로 해놨는데..?
 
 const MULTIBOOT2_MAGIC: u32 = 0x36d76289;
 

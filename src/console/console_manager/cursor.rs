@@ -1,6 +1,6 @@
 //! Console Cursor
 
-pub type Result<T> = core::result::Result<T, ()>;
+pub type Result<T> = core::result::Result<T, ()>; // TODO 이거 별로 맘에 안드는데..
 
 #[derive(Clone, Copy)]
 pub struct Cursor<const H: usize, const W: usize> {

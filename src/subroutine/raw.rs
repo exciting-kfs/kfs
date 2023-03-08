@@ -13,20 +13,13 @@ impl Raw {
 
 impl Read<u8> for Raw {
 	fn read_one(&mut self) -> Option<u8> {
-		if let Some(x) = self.0 {
-			self.0 = None;
-			Some(x)
-		} else {
-			None
-		}
+		core::mem::take(&mut self.0)
 	}
 }
 
 impl Write<u8> for Raw {
 	fn write_one(&mut self, data: u8) {
-		if let None = self.0 {
-			self.0 = Some(data)
-		}
+		self.0 = self.0.or(Some(data));
 	}
 }
 

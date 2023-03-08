@@ -96,8 +96,6 @@ impl fmt::Write for ConsoleManager {
 			unsafe { DMESG.write(*byte) }
 			dmesg.flush();
 		}
-
-		self.draw();
 		Ok(())
 	}
 }

@@ -145,20 +145,15 @@ impl TTY {
 	}
 
 	pub fn write(&mut self, code: Code) {
-		let ascii = match convert(code) {
-			Some(v) => v,
-			None => return,
-		};
-
-		self.buf = Some(ascii);
+		self.buf = convert(code);
 	}
 
 	pub fn read_echo(&mut self) -> Option<u8> {
-		if !self.echo || self.buf.is_none() {
+		if !self.echo {
 			return None;
 		}
 
-		let buf = self.buf.unwrap();
+		let buf = self.buf?;
 
 		if buf.len() <= self.cursor {
 			self.cursor = 0;
@@ -178,16 +173,12 @@ impl TTY {
 		} else {
 			self.cursor += 1;
 			self.carrot = false;
-			return Some(b'@' + c & !(1 << 7));
+			return Some(b'@' + c & !(1 << 7)); // TODO 주석으로 설명이 필요할 듯.
 		}
 	}
 
 	pub fn read_task(&mut self) -> Option<u8> {
-		if self.buf.is_none() {
-			return None;
-		}
-
-		let buf = self.buf.unwrap();
+		let buf = self.buf?;
 
 		if buf.len() <= self.cursor {
 			self.clear();
