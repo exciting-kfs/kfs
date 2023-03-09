@@ -25,6 +25,9 @@ clean :
 	rm -f rescue.iso
 	rm -f .sw*
 
+dmesg :
+	cat /tmp/serial0
+
 dump-all:
 	objdump -D $(OBJDUMP_OPTS) $(KERNEL_BIN) $(OBJDUMP_PAGER)
 

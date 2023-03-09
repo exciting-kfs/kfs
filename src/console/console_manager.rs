@@ -79,23 +79,9 @@ impl ConsoleManager {
 		}
 	}
 
-	/// get console for kernel message buffer.
-	pub fn dmesg(&mut self) -> &mut ConsoleChain {
-		&mut self.cons[CONSOLE_COUNTS - 1]
-	}
-}
-
-use core::fmt;
-
-impl fmt::Write for ConsoleManager {
-	/// console format writer implementation.
-	fn write_str(&mut self, s: &str) -> fmt::Result {
-		let dmesg = self.dmesg();
-
-		for byte in s.as_bytes() {
-			unsafe { DMESG.write(*byte) }
-			dmesg.flush();
+	pub fn flush_all(&mut self) {
+		for console in &mut self.cons[..] {
+			console.flush();
 		}
-		Ok(())
 	}
 }

@@ -98,18 +98,12 @@ macro_rules! fmt_with {
     };
 
     ($(WITH($($xs:tt)+))* FMT($fmt:expr, $($args:tt)*)) => {
-        core::format_args!(
-			concat!(
-				"\x1b[u",
-				$crate::fmt_with!(HANDLE $(WITH($($xs)+))* FMT($fmt)),
-				"\x1b[s"
-			),
-			$($args)*
-		)
+        core::format_args!($crate::fmt_with!(HANDLE $(WITH($($xs)+))* FMT($fmt)), $($args)*)
     };
 }
 
-use crate::console::CONSOLE_MANAGER;
+use crate::driver::serial;
+use crate::subroutine::DMESG;
 use core::fmt::{Arguments, Result, Write};
 
 pub fn __printk(arg: Arguments) -> Result {
@@ -124,7 +118,9 @@ pub fn __printk(arg: Arguments) -> Result {
 	// FIXME: unlock ALREADY_PRINT in panic!() path.
 	unsafe {
 		ALREADY_PRINT = true;
-		result = CONSOLE_MANAGER.get().write_fmt(arg);
+		result = serial::Serial
+			.write_fmt(arg)
+			.and_then(|_| DMESG.write_fmt(arg));
 		ALREADY_PRINT = false;
 	}
 
