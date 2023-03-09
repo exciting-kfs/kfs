@@ -1,5 +1,5 @@
 //! serial (COM1) driver
-//! - see alsohttps://en.wikibooks.org/w/index.php?title=Serial_Programming/8250_UART_Programming
+//! - see also https://en.wikibooks.org/w/index.php?title=Serial_Programming/8250_UART_Programming
 
 mod com1 {
 	use crate::io::pmio::Port;
