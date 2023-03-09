@@ -10,6 +10,8 @@ fi
 
 mkfifo $SERIAL
 
+scripts/bios.sh
+
 scripts/rescue.sh && qemu-system-i386	\
  -boot d				\
  -vga std				\
