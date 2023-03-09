@@ -84,4 +84,8 @@ impl ConsoleManager {
 			console.flush();
 		}
 	}
+
+	pub fn flush_foreground(&mut self) {
+		self.cons[self.foreground].flush();
+	}
 }

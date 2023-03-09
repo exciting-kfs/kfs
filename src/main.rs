@@ -24,11 +24,16 @@ use input::{key_event::Code, keyboard::KEYBOARD};
 /// we should make sure no more `panic!()` from here.
 #[panic_handler]
 fn panic_handler_impl(info: &PanicInfo) -> ! {
-	unsafe { CONSOLE_MANAGER.get().set_foreground(CONSOLE_COUNTS - 1) };
-
+	
 	printk_panic!("{}\ncall stack (most recent call first)\n", info);
 	print_stacktrace!();
-
+	
+	unsafe { 
+		CONSOLE_MANAGER.get().set_foreground(CONSOLE_COUNTS - 1);
+		CONSOLE_MANAGER.get().flush_foreground();
+		CONSOLE_MANAGER.get().draw();
+	};
+	
 	loop {}
 }
 
@@ -69,6 +74,7 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 					pr_warn!("BACKTICK PRESSED {} TIMES!!", I);
 					I += 1;
 				}
+				panic!();
 			}
 			text_vga::putc(24, 79, cyan);
 			unsafe {
