@@ -9,6 +9,15 @@
 //! 	- CSI N D: move cursor left `N` times.
 //! 	- CSI H: move cursor to begining.
 //! 	- CSI F: move cursor to end.
+//! 	- CSI N G: move cursor to column `N`.
+//! 	- CSI N J: erase `screen`
+//! 		- N = 0 => cursor to end
+//! 		- N = 1 => begin to cursor
+//! 		- N = 2 => entire screen then move cursor to (0,0)
+//! 	- CSI N K: erase `line`
+//! 		- N = 0 => cursor to end
+//! 		- N = 1 => begin to cursor
+//! 		- N = 2 => entire line
 //! 	- CSI N m: alter character display properties. (see console/ascii)
 //! 	- CSI N ~: pc style extra keys. (see driver/tty)
 
@@ -76,7 +85,7 @@ impl Console {
 			.window(self.window_start, WINDOW_SIZE)
 			.expect("buffer overflow");
 		text_vga::put_slice_iter(window);
-		text_vga::put_cursor(self.cursor.to_idx());
+		text_vga::put_cursor(self.cursor.into_flat());
 	}
 
 	/// put character at current cursor
@@ -87,7 +96,7 @@ impl Console {
 			.expect("buffer overflow");
 
 		let ch = VGAChar::styled(self.attr, ch);
-		window[self.cursor.to_idx()] = ch;
+		window[self.cursor.into_flat()] = ch;
 	}
 
 	fn delete_char(&mut self) {
@@ -116,18 +125,12 @@ impl Console {
 	fn line_feed(&mut self, lines: usize) {
 		let minimum_buf_size = self.window_start + WINDOW_SIZE + BUFFER_WIDTH * lines;
 
-		let extend_size = match self.buf.full() {
-			true => BUFFER_WIDTH * lines,
-			false => minimum_buf_size
-				.checked_sub(self.buf.size())
-				.unwrap_or_default(),
-		};
+		let extend_size = minimum_buf_size
+			.checked_sub(self.buf.size())
+			.unwrap_or_default();
 
-		if extend_size > 0 {
-			self.buf
-				.push_n(VGAChar::styled(self.attr, b' '), extend_size);
-		}
-
+		self.buf
+			.push_n(VGAChar::styled(self.attr, b' '), extend_size);
 		self.window_start =
 			(self.window_start + BUFFER_WIDTH * lines).min(BUFFER_SIZE - WINDOW_SIZE);
 	}
@@ -149,31 +152,34 @@ impl Console {
 	}
 
 	fn carriage_return(&mut self) {
-		self.cursor.move_abs_x(0).unwrap();
+		self.cursor.move_abs_x(0);
 	}
 
 	fn cursor_left(&mut self, n: u8) {
-		self.cursor.move_rel_x(-(n.max(1) as isize))
+		self.cursor.move_rel_x(-(n.max(1) as isize));
 	}
 
 	fn cursor_right(&mut self, n: u8) {
 		self.cursor.move_rel_x(n.max(1) as isize);
+		self.cursor.fixup_line_end();
 	}
 
 	fn cursor_down(&mut self, n: u8) {
 		self.cursor.move_rel_y(n.max(1) as isize);
+		self.cursor.fixup_line_end();
 	}
 
 	fn cursor_up(&mut self, n: u8) {
 		self.cursor.move_rel_y(-(n.max(1) as isize));
+		self.cursor.fixup_line_end();
 	}
 
 	fn cursor_home(&mut self) {
-		self.cursor.move_abs(0, 0).unwrap();
+		self.cursor.move_abs(0, 0);
 	}
 
 	fn cursor_end(&mut self) {
-		self.cursor.move_abs_x(0).unwrap();
+		self.cursor.move_abs_x(0);
 		self.cursor.move_rel_y(-1);
 	}
 
@@ -187,31 +193,79 @@ impl Console {
 		self.window_start = self.window_start_backup;
 	}
 
-	/// print normal ascii character.
-	fn handle_text(&mut self, ch: u8) {
-		self.put_char(ch);
-		if let Err(_) = self.cursor.check_rel(0, 1) {
-			self.handle_ctl(LF);
-		} else {
-			self.cursor.move_rel_x(1);
+	fn cursor_set_col(&mut self, param: u8) {
+		self.cursor.move_abs_x(param as isize);
+	}
+
+	fn erase_by_iterater<I>(&mut self, it: I)
+	where
+		I: IntoIterator<Item = usize>,
+	{
+		let mut win = self.buf.window_mut(self.window_start, WINDOW_SIZE).unwrap();
+
+		for offset in it {
+			win[offset] = VGAChar::styled(self.attr, b' ');
 		}
 	}
 
-	/// print specific ascii c0 character.
+	fn line_erase(&mut self, param: u8) {
+		let (y, x) = self.cursor.to_tuple();
+
+		let (b, e) = match param {
+			0 => (x, (BUFFER_WIDTH - 1)),
+			1 => (0, x),
+			2 => (0, (BUFFER_WIDTH - 1)),
+			_ => return,
+		};
+
+		self.erase_by_iterater((y * BUFFER_WIDTH + b)..=(y * BUFFER_WIDTH + e));
+	}
+
+	fn screen_erase(&mut self, param: u8) {
+		let range = match param {
+			0 => self.cursor.into_flat()..=(WINDOW_SIZE - 1),
+			1 => 0..=self.cursor.into_flat(),
+			2 => 0..=(WINDOW_SIZE - 1),
+			_ => return,
+		};
+
+		self.erase_by_iterater(range);
+
+		if param == 2 {
+			self.cursor.move_abs(0, 0);
+		}
+	}
+
+	/// print normal ascii character.
+	fn handle_text(&mut self, ch: u8) {
+		if let Err(_) = self.cursor.check_rel(0, 1) {
+			self.handle_ctl(LF);
+		}
+		self.put_char(ch);
+		self.cursor.move_rel_x(1);
+	}
+
+	/// handle ascii c0 character.
 	fn handle_ctl(&mut self, ctl: u8) {
-		// TODO: FF HT VT
+		// TODO: HT VT
 		match ctl {
 			BS => {
-				self.cursor.move_rel_x(-1);
-				self.delete_char();
+				if let Ok(_) = self.cursor.check_rel(0, -1) {
+					self.cursor.move_rel_x(-1);
+					self.delete_char();
+				}
 			}
 			CR | LF => {
-				if let Err(_) = self.cursor.check_rel(1, 0) {
-					self.line_feed(1);
-				} else {
-					self.cursor.move_rel_y(1);
+				match self.cursor.check_rel(1, 0) {
+					Err(_) => self.line_feed(1),
+					Ok(_) => self.cursor.move_rel_y(1),
 				}
 				self.carriage_return();
+			}
+			FF => {
+				let (y, _) = self.cursor.to_tuple();
+				self.line_feed(y);
+				self.cursor.move_abs(0, 0);
 			}
 			_ => (),
 		}
@@ -265,6 +319,9 @@ impl Console {
 			b'm' => self.handle_color(param),
 			b's' => self.cursor_save(),
 			b'u' => self.cursor_restore(),
+			b'K' => self.line_erase(param),
+			b'J' => self.screen_erase(param),
+			b'G' => self.cursor.move_abs_x(param as isize),
 			_ => (),
 		};
 	}

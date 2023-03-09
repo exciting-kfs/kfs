@@ -112,20 +112,21 @@ macro_rules! fmt_with {
 use crate::console::CONSOLE_MANAGER;
 use core::fmt::{Arguments, Result, Write};
 
-pub fn __printk(arg: Arguments<'_>) -> Result {
-	static mut LOCK: bool = false;
+pub fn __printk(arg: Arguments) -> Result {
+	static mut ALREADY_PRINT: bool = false;
 
-	if unsafe { LOCK } {
-		Ok(())
-	} else {
-		unsafe {
-			LOCK = true;
-		}
-		let result = unsafe { CONSOLE_MANAGER.get().write_fmt(arg) };
-		unsafe {
-			LOCK = false;
-		}
-
-		result
+	// prevent recursive `__printk` call.
+	if unsafe { ALREADY_PRINT } {
+		return Ok(());
 	}
+
+	let result;
+	// FIXME: unlock ALREADY_PRINT in panic!() path.
+	unsafe {
+		ALREADY_PRINT = true;
+		result = CONSOLE_MANAGER.get().write_fmt(arg);
+		ALREADY_PRINT = false;
+	}
+
+	result
 }

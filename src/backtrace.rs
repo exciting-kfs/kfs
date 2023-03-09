@@ -26,8 +26,7 @@ pub struct Backtrace {
 
 impl Backtrace {
 	pub fn new(stack: StackDump) -> Self {
-		let boot_info =
-			unsafe { BOOT_INFO.and_then(|bi_addr| multiboot2::load(bi_addr as usize).ok()) };
+		let boot_info = unsafe { multiboot2::load(BOOT_INFO).ok() };
 
 		let tables = boot_info.and_then(get_sections).and_then(make_tables);
 

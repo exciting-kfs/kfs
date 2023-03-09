@@ -1,5 +1,7 @@
-pub mod dmesg;
-pub mod shell;
+mod dmesg;
+mod raw;
+mod shell;
 
-// pub use dmesg::Dmesg;
-// pub use shell::Shell;
+pub use dmesg::{Dmesg, DMESG};
+pub use raw::{Raw, RAW};
+pub use shell::{Shell, SHELL};

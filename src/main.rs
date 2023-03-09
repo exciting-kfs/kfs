@@ -32,20 +32,33 @@ fn panic_handler_impl(info: &PanicInfo) -> ! {
 	loop {}
 }
 
-pub static mut BOOT_INFO: Option<*const u32> = None;
+pub static mut BOOT_INFO: usize = 0;
+
+const MULTIBOOT2_MAGIC: u32 = 0x36d76289;
 
 #[no_mangle]
-pub fn kernel_entry(_boot_info: *const u32, _magic: u32) -> ! {
-	unsafe { BOOT_INFO = Some(_boot_info) };
+pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
+	text_vga::clear();
+	text_vga::enable_cursor(0, 11);
+
+	if magic != MULTIBOOT2_MAGIC {
+		panic!(
+			concat!(
+				"unexpected boot magic. ",
+				"expected: {:#x}, ",
+				"but received: {:#x}",
+			),
+			MULTIBOOT2_MAGIC, magic
+		);
+	}
+
+	unsafe { BOOT_INFO = bi_header };
 
 	let cyan = VGAChar::styled(VGAAttr::new(false, Color::Cyan, false, Color::Cyan), b' ');
 	let magenta = VGAChar::styled(
 		VGAAttr::new(false, Color::Magenta, false, Color::Magenta),
 		b' ',
 	);
-
-	text_vga::clear();
-	text_vga::enable_cursor(0, 11);
 
 	loop {
 		if let Some(event) = unsafe { KEYBOARD.get_keyboard_event() } {

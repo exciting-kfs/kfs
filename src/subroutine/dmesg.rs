@@ -31,18 +31,18 @@ impl Dmesg {
 impl Read<u8> for Dmesg {
 	fn read_one(&mut self) -> Option<u8> {
 		if !self.kern_buf.empty() {
-			self.kern_buf.pop()
-		} else {
-			if self.user_ready {
-				let value = self.parser.as_mut_buf().pop();
-				if value.is_none() {
-					self.user_ready = false;
-					self.parser.reset();
-				}
-				return value;
-			}
-			None
+			return self.kern_buf.pop();
 		}
+		if !self.user_ready {
+			return None;
+		}
+		
+		let value = self.parser.as_mut_buf().pop();
+		if value.is_none() {
+			self.user_ready = false;
+			self.parser.reset();
+		}
+		value
 	}
 }
 
