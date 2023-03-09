@@ -31,7 +31,7 @@ pub mod constants {
 
 use constants::*;
 
-use crate::{collection::WrapQueue, pr_warn};
+use crate::collection::WrapQueue;
 
 #[derive(Debug)]
 pub enum Ascii {
@@ -98,9 +98,7 @@ impl AsciiParser {
 
 	/// reset internal buffer and state.
 	pub fn reset(&mut self) {
-		while !self.buf.empty() {
-			self.buf.pop();
-		}
+		self.buf.reset();
 		self.state = State::Start;
 		self.param = 0;
 	}

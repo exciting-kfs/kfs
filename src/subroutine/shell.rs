@@ -1,5 +1,5 @@
 use crate::{
-	collection::WrapQueue,
+	collection,
 	console::{constants::*, Ascii, AsciiParser},
 	io::character::{Read as ChRead, Write as ChWrite, RW as ChRW},
 	BOOT_INFO,
@@ -9,116 +9,10 @@ use core::fmt::{self, Write};
 
 use core::{arch::asm, slice::from_raw_parts};
 
-pub struct LineBuffer<const CAP: usize> {
-	buf: [u8; CAP],
-	cursor: usize,
-	tail: usize,
-}
-
 type Result<T> = core::result::Result<T, ()>;
 
-impl<const CAP: usize> LineBuffer<CAP> {
-	pub const fn new() -> Self {
-		Self {
-			buf: [0; CAP],
-			tail: 0,
-			cursor: 0,
-		}
-	}
-
-	pub fn full(&self) -> bool {
-		self.tail == CAP
-	}
-
-	pub fn size(&self) -> usize {
-		self.tail
-	}
-
-	pub fn empty(&self) -> bool {
-		self.tail == 0
-	}
-
-	pub fn clear(&mut self) {
-		self.tail = 0;
-		self.cursor = 0;
-	}
-
-	pub fn shift_chars(&mut self, from: usize, left: bool) {
-		if left {
-			for i in from..self.tail {
-				self.buf[i - 1] = self.buf[i];
-			}
-		} else {
-			for i in (from..self.tail).rev() {
-				self.buf[i + 1] = self.buf[i];
-			}
-		}
-	}
-
-	pub fn putc(&mut self, c: u8) {
-		if self.full() {
-			return;
-		}
-
-		self.shift_chars(self.cursor, false);
-		self.buf[self.cursor] = c;
-		self.tail += 1;
-		self.cursor += 1;
-	}
-
-	pub fn delc(&mut self, left: bool) {
-		if self.empty() {
-			return;
-		}
-
-		if left && self.cursor > 0 {
-			self.shift_chars(self.cursor, true);
-			self.cursor -= 1;
-			self.tail -= 1;
-		} else if !left && self.cursor < self.tail {
-			self.shift_chars(self.cursor + 1, true);
-			self.tail -= 1;
-		}
-	}
-
-	pub fn cursor_left(&mut self) -> isize {
-		if self.cursor == 0 {
-			return 0;
-		} else {
-			self.cursor -= 1;
-			return -1;
-		}
-	}
-
-	pub fn cursor_right(&mut self) -> isize {
-		if self.cursor == self.tail {
-			return 0;
-		} else {
-			self.cursor += 1;
-			return 1;
-		}
-	}
-
-	pub fn cursor_head(&mut self) -> isize {
-		let ret = -(self.cursor as isize);
-
-		self.cursor = 0;
-
-		ret
-	}
-
-	pub fn cursor_tail(&mut self) -> isize {
-		let ret = self.tail - self.cursor;
-
-		self.cursor = self.tail;
-
-		ret as isize
-	}
-
-	pub fn as_slice(&self) -> &[u8] {
-		&self.buf[..self.tail]
-	}
-}
+type WrapQueue = collection::WrapQueue<u8, 4096>;
+type LineBuffer = collection::LineBuffer<64>;
 
 enum State {
 	Prompt,
@@ -126,14 +20,11 @@ enum State {
 	Normal,
 }
 
-type Buffer = WrapQueue<u8, 4096>;
-
 pub static mut SHELL: Shell = Shell::new();
 pub struct Shell {
 	state: State,
-	current_line: usize,
-	line_buffer: LineBuffer<64>,
-	write_queue: Buffer,
+	line_buffer: LineBuffer,
+	write_queue: WrapQueue,
 	parser: AsciiParser,
 }
 
@@ -143,24 +34,23 @@ impl Shell {
 	pub const fn new() -> Self {
 		Self {
 			state: State::Prompt,
-			current_line: 0,
 			line_buffer: LineBuffer::new(),
-			write_queue: Buffer::with(0),
+			write_queue: WrapQueue::with(0),
 			parser: AsciiParser::new(),
 		}
 	}
 
 	fn write_text(&mut self, ch: u8) {
-		self.line_buffer.putc(ch);
+		self.line_buffer.put_char(ch);
 	}
 
 	fn sync_line(&mut self) {
 		self.sync_cursor(PROMPT.len() as u8);
-		self.write_const(b"\x1b[J");
+		self.write_const(b"\x1b[K");
 		for ch in self.line_buffer.as_slice() {
 			self.write_queue.push(*ch);
 		}
-		self.sync_cursor(self.line_buffer.cursor as u8 + PROMPT.len() as u8);
+		self.sync_cursor(self.line_buffer.cursor() as u8 + PROMPT.len() as u8);
 	}
 
 	fn sync_cursor(&mut self, cursor: u8) {
@@ -170,7 +60,7 @@ impl Shell {
 	fn write_ctl(&mut self, c: u8) {
 		match c {
 			BS => {
-				self.line_buffer.delc(true);
+				self.line_buffer.backspace();
 			}
 			CR | LF => {
 				self.write_queue.push(b'\n');
@@ -186,14 +76,14 @@ impl Shell {
 	fn write_ctlseq(&mut self, _param: u8, kind: u8) {
 		match kind {
 			b'C' => {
-				let delta = self.line_buffer.cursor_right();
-				if delta != 0 {
+				if !self.line_buffer.is_cursor_at_end() {
+					self.line_buffer.move_cursor_right();
 					self.write_parse_result();
 				}
 			}
 			b'D' => {
-				let delta = self.line_buffer.cursor_left();
-				if delta != 0 {
+				if !self.line_buffer.is_cursor_at_begin() {
+					self.line_buffer.move_cursor_left();
 					self.write_parse_result();
 				}
 			}

@@ -83,6 +83,11 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 		}
 	}
 
+	pub fn reset(&mut self) {
+		self.tail = self.head;
+		self.state = State::Empty;
+	}
+
 	pub fn empty(&self) -> bool {
 		self.state == State::Empty
 	}

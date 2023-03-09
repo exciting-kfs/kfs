@@ -130,7 +130,7 @@ pub struct TTY {
 	echo: bool,
 	buf: Option<&'static [u8]>,
 	cursor: usize,
-	carrot: bool,
+	caret: bool,
 }
 
 impl TTY {
@@ -140,25 +140,32 @@ impl TTY {
 			echo,
 			buf: None,
 			cursor: 0,
-			carrot: false,
+			caret: false,
 		}
 	}
 
 	pub fn write(&mut self, code: Code) {
-		let ascii = match convert(code) {
-			Some(v) => v,
-			None => return,
-		};
-
-		self.buf = Some(ascii);
+		self.buf = convert(code);
 	}
 
+	/// echo back given characters.
+	/// if character is non-printable,
+	///   then escape with caret-notation to make it printable.
+	///
+	/// # caret-notation
+	///
+	/// represent non printable ascii `(0..=31, 127)` with `^('@' + ascii)` and MSB(bit 8) cleared.
+	///
+	/// ## examples
+	/// - 0  (NUL) => `^@`
+	/// - 1b (ESC) => `^[`
+	/// - 7f (DEL) => `^?`
 	pub fn read_echo(&mut self) -> Option<u8> {
-		if !self.echo || self.buf.is_none() {
+		if !self.echo {
 			return None;
 		}
 
-		let buf = self.buf.unwrap();
+		let buf = self.buf?;
 
 		if buf.len() <= self.cursor {
 			self.cursor = 0;
@@ -172,22 +179,18 @@ impl TTY {
 			return Some(c);
 		}
 
-		if !self.carrot {
-			self.carrot = true;
+		if !self.caret {
+			self.caret = true;
 			return Some(b'^');
 		} else {
 			self.cursor += 1;
-			self.carrot = false;
-			return Some(b'@' + c & !(1 << 7));
+			self.caret = false;
+			return Some((b'@' + c) & !(1 << 7));
 		}
 	}
 
 	pub fn read_task(&mut self) -> Option<u8> {
-		if self.buf.is_none() {
-			return None;
-		}
-
-		let buf = self.buf.unwrap();
+		let buf = self.buf?;
 
 		if buf.len() <= self.cursor {
 			self.clear();
@@ -202,7 +205,7 @@ impl TTY {
 
 	fn clear(&mut self) {
 		self.buf = None;
-		self.carrot = false;
+		self.caret = false;
 		self.cursor = 0;
 	}
 }

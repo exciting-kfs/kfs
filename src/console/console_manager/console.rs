@@ -125,18 +125,12 @@ impl Console {
 	fn line_feed(&mut self, lines: usize) {
 		let minimum_buf_size = self.window_start + WINDOW_SIZE + BUFFER_WIDTH * lines;
 
-		let extend_size = match self.buf.full() {
-			true => BUFFER_WIDTH * lines,
-			false => minimum_buf_size
-				.checked_sub(self.buf.size())
-				.unwrap_or_default(),
-		};
+		let extend_size = minimum_buf_size
+			.checked_sub(self.buf.size())
+			.unwrap_or_default();
 
-		if extend_size > 0 {
-			self.buf
-				.push_n(VGAChar::styled(self.attr, b' '), extend_size);
-		}
-
+		self.buf
+			.push_n(VGAChar::styled(self.attr, b' '), extend_size);
 		self.window_start =
 			(self.window_start + BUFFER_WIDTH * lines).min(BUFFER_SIZE - WINDOW_SIZE);
 	}
@@ -218,9 +212,9 @@ impl Console {
 		let (y, x) = self.cursor.to_tuple();
 
 		let (b, e) = match param {
-			0 => (x, (BUFFER_WIDTH - 2)),
+			0 => (x, (BUFFER_WIDTH - 1)),
 			1 => (0, x),
-			2 => (0, (BUFFER_WIDTH - 2)),
+			2 => (0, (BUFFER_WIDTH - 1)),
 			_ => return,
 		};
 
@@ -228,14 +222,14 @@ impl Console {
 	}
 
 	fn screen_erase(&mut self, param: u8) {
-		let rng = match param {
-			0 => 0..=self.cursor.into_flat(),
-			1 => self.cursor.into_flat()..=(WINDOW_SIZE - 1),
+		let range = match param {
+			0 => self.cursor.into_flat()..=(WINDOW_SIZE - 1),
+			1 => 0..=self.cursor.into_flat(),
 			2 => 0..=(WINDOW_SIZE - 1),
 			_ => return,
 		};
 
-		self.erase_by_iterater(rng);
+		self.erase_by_iterater(range);
 
 		if param == 2 {
 			self.cursor.move_abs(0, 0);
@@ -251,9 +245,9 @@ impl Console {
 		self.cursor.move_rel_x(1);
 	}
 
-	/// print specific ascii c0 character.
+	/// handle ascii c0 character.
 	fn handle_ctl(&mut self, ctl: u8) {
-		// TODO: FF HT VT
+		// TODO: HT VT
 		match ctl {
 			BS => {
 				if let Ok(_) = self.cursor.check_rel(0, -1) {
@@ -262,10 +256,9 @@ impl Console {
 				}
 			}
 			CR | LF => {
-				if let Err(_) = self.cursor.check_rel(1, 0) {
-					self.line_feed(1);
-				} else {
-					self.cursor.move_rel_y(1);
+				match self.cursor.check_rel(1, 0) {
+					Err(_) => self.line_feed(1),
+					Ok(_) => self.cursor.move_rel_y(1),
 				}
 				self.carriage_return();
 			}
@@ -326,8 +319,8 @@ impl Console {
 			b'm' => self.handle_color(param),
 			b's' => self.cursor_save(),
 			b'u' => self.cursor_restore(),
-			b'J' => self.line_erase(param),
-			b'K' => self.screen_erase(param),
+			b'K' => self.line_erase(param),
+			b'J' => self.screen_erase(param),
 			b'G' => self.cursor.move_abs_x(param as isize),
 			_ => (),
 		};

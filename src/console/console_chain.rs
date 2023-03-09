@@ -39,9 +39,16 @@ impl ConsoleChain {
 		self.flush_tty();
 	}
 
-	/// Flush all readied but not performd I/O
+	/// Flush all prepared but not performd I/O
 	///
 	/// In order to avoid data loss, do flush reverse way.
+	///
+	/// exact order is
+	///
+	/// 1) `subroutine` -> `console` (from `flush_subroutine()`)
+	/// 2) `tty` -> `console` (from `flush_tty()`)
+	/// 3) `tty` -> `subroutine` (from `flush_tty()`)
+	/// 4) `subroutine` -> `console` (from `flush_subroutine()` in `flush_tty()`)
 	pub fn flush(&mut self) {
 		self.flush_subroutine();
 		self.flush_tty();
