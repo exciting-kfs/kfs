@@ -74,7 +74,6 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 					pr_warn!("BACKTICK PRESSED {} TIMES!!", I);
 					I += 1;
 				}
-				panic!();
 			}
 			text_vga::putc(24, 79, cyan);
 			unsafe {
