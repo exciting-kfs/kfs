@@ -27,7 +27,7 @@ pub enum Code {
 	// Alpha
 	A = ALPHA_CLASS << KEY_CLASS_BIT_OFFSET,
 	B, C, D, E, F, G, H, I, J, K,
-	L, N, M, O, P, Q, R, S, T, U,
+	L, M, N, O, P, Q, R, S, T, U,
 	V, W, X, Y, Z,
 
 	// Symbol
