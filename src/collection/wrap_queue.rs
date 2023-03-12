@@ -34,6 +34,18 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 		}
 	}
 
+	pub fn filled<F>(cb: F) -> Self
+	where
+		F: FnMut(usize) -> T,
+	{
+		Self {
+			data: core::array::from_fn(cb),
+			head: 0,
+			tail: 0,
+			state: State::Full,
+		}
+	}
+
 	/// construct new wrap_queue contain N copies of `value`
 	pub const fn with(value: T) -> Self
 	where
@@ -203,6 +215,46 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 			head,
 			tail,
 			data: &mut self.data,
+		})
+	}
+
+	fn iter(&self) -> Iter<'_, T, CAPACITY> {
+		Iter::new(self)
+	}
+}
+
+impl<'a, T, const CAP: usize> IntoIterator for &'a WrapQueue<T, CAP> {
+	type Item = &'a T;
+	type IntoIter = Iter<'a, T, CAP>;
+	fn into_iter(self) -> Self::IntoIter {
+		self.iter()
+	}
+}
+
+/// Iter for WrapQueue
+
+pub struct Iter<'a, T, const CAP: usize> {
+	idx: usize,
+	container: &'a WrapQueue<T, CAP>
+}
+
+impl<'a, T, const CAP: usize> Iter<'a, T, CAP> {
+	fn new(container: &'a WrapQueue<T, CAP>) -> Self {
+		Iter {
+			idx: 0,
+			container
+		}
+	}
+}
+
+impl<'a, T, const CAP: usize> Iterator for Iter<'a, T, CAP> {
+	type Item = &'a T;
+	fn next(&mut self) -> Option<Self::Item> {
+		let idx = self.idx;
+		
+		self.container.at(idx).and_then(|data| {
+			self.idx += 1;
+			Some(data)
 		})
 	}
 }
