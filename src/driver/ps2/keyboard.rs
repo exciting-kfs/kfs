@@ -2,7 +2,7 @@ use super::control::{test_status_now, Status};
 use crate::input::key_event::{Code, KeyEvent, KeyState};
 use crate::io::pmio::Port;
 
-static KEYBOARD_PORT: Port = Port::new(0x60);
+pub(super) static KEYBOARD_PORT: Port = Port::new(0x60);
 
 const CODE_PAGE2: u8 = 0xe0;
 const PAUSE: u8 = 0xe1;

@@ -18,7 +18,7 @@ fn main() {
 	println!("cargo:rerun-if-changed={}", LINKER_SCRIPT);
 
 	let v = Vec::from_iter(
-		glob("src/init/**/*.[sS]")
+		glob("src/asm/**/*.[sS]")
 			.expect("invalid glob")
 			.map(|file| file.expect("file matched. but unreachable")),
 	);

@@ -7,6 +7,8 @@ mod stackframe_iter;
 mod strtab;
 mod symtab;
 
+use rustc_demangle::demangle;
+
 use multiboot2::BootInformation;
 use multiboot2::ElfSection;
 
@@ -37,7 +39,7 @@ impl Backtrace {
 	pub fn print_trace(&self) {
 		for (idx, frame) in self.stack.iter().enumerate() {
 			let name = self.find_name(frame.fn_addr);
-			pr_info!("frame #{}: {:?}: {:?}", idx, frame.fn_addr, name);
+			pr_info!("frame #{}: {:?}: {:?}", idx, frame.fn_addr, demangle(name));
 		}
 	}
 

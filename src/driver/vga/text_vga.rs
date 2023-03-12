@@ -54,6 +54,11 @@ pub fn clear() {
 	}
 }
 
+pub fn init_vga() {
+	clear();
+	enable_cursor(0, 11);
+}
+
 pub fn enable_cursor(start: usize, end: usize) {
 	INDEX_PORT.write_byte(0x0a); // cursor start
 	let start = DATA_PORT.read_byte() & 0xc0 | start as u8;
