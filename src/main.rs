@@ -18,35 +18,37 @@ use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
 use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use input::{key_event::Code, keyboard::KEYBOARD};
 
+pub static mut BOOT_INFO: usize = 0;
+
+const MULTIBOOT2_MAGIC: u32 = 0x36d76289;
+
 /// very simple panic handler.
 /// that just print panic infomation and fall into infinity loop.
 ///
 /// we should make sure no more `panic!()` from here.
 #[panic_handler]
 fn panic_handler_impl(info: &PanicInfo) -> ! {
-	
 	printk_panic!("{}\ncall stack (most recent call first)\n", info);
-	print_stacktrace!();
-	
-	unsafe { 
+
+	unsafe {
+		if BOOT_INFO != 0 {
+			print_stacktrace!();
+		}
 		CONSOLE_MANAGER.get().set_foreground(CONSOLE_COUNTS - 1);
 		CONSOLE_MANAGER.get().flush_foreground();
 		CONSOLE_MANAGER.get().draw();
 	};
-	
+
 	loop {}
 }
 
-pub static mut BOOT_INFO: usize = 0;
+fn init_hardware() {
+	text_vga::init_vga();
+	driver::ps2::init_ps2().expect("failed to init PS/2");
+	driver::serial::init_serial().expect("failed to init COM1 serial port");
+}
 
-const MULTIBOOT2_MAGIC: u32 = 0x36d76289;
-
-#[no_mangle]
-pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
-	text_vga::clear();
-	text_vga::enable_cursor(0, 11);
-	driver::serial::init_serial().expect("failed to init COM1 port");
-
+fn boot_check(bi_header: usize, magic: u32) {
 	if magic != MULTIBOOT2_MAGIC {
 		panic!(
 			concat!(
@@ -59,6 +61,12 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	}
 
 	unsafe { BOOT_INFO = bi_header };
+}
+
+#[no_mangle]
+pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
+	boot_check(bi_header, magic);
+	init_hardware();
 
 	let cyan = VGAChar::styled(VGAAttr::new(false, Color::Cyan, false, Color::Cyan), b' ');
 	let magenta = VGAChar::styled(
