@@ -33,4 +33,6 @@ SECTIONS {
 	.kernel_stack : ALIGN(4096) {
 		*(.kernel_stack)
 	}
+
+	PROVIDE(kernel_last = . );
 }

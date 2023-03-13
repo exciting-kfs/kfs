@@ -11,6 +11,7 @@ mod io;
 mod printk;
 mod subroutine;
 mod util;
+mod mm;
 
 use core::panic::PanicInfo;
 
