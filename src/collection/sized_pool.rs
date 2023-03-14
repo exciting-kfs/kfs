@@ -1,26 +1,27 @@
-use super::sized_stack::SizedStack;
+use super::recycle::{Recycle, Error};
+
 
 pub struct SizedPool<T, const CAP: usize> {
         pool: [T; CAP],
-        recycle: SizedStack<usize, CAP>
+        recycle: Recycle<CAP>
 }
 
 impl<T, const CAP: usize> SizedPool<T, CAP> {
         pub fn from_fn<F>(cb: F) -> Self
         where F: FnMut(usize) -> T
         {
-                SizedPool { pool: core::array::from_fn(cb), recycle: SizedStack::filled(|idx| idx) }
+                SizedPool { pool: core::array::from_fn(cb), recycle: Recycle::new() }
         }
 
         pub fn insert(&mut self, data: T) -> Option<usize>{
-                self.recycle.pop().ok().and_then(|idx| {
+                self.recycle.alloc().ok().and_then(|idx| {
                         self.pool[idx] = data;
                         Some(idx)
                 })
         }
 
-        pub fn remove(&mut self, idx: usize) {
-                self.recycle.push(idx);
+        pub fn remove(&mut self, idx: usize) -> Result<(), Error> {
+                self.recycle.free(idx)
         }
 
         pub fn take(&mut self, idx: usize) -> Option<T>
@@ -28,7 +29,7 @@ impl<T, const CAP: usize> SizedPool<T, CAP> {
         {
                 match self.is_avail(idx) {
                         true => {
-                                self.recycle.push(idx);
+                                self.recycle.free(idx).unwrap_or_default();
                                 Some(core::mem::take(&mut self.pool[idx]))
                         }
                         false => None,
