@@ -1,19 +1,19 @@
-use super::wrap_queue::WrapQueue;
+use super::sized_stack::SizedStack;
 
 pub struct SizedPool<T, const CAP: usize> {
         pool: [T; CAP],
-        recycle: WrapQueue<usize, CAP>
+        recycle: SizedStack<usize, CAP>
 }
 
 impl<T, const CAP: usize> SizedPool<T, CAP> {
         pub fn from_fn<F>(cb: F) -> Self
         where F: FnMut(usize) -> T
         {
-                SizedPool { pool: core::array::from_fn(cb), recycle: WrapQueue::filled(|idx| idx) }
+                SizedPool { pool: core::array::from_fn(cb), recycle: SizedStack::filled(|idx| idx) }
         }
 
         pub fn insert(&mut self, data: T) -> Option<usize>{
-                self.recycle.pop().and_then(|idx| {
+                self.recycle.pop().ok().and_then(|idx| {
                         self.pool[idx] = data;
                         Some(idx)
                 })
