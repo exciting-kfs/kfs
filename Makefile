@@ -1,45 +1,168 @@
-KERNEL_BIN := target/i686-unknown-none-elf/debug/kernel
-OBJDUMP_OPTS := --demangle --x86-asm-syntax=intel --print-imm-hex
-OBJDUMP_PAGER := | vim -
+# === User settings / toolchain ===
 
+RELEASE_MODE := n
+DEBUG_WITH_VSCODE := y
+
+I386_GRUB2_PREFIX := $(I386_GRUB2_PREFIX)
+
+OBJCOPY := i686-elf-objcopy
+
+OBJDUMP := i686-elf-objdump
+OBJDUMP_FLAG := --demangle                                  \
+                --disassembler-options=intel,intel-mnemonic \
+
+LD := i686-elf-ld
+
+PAGER := vim -
+
+DMESG_FIFO := /tmp/serial0
+
+# === toolchain (inferred from above) ===
+
+GRUB2_MKRESCUE=$(I386_GRUB2_PREFIX)/bin/grub-mkrescue
+GRUB2_I386_LIB=$(I386_GRUB2_PREFIX)/lib/grub/i386-pc
+
+# === Targets ===
+
+ifeq ($(RELESE_MODE),y)
+TARGET_ROOT := target/i686-unknown-none-elf/release
+CARGO_FLAG :=  --release
+else
+TARGET_ROOT := target/i686-unknown-none-elf/debug
+endif
+
+LIB_KERNEL_NAME := libkernel.a
+LIB_KERNEL_SRC_ROOT := src
+
+LIB_KERNEL := $(TARGET_ROOT)/$(LIB_KERNEL_NAME)
+LIB_KERNEL_SRC := $(shell find $(LIB_KERNEL_SRC_ROOT) -type f -and \( -name '*.[sS]' -or -name '*.rs' \))
+CARGO_CONFIG := Cargo.toml .cargo/config.toml
+BUILD_SCRIPT := build.rs
+
+KERNEL_BIN_NAME := kernel
+KERNEL_BIN := $(TARGET_ROOT)/$(KERNEL_BIN_NAME)
+
+KERNEL_ELF_NAME := $(KERNEL_BIN_NAME).elf
+KERNEL_ELF := $(TARGET_ROOT)/$(KERNEL_ELF_NAME)
+
+KERNEL_DEBUG_SYMBOL_NAME := $(KERNEL_BIN_NAME).sym
+KERNEL_DEBUG_SYMBOL := $(TARGET_ROOT)/$(KERNEL_DEBUG_SYMBOL_NAME)
+
+RESCUE_TARGET_ROOT := $(TARGET_ROOT)/iso
+RESUCE_SRC_ROOT := iso
+
+RESCUE_IMG_NAME := rescue.iso
+RESCUE_IMG := $(TARGET_ROOT)/$(RESCUE_IMG_NAME)
+
+LINKER_SCRIPT := linker-script/kernel.ld
+
+DOC := $(TARGET_ROOT)/doc/kernel/index.html
+
+# === Phony recipes ===
+
+.PHONY : all
 all : rescue
 
-build :
-	cargo build
+.PHONY : build
+build : $(KERNEL_BIN)
 
-doc :
-	cargo doc
+.PHONY : rescue
+rescue : $(RESCUE_IMG)
 
-# it works on macos, but not tested on another os
-doc-open : doc
-	open target/i686-unknown-none-elf/doc/kernel/index.html
-
-run :
-	scripts/qemu.sh
-
-rescue :
-	scripts/rescue.sh
-
+.PHONY : clean
 clean :
-	cargo clean
-	rm -f rescue.iso
-	rm -f .sw*
+	@echo '[-] cleanup...'
+	@cargo clean
+	@rm -f .sw*
 
+.PHONY : re
+re : clean
+	@$(MAKE) all
+
+.PHONY : run
+run : rescue
+	@scripts/qemu.sh $(RESCUE_IMG) $(DMESG_FIFO) -monitor stdio
+
+ifeq ($(DEBUG_WITH_VSCODE),y)
+
+.PHONY : debug
+debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
+	@scripts/vsc-debug.py $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN) & \
+	scripts/qemu.sh $(RESCUE_IMG) $(DMESG_FIFO) -s -S -monitor stdio
+
+else
+
+.PHONY : debug
+debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
+	@scripts/qemu.sh $(RESCUE_IMG) $(DMESG_FIFO) -s -S -monitor stdio & rust-lldb   \
+		--one-line "target create --symfile $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN)"   \
+		--one-line "gdb-remote localhost:1234"                                      \
+		--source scripts/debug.lldb                                                 \
+
+endif
+
+.PHONY : dmesg
 dmesg :
-	cat /tmp/serial0
+	@cat $(DMESG_FIFO)
 
-dump-all:
-	objdump -D $(OBJDUMP_OPTS) $(KERNEL_BIN) $(OBJDUMP_PAGER)
+.PHONY : doc
+doc :
+	@cargo doc $(CARGO_FLAG)
 
-dump-text:
-	objdump -d $(OBJDUMP_OPTS) $(KERNEL_BIN) $(OBJDUMP_PAGER)
+.PHONY : doc-open
+doc-open : doc
+	@open $(DOC)
 
-dump-header:
-	objdump -x $(KERNEL_BIN) $(OBJDUMP_PAGER)
+# Prepend PIPE operator only if PAGER is set.
+ifdef PAGER
+PAGER := | $(PAGER)
+endif
 
-debug :
-	scripts/debug.sh &
-	rust-lldb $(KERNEL_BIN)                    \
-		--one-line 'gdb-remote localhost:1234' \
-		--one-line 'b kernel_init'             \
-		--one-line 'c'
+.PHONY : dump-header
+dump-header : $(KERNEL_BIN)
+	@$(OBJDUMP) $(OBJDUMP_FLAG) --all-headers $(KERNEL_BIN) $(PAGER)
+
+.PHONY : dump-text
+dump-text : $(KERNEL_BIN)
+	@$(OBJDUMP) $(OBJDUMP_FLAG) --disassemble $(KERNEL_BIN) $(PAGER)
+
+.PHONY : size
+size : $(KERNEL_BIN)
+	@ls -lh $<
+
+# === Main recipes ===
+
+.PHONY : $(LIB_KERNEL)
+$(LIB_KERNEL) :
+	@cargo build $(CARGO_FLAG)
+
+# TODO: better dependency tracking.
+#
+# $(LIB_KERNEL) : $(LIB_KERNEL_SRC) $(BUILD_SCRIPT) $(CARGO_CONFIG)
+# 	@cargo build
+
+$(KERNEL_ELF) : $(LIB_KERNEL) $(LINKER_SCRIPT)
+	@echo "[-] linking kernel image..."
+	@$(LD)                        \
+		-n                        \
+		--gc-sections             \
+		--no-warn-rwx-segments    \
+		--no-warn-execstack       \
+		--script=$(LINKER_SCRIPT) \
+		-o $@                     \
+		$(LIB_KERNEL) 
+
+$(KERNEL_BIN) : $(KERNEL_ELF)
+	@echo "[-] stripping debug-symbols..."
+	@$(OBJCOPY) --strip-debug $< $(KERNEL_BIN)
+
+$(KERNEL_DEBUG_SYMBOL) : $(KERNEL_ELF)
+	@echo "[-] extracting debug-symbols..."
+	@$(OBJCOPY) --only-keep-debug $< $(KERNEL_DEBUG_SYMBOL)
+
+$(RESCUE_IMG) : $(KERNEL_BIN) $(shell find $(RESUCE_SRC_ROOT) -type f)
+	@echo "[-] creating rescue image..."
+	@mkdir -p $(TARGET_ROOT)/boot
+	@cp -r $(RESUCE_SRC_ROOT) $(TARGET_ROOT)
+	@cp $(KERNEL_BIN) $(RESCUE_TARGET_ROOT)/boot
+	@$(GRUB2_MKRESCUE) -d $(GRUB2_I386_LIB) $(RESCUE_TARGET_ROOT) -o $@ 2>/dev/null >/dev/null

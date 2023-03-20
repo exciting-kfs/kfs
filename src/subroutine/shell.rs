@@ -150,15 +150,28 @@ impl Shell {
 			Some(v) => v,
 		};
 
+		let print_space = |printable: &mut Shell, mut size| {
+			let modifier = if size < 1024 {
+				"B"
+			} else if size < 1024 * 1024 {
+				size /= 1024;
+				"K"
+			} else {
+				size /= 1024 * 1024;
+				"M"
+			};
+
+			write!(printable, "{}{modifier}, ", size).unwrap();
+		};
+
 		for mem in mmap.all_memory_areas() {
-			writeln!(
-				self,
-				"base: {:#x}, size: {:#x}, type: {:?}",
-				mem.start_address(),
-				mem.size(),
-				mem.typ()
-			)
-			.unwrap();
+			write!(self, "base: ").unwrap();
+			print_space(self, mem.start_address());
+
+			write!(self, "size: ").unwrap();
+			print_space(self, mem.size());
+			// 31 34 39
+			writeln!(self, "status: {:?}", mem.typ()).unwrap();
 		}
 	}
 

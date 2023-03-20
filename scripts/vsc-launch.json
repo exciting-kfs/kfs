@@ -1,0 +1,16 @@
+{
+	"name": "Kernel Debug",
+	"type": "lldb",
+	"request": "custom",
+	"sourceLanguages": [
+		"asm",
+		"rust"
+	],
+	"targetCreateCommands": [],
+	"processCreateCommands": [
+		"gdb-remote localhost:1234"
+	],
+	"initCommands": [
+		"command source scripts/debug.lldb"
+	]
+}

@@ -36,7 +36,7 @@ impl Attr {
 	}
 
 	pub fn toggle_bright(&mut self) {
-		self.0 ^= 1 << BLINK_MASK;
+		self.0 ^= BRIGHT_MASK;
 	}
 
 	pub fn set_fg(&mut self, fg: Color) {
