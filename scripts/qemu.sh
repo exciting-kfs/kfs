@@ -12,6 +12,21 @@ shift
 COM1="$1"
 shift
 
+<<<<<<< HEAD
+=======
+COM2="$1"
+shift
+
+trap "rm -f $COM1 $COM2" EXIT
+
+until [ -p $COM2 ] && [ -p $COM1 ]
+do
+    sleep 1
+done
+
+echo " " >> $COM2 & # FIXME run_test: wait_readable
+
+>>>>>>> a5c7275... refactor some code, exclude excution test for closure
 # -m 3968(4096 - 128): almost maximum memory in x86 (without PAE)
 qemu-system-i386                    \
     -machine pc,max-ram-below-4g=4G \

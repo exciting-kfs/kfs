@@ -1,6 +1,8 @@
 #![no_std]
 #![no_main]
 #![allow(dead_code)]
+#![feature(const_cmp)]
+#![feature(allocator_api)]
 
 mod backtrace;
 mod boot;
@@ -16,7 +18,7 @@ mod subroutine;
 mod test;
 mod util;
 
-use core::panic::PanicInfo;
+use core::{panic::PanicInfo, ptr::NonNull};
 
 use boot::BOOT_INFO;
 use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
@@ -29,6 +31,13 @@ use mm::{
 	PageAllocator,
 };
 use test::{exit_qemu_with, TEST_ARRAY};
+use io::character::Write;
+use kfs_macro::kernel_test;
+use subroutine::SHELL;
+
+use core::arch::asm;
+use mm::page_allocator::buddy_allocator::{BuddyAllocator, Page};
+use mm::x86_page::{PageFlag, PDE, PTE};
 
 /// very simple panic handler.
 /// that just print panic infomation and fall into infinity loop.
@@ -58,6 +67,27 @@ fn init_hardware() {
 	driver::serial::init_serial();
 }
 
+struct MemInfo {
+	pub above_1m_start: usize,
+	pub above_1m_end: usize,
+	pub kernel_end: usize,
+}
+
+extern "C" {
+	static mut GLOBAL_PD: mm::x86_page::PD;
+	static mut GLOBAL_FIRST_PT: mm::x86_page::PT;
+}
+
+#[inline]
+fn current_or_next_aligned(p: usize, align: usize) -> usize {
+	(p + align - 1) & !(align - 1)
+}
+
+#[inline]
+fn next_aligned(p: usize, align: usize) -> usize {
+	(p + align) & !(align - 1)
+}
+
 fn run_test() -> ! {
 	let tests = TEST_ARRAY.as_slice();
 	let n_test = tests.len();
@@ -67,11 +97,49 @@ fn run_test() -> ! {
 		test.run();
 		pr_info!("...\x1b[32mPASS\x1b[39m");
 	}
-
+	
 	pr_info!("All test PASSED.");
-
+	
 	exit_qemu_with(0);
 }
+
+fn init_pages(mem_info: &boot::MemInfo) {
+	unsafe {
+		GLOBAL_FIRST_PT.entries[0] = PTE::new(0, PageFlag::Present | PageFlag::Global);
+		for i in 1..1024 {
+			GLOBAL_FIRST_PT.entries[i] = PTE::new(
+				0x1000 * i,
+				PageFlag::Present | PageFlag::Global | PageFlag::Write,
+			);
+		}
+
+		// 4M * 768 = 0xc000_0000
+		GLOBAL_PD.entries[768] = PDE::new(
+			&GLOBAL_FIRST_PT as *const _ as usize,
+			PageFlag::Present | PageFlag::Write,
+		);
+
+		for i in 1..MAX_ZONE_NORMAL {
+			if (i + 1) * PSE_PAGE_SIZE > mem_info.above_1m_end {
+				break;
+			}
+
+			GLOBAL_PD.entries[i + 768] = PDE::new_4m(
+				i * PSE_PAGE_SIZE,
+				PageFlag::Present | PageFlag::Global | PageFlag::Write,
+			);
+		}
+
+		flush_global_page_cache!();
+	}
+
+}
+
+// 224 * 4 = 896MB
+const MAX_ZONE_NORMAL: usize = 224;
+
+// 4MB
+const PSE_PAGE_SIZE: usize = 4 * 1024 * 1024;
 
 fn run_io() -> ! {
 	let cyan = VGAChar::styled(VGAAttr::new(false, Color::Cyan, false, Color::Cyan), b' ');
