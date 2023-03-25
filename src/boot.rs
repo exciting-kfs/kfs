@@ -2,7 +2,10 @@ mod strtab;
 mod symtab;
 
 use core::ffi::c_char;
+use core::ops::Range;
 
+use crate::mm::util::to_physical_addr_checked;
+use crate::pr_info;
 use multiboot2::ElfSection;
 
 use self::{
@@ -10,21 +13,38 @@ use self::{
 	symtab::{Symtab, SymtabEntry},
 };
 
+const MULTIBOOT2_MAGIC: u32 = 0x36d76289;
+
 pub static mut BOOT_INFO: usize = 0;
 pub static mut SYMTAB: Symtab = Symtab::new();
 pub static mut STRTAB: Strtab = Strtab::new();
 
-const MULTIBOOT2_MAGIC: u32 = 0x36d76289;
+pub struct MemInfo {
+	pub linear: Range<usize>,
+	pub kernel_end: usize,
+}
 
-pub fn init_bootinfo(bi_header: usize, magic: u32) -> usize {
+pub fn init_bootinfo(bi_header: usize, magic: u32) -> MemInfo {
+	check_magic(magic);
+
 	unsafe { BOOT_INFO = bi_header };
 
-	let (symtab, strtab, last_address) = get_info(bi_header);
+	let info = unsafe { multiboot2::load(bi_header).unwrap() };
+	let mmap = info.memory_map_tag().unwrap();
 
-	check_magic(magic);
-	set_tables(symtab, strtab);
+	let linear = mmap
+		.memory_areas()
+		.find(|x| x.start_address() == (1024 * 1024))
+		.unwrap();
 
-	last_address
+	let linear = (linear.start_address() as usize)..(linear.end_address() as usize);
+
+	let kernel_end = info.elf_sections_tag().unwrap().sections().fold(
+		to_physical_addr_checked(bi_header + info.total_size()),
+		|acc, cur| acc.max(to_physical_addr_checked(cur.end_address() as usize)),
+	);
+
+	return MemInfo { linear, kernel_end };
 }
 
 fn check_magic(magic: u32) {

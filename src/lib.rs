@@ -141,3 +141,106 @@ mod test1111 {
 		pr_info!("DS: 4");
 	}
 }
+// -------------------------------------------------------------------
+
+// #![allow(dead_code)]
+// #![feature(maybe_uninit_uninit_array)]
+// #![feature(new_uninit)]
+// #![feature(const_maybe_uninit_uninit_array)]
+
+// use crate::mm::page_allocator::buddy_allocator::Page;
+// use crate::mm::page_allocator::util::rank_to_size;
+// use core::mem::MaybeUninit;
+// use rand::prelude::*;
+// use std::ptr::NonNull;
+
+// const SPACE_SIZE: usize = 1024 * 1024 * 1024; // (1GB)
+
+// mod mm;
+
+// use std::collections::BTreeMap;
+
+// struct RangeMap {
+//     min: usize,
+//     max: usize,
+//     tree: BTreeMap<usize, usize>,
+// }
+
+// impl RangeMap {
+//     pub fn new(min: usize, max: usize) -> Self {
+//         RangeMap {
+//             min,
+//             max,
+//             tree: BTreeMap::new(),
+//         }
+//     }
+
+//     pub fn add(&mut self, begin: usize, end: usize) -> Result<(), ()> {
+//         assert!(begin < end);
+
+//         if begin < self.min || self.max <= end {
+//             println!(
+//                 "b:{begin:#x} e:{end:#x}, min:{:#x}, max:{:#x}",
+//                 self.min, self.max
+//             );
+//             return Err(());
+//         }
+
+//         // hmm...
+//         if let Some(x) = self.tree.range(..begin).rev().next() {
+//             if *x.1 > begin {
+//                 println!("2");
+//                 return Err(());
+//             }
+//         }
+
+//         if let Some(x) = self.tree.range(begin..).next() {
+//             if *x.0 < end {
+//                 println!("3");
+//                 return Err(());
+//             }
+//         }
+
+//         self.tree.insert(begin, end);
+
+//         return Ok(());
+//     }
+// }
+
+// const PAGE_SIZE: usize = 4096;
+
+// fn main() {
+//     let space = Box::<MaybeUninit<[u8; SPACE_SIZE]>>::new_zeroed();
+//     // MaybeUninit::uninit_array();
+//     let mut page_alloc = unsafe {
+//         mm::page_allocator::buddy_allocator::BuddyAllocator::new(
+//             space.as_ptr() as usize,
+//             space.as_ptr() as usize + SPACE_SIZE + 1,
+//         )
+//     };
+
+//     let mut tree = RangeMap::new(
+//         space.as_ptr() as usize,
+//         space.as_ptr() as usize + SPACE_SIZE + 1,
+//     );
+
+//     let mut v: Vec<usize> = Vec::new();
+
+//     let mut rng = rand::thread_rng();
+
+//     let mut alloc_size = rng.gen_range(0..=10);
+//     while let Ok(p) = page_alloc.alloc_page(alloc_size) {
+//         let addr = p.as_ptr() as usize;
+//         println!("ALLOC R={}", alloc_size);
+//         v.push(addr);
+//         tree.add(addr, addr + rank_to_size(alloc_size)).unwrap();
+//         println!("{}", page_alloc);
+//         alloc_size = rng.gen_range(0..=10);
+//     }
+
+//     for addr in v {
+//         println!("FREE  {:p}", addr as *const u8);
+//         page_alloc.free_page(NonNull::new(addr as *mut Page).unwrap());
+//         println!("{}", page_alloc);
+//     }
+// }

@@ -12,15 +12,15 @@ extern kernel_init
 ; we have to put entry point in this section.
 section .boot exec
 
-global global_pd:data 0x1000
-global global_first_pt:data 0x1000
+global GLOBAL_PD:data 0x1000
+global GLOBAL_FIRST_PT:data 0x1000
 
 global __start:function (__start.end - __start)
 
 ; Initially, this space holds multiboot2 header.
 ; But during booting sequence,
 ; header will be overwritten with global page directory.
-global_pd:
+GLOBAL_PD:
 multiboot2_header_start:
 	dd MAGIC
 	dd ARCH
@@ -40,11 +40,11 @@ __start:
 .end:
 
 ; In order to prevent another section is placed here
-; ([global_pd, global_pd + 1page)) by linker or bootloader,
+; ([GLOBAL_PD, GLOBAL_PD + 1page)) by linker or bootloader,
 ; allocate at least 1 page explictly.
-times 0x1000 - $ + global_pd db 0
+times 0x1000 - $ + GLOBAL_PD db 0
 
 ; This space will be used as first page table.
 ; which holds null-page and low-address MMIO pages.
-global_first_pt:
+GLOBAL_FIRST_PT:
 times 0x1000 db 0

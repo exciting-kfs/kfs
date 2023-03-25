@@ -16,6 +16,7 @@ test = false
 bench = false
 
 [dependencies]
+bitflags = "2.0.2"
 multiboot2 = "0.14.0"
 rustc-demangle = "0.1.21"
 kfs_macro = { path = "./kfs_macro" }
