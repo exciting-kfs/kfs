@@ -1,9 +1,9 @@
 use super::stackframe::{self, Stackframe};
 
 extern "C" {
-	/// it's not **callable** foreign function.
-	/// but address of the kernel stack.
-	fn kernel_stack_init();
+	/// Do not __call__ this function. it's not function at all.
+	/// but just pointer, which points bottom of the kernel stack.
+	fn kernel_stack_bottom();
 }
 
 pub struct StackframeIter {
@@ -13,7 +13,7 @@ pub struct StackframeIter {
 impl Iterator for StackframeIter {
 	type Item = Stackframe;
 	fn next(&mut self) -> Option<Self::Item> {
-		let stack_base = kernel_stack_init as *const usize;
+		let stack_base = kernel_stack_bottom as *const usize;
 		if self.base_ptr == stack_base {
 			return None;
 		}

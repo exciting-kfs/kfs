@@ -8,6 +8,7 @@ mod console;
 mod driver;
 mod input;
 mod io;
+mod mm;
 mod printk;
 mod subroutine;
 mod util;
@@ -48,7 +49,7 @@ fn init_hardware() {
 	driver::serial::init_serial().expect("failed to init COM1 serial port");
 }
 
-fn boot_check(bi_header: usize, magic: u32) {
+fn init_bootinfo(bi_header: usize, magic: u32) -> usize {
 	if magic != MULTIBOOT2_MAGIC {
 		panic!(
 			concat!(
@@ -61,12 +62,33 @@ fn boot_check(bi_header: usize, magic: u32) {
 	}
 
 	unsafe { BOOT_INFO = bi_header };
+
+	let mut last_address = unsafe { bi_header + *(bi_header as *const u32) as usize };
+
+	let info = unsafe { multiboot2::load(bi_header).unwrap() };
+	let sh = info.elf_sections_tag().unwrap();
+	for section in sh.sections() {
+		last_address = last_address.max(section.end_address() as usize);
+	}
+
+	last_address
+}
+
+#[inline]
+fn current_or_next_aligned(p: usize, align: usize) -> usize {
+	(p + align - 1) & !(align - 1)
+}
+
+#[inline]
+fn next_aligned(p: usize, align: usize) -> usize {
+	(p + align) & !(align - 1)
 }
 
 #[no_mangle]
 pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
-	boot_check(bi_header, magic);
 	init_hardware();
+
+	let _kernel_end = init_bootinfo(bi_header, magic);
 
 	let cyan = VGAChar::styled(VGAAttr::new(false, Color::Cyan, false, Color::Cyan), b' ');
 	let magenta = VGAChar::styled(
@@ -81,6 +103,7 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 				unsafe {
 					pr_warn!("BACKTICK PRESSED {} TIMES!!", I);
 					I += 1;
+					panic!("panic!!");
 				}
 			}
 			text_vga::putc(24, 79, cyan);

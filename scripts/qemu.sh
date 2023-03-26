@@ -1,19 +1,29 @@
 #! /bin/bash
 
-SERIAL=/tmp/serial0
+if [ $# -lt 2 ]; then
+	echo 'Usage: qemu.sh "ISO file" "serial backend" ...extraflags'; exit 1
+fi
+
+RESCUE="$1"
+shift
+
+SERIAL="$1"
+shift
 
 trap "rm -f $SERIAL" EXIT
 
 if [ -p $SERIAL ]; then
-	rm -f $SERIAL
+    rm -f $SERIAL
 fi
 
 mkfifo $SERIAL
 
-scripts/rescue.sh && qemu-system-i386	\
- -boot d								\
- -vga std								\
- -cdrom rescue.iso						\
- -monitor stdio							\
- -serial pipe:$SERIAL
-
+# -m 3968(4096 - 128): almost maximum memory in x86 (without PAE)
+qemu-system-i386                    \
+    -machine pc,max-ram-below-4g=4G \
+    -m 3968                         \
+    -boot d                         \
+    -vga std                        \
+    -cdrom $RESCUE                  \
+    -serial pipe:$SERIAL            \
+    $@

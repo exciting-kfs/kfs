@@ -1,50 +1,69 @@
-# x86 32 bit kernel project
+# x86_32 Kernel project
 
 ## Dependencies
 
-### build kernel binary
-- cargo / rustc (nightly)
+---
+
+### Kernel binary
+
+- rust (nightly)
 - nasm 
+- GNU binutils
+- make
 
-### build rescue image
-- grub2 (compiled with CC_TARGET=i686-elf-gcc)
+---
+
+### Run & Debug
+
+- grub2
 - xorriso
-
-### run with qemu
 - qemu
-
-### debug
 - lldb
 
-## Configure
+---
 
-### enable rust nightly
-```
-$ rustup default nightly
-```
+## Makefile Configs
 
-## Build & Run
+- `RELEASE_MODE`
 
-### create kernel binary
-```shell
-$ cargo build
+	- `y`: Enable all optimizations.
+	- `n`: Debug mode. Generate debug symbols and enable run-time checkings.
 
-OR
+- `DEBUG_WITH_VSCODE`
 
-$ make build
-```
+	- `y`: Debug with vscode. [CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb) is needed.
+	- `n`: Debug with plain LLDB.
 
-### create rescue image
-```shell
-$ make rescue
-```
+---
 
-### run rescue image with qemu
-```shell
-$ make run
-```
+## Makefile Targets
 
-### debug
-```shell
-$ make debug
-```
+### Build
+
+- `all` (default target), `rescue`: Create ISO rescue image.
+
+- `build`: Create kernel binary.
+
+- `doc`: Generate `libkernel.a` document.
+
+- `clean`: Delete build artifacts.
+
+- `re`: Perform clean-build
+
+### Run
+
+- `run`: Run kernel with Qemu.
+
+- `debug`: Debug kernel with LLDB.
+
+- `dmesg`: Read kernel message buffer.
+
+### Utils
+
+- `dump-header`: Dump kernel ELF headers.
+
+- `dump-text`: Dump kernel .text sections.
+
+- `size`: Show size of kernel binary.
+
+- `doc-open`: Open `libkernel.a` document.
