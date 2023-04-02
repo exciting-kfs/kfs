@@ -52,18 +52,21 @@ fn get_info(bi_header: usize) -> (ElfSection, ElfSection, usize){
 		}
 	}
 
-	let symtab = symtab.expect("There is no symtab.");
+	let symtab = symtab.expect("There is no symtab."); // TODO release?
 	let strtab = strtab.expect("There is no strtab.");
 
 	(symtab, strtab, last_address)
 }
 
 fn set_tables(symtab: ElfSection, strtab: ElfSection) {
-	let addr = symtab.start_address() as *const SymtabEntry;
-	let count = symtab.size() as usize / core::mem::size_of::<SymtabEntry>();
 
 	unsafe {
-		SYMTAB = Symtab::init(addr, count);
-		STRTAB = Strtab::init(strtab.start_address() as *const u8);
+		let addr = symtab.start_address() as *const SymtabEntry;
+		let count = symtab.size() as usize / core::mem::size_of::<SymtabEntry>();
+		SYMTAB.init(addr, count);
+
+		let addr = strtab.start_address() as *const u8;
+		let size = strtab.size() as usize;
+		STRTAB.init(addr, size);
 	}
 }

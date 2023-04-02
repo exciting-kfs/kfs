@@ -23,17 +23,17 @@ impl Backtrace {
 	/// Print call stack trace of StackDump.
 	pub fn print_trace(&self) {
 		for (idx, frame) in self.stack.iter().enumerate() {
-			let name = self.find_name(frame.fn_addr);
+			let name = self.find_name(frame.fn_addr).unwrap_or_default();
 			pr_info!("frame #{}: {:?}: {:?}", idx, frame.fn_addr, demangle(name));
 		}
 	}
 
 	/// Find function name using Symtab and Strtab
-	fn find_name(&self, fn_addr: *const usize) -> &'static str {
+	fn find_name(&self, fn_addr: *const usize) -> Option<&'static str> {
 		unsafe {
-			let index = SYMTAB.get_name_index(fn_addr);
+			let index = SYMTAB.get_name_index(fn_addr)?;
 			let name = STRTAB.get_name(index);
-			name.unwrap_or_default()
+			name
 		}
 	}
 }
