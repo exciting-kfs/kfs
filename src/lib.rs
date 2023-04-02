@@ -12,18 +12,15 @@ mod mm;
 mod printk;
 mod subroutine;
 mod util;
+mod boot;
 
 use core::panic::PanicInfo;
 
 use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
 use driver::{vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color}, serial};
-use input::{key_event::{Code, KeyEvent}, keyboard::KEYBOARD};
+use input::{key_event::Code, keyboard::KEYBOARD};
 use io::character::Write;
 use subroutine::SHELL;
-
-pub static mut BOOT_INFO: usize = 0;
-
-const MULTIBOOT2_MAGIC: u32 = 0x36d76289;
 
 /// very simple panic handler.
 /// that just print panic infomation and fall into infinity loop.
@@ -34,7 +31,7 @@ fn panic_handler_impl(info: &PanicInfo) -> ! {
 	printk_panic!("{}\ncall stack (most recent call first)\n", info);
 
 	unsafe {
-		if BOOT_INFO != 0 {
+		if boot::BOOT_INFO != 0 {
 			print_stacktrace!();
 		}
 		CONSOLE_MANAGER.get().set_foreground(CONSOLE_COUNTS - 1);
@@ -51,30 +48,6 @@ fn init_hardware() {
 	driver::serial::init_serial().expect("failed to init COM1 serial port");
 }
 
-fn init_bootinfo(bi_header: usize, magic: u32) -> usize {
-	if magic != MULTIBOOT2_MAGIC {
-		panic!(
-			concat!(
-				"unexpected boot magic. ",
-				"expected: {:#x}, ",
-				"but received: {:#x}",
-			),
-			MULTIBOOT2_MAGIC, magic
-		);
-	}
-
-	unsafe { BOOT_INFO = bi_header };
-
-	let mut last_address = unsafe { bi_header + *(bi_header as *const u32) as usize };
-
-	let info = unsafe { multiboot2::load(bi_header).unwrap() };
-	let sh = info.elf_sections_tag().unwrap();
-	for section in sh.sections() {
-		last_address = last_address.max(section.end_address() as usize);
-	}
-
-	last_address
-}
 
 #[inline]
 fn current_or_next_aligned(p: usize, align: usize) -> usize {
@@ -90,7 +63,7 @@ fn next_aligned(p: usize, align: usize) -> usize {
 pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	init_hardware();
 
-	let _kernel_end = init_bootinfo(bi_header, magic);
+	let _kernel_end = boot::init_bootinfo(bi_header, magic);
 
 	let cyan = VGAChar::styled(VGAAttr::new(false, Color::Cyan, false, Color::Cyan), b' ');
 	let magenta = VGAChar::styled(

@@ -5,7 +5,11 @@ pub struct Symtab {
 }
 
 impl Symtab {
-    pub fn new(addr: *const SymtabEntry, count: usize) -> Self {
+    pub const fn new() -> Self {
+        Symtab { addr: 0 as *const SymtabEntry, count: 0 }
+    }
+
+    pub fn init(addr: *const SymtabEntry, count: usize) -> Self {
         Symtab { addr, count }
     }
 

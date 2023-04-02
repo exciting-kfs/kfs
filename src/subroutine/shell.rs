@@ -2,7 +2,7 @@ use crate::{
 	collection,
 	console::{constants::*, Ascii, AsciiParser},
 	io::character::{Read as ChRead, Write as ChWrite, RW as ChRW},
-	BOOT_INFO,
+	boot::BOOT_INFO,
 };
 
 use core::fmt::{self, Write};

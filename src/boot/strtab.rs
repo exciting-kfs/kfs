@@ -6,7 +6,11 @@ pub struct Strtab {
 }
 
 impl Strtab {
-	pub fn new(addr: *const u8) -> Self {
+	pub const fn new() -> Self {
+		Strtab { addr: 0 as *const u8 }
+	}
+
+	pub fn init(addr: *const u8) -> Self {
 		Strtab { addr }
 	}
 
