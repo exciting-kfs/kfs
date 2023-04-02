@@ -16,8 +16,10 @@ mod util;
 use core::panic::PanicInfo;
 
 use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
-use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
-use input::{key_event::Code, keyboard::KEYBOARD};
+use driver::{vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color}, serial};
+use input::{key_event::{Code, KeyEvent}, keyboard::KEYBOARD};
+use io::character::Write;
+use subroutine::SHELL;
 
 pub static mut BOOT_INFO: usize = 0;
 
@@ -111,6 +113,12 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 				CONSOLE_MANAGER.get().update(event);
 				CONSOLE_MANAGER.get().draw();
 			};
+		} else if let Some(byte) = serial::get_byte() {
+			unsafe {
+				SHELL.write_one(byte);
+				CONSOLE_MANAGER.get().flush_all();
+				CONSOLE_MANAGER.get().draw();
+			}
 		} else {
 			unsafe {
 				CONSOLE_MANAGER.get().flush_all();
