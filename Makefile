@@ -1,7 +1,7 @@
 # === User settings / toolchain ===
 
 RELEASE_MODE := n
-DEBUG_WITH_VSCODE := n
+DEBUG_WITH_VSCODE := y
 
 I386_GRUB2_PREFIX := $(I386_GRUB2_PREFIX)
 
@@ -16,6 +16,7 @@ LD := i686-elf-ld
 PAGER := vim -
 
 DMESG_FIFO := /tmp/serial0
+UNITTEST_FIFO := /tmp/serial1
 
 # === toolchain (inferred from above) ===
 
@@ -81,20 +82,20 @@ re : clean
 
 .PHONY : run
 run : rescue
-	@scripts/qemu.sh $(RESCUE_IMG) $(DMESG_FIFO) -monitor stdio
+	@scripts/qemu.sh $(RESCUE_IMG) $(DMESG_FIFO) $(UNITTEST_FIFO) -monitor stdio
 
 ifeq ($(DEBUG_WITH_VSCODE),y)
 
 .PHONY : debug
 debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
 	@scripts/vsc-debug.py $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN) & \
-	scripts/qemu.sh $(RESCUE_IMG) $(DMESG_FIFO) -s -S -monitor stdio
+	scripts/qemu.sh $(RESCUE_IMG) $(DMESG_FIFO) $(UNITTEST_FIFO) -s -S -monitor stdio
 
 else
 
 .PHONY : debug
 debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
-	@scripts/qemu.sh $(RESCUE_IMG) $(DMESG_FIFO) -s -S -monitor stdio & rust-lldb   \
+	@scripts/qemu.sh $(RESCUE_IMG) $(DMESG_FIFO) $(UNITTEST_FIFO) -s -S -monitor stdio & rust-lldb   \
 		--one-line "target create --symfile $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN)"   \
 		--one-line "gdb-remote localhost:1234"                                      \
 		--source scripts/debug.lldb                                                 \
@@ -129,6 +130,11 @@ dump-text : $(KERNEL_BIN)
 .PHONY : size
 size : $(KERNEL_BIN)
 	@ls -lh $<
+
+.PHONY : test
+test : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
+	@scripts/test.sh $(RESCUE_IMG) $(DMESG_FIFO) $(UNITTEST_FIFO)
+
 
 # === Main recipes ===
 

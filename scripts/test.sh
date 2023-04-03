@@ -1,4 +1,3 @@
-#! /bin/bash
 
 if [ $# -lt 2 ]; then
 	echo 'Usage: qemu.sh "ISO file" "serial backend" ...extraflags'; exit 1
@@ -26,6 +25,7 @@ fi
 
 mkfifo $SERIAL
 mkfifo $UNIT_TEST
+echo " unit_test hello_world" >> $UNIT_TEST & # why skipped 1st character)
 
 # -m 3968(4096 - 128): almost maximum memory in x86 (without PAE)
 qemu-system-i386                    \
@@ -36,4 +36,7 @@ qemu-system-i386                    \
     -cdrom $RESCUE                  \
     -serial pipe:$SERIAL            \
     -serial pipe:$UNIT_TEST         \
-    $@
+    $@				    &
+
+cat $SERIAL
+    
