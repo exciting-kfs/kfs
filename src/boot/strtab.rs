@@ -71,7 +71,7 @@ impl<'a> Iterator for Iter<'a> {
 		let len = c_strlen(self.ptr);
 		let ret = unsafe { core::slice::from_raw_parts(self.ptr, len) };
 		let ret = core::str::from_utf8(ret).ok();
-		self.ptr = unsafe { self.ptr.add(len) };
+		self.ptr = unsafe { self.ptr.add(len + 1) };
 
 		ret
 	}
@@ -79,7 +79,7 @@ impl<'a> Iterator for Iter<'a> {
 
 fn c_strlen(ptr: *const u8) -> usize {
 	let mut len = 0;
-	while unsafe { *ptr.add(len) } == 0 {
+	while unsafe { *ptr.add(len) } != 0 {
 		len += 1
 	}
 	len

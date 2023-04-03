@@ -45,7 +45,7 @@ fn panic_handler_impl(info: &PanicInfo) -> ! {
 fn init_hardware() {
 	text_vga::init_vga();
 	driver::ps2::init_ps2().expect("failed to init PS/2");
-	driver::serial::init_serial().expect("failed to init COM1 serial port");
+	driver::serial::init_serial();
 }
 
 
@@ -71,6 +71,8 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 		b' ',
 	);
 
+	hello_world();
+
 	loop {
 		if let Some(event) = unsafe { KEYBOARD.get_keyboard_event() } {
 			if event.key == Code::Backtick && event.pressed() {
@@ -86,7 +88,7 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 				CONSOLE_MANAGER.get().update(event);
 				CONSOLE_MANAGER.get().draw();
 			};
-		} else if let Some(byte) = serial::get_byte() {
+		} else if let Some(byte) = unsafe { serial::COM2.get_byte() } {
 			unsafe {
 				SHELL.write_one(byte);
 				CONSOLE_MANAGER.get().flush_all();
@@ -99,4 +101,8 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 		}
 		text_vga::putc(24, 79, magenta);
 	}
+}
+
+pub fn hello_world() {
+	pr_info!("pr_info: hello world");
 }

@@ -2,10 +2,10 @@ use crate::{
 	collection,
 	console::{constants::*, Ascii, AsciiParser},
 	io::character::{Read as ChRead, Write as ChWrite, RW as ChRW},
-	boot::BOOT_INFO,
+	boot::{BOOT_INFO, SYMTAB, STRTAB}, pr_info,
 };
 
-use core::fmt::{self, Write};
+use core::fmt::{self, Write, Debug};
 
 use core::{arch::asm, slice::from_raw_parts};
 
@@ -175,15 +175,34 @@ impl Shell {
 		}
 	}
 
-	fn execute_builtin<'a, T>(&mut self, kind: Builtin, _args: T)
+	fn builtin_unit_test<'a, I>(&mut self, mut args: I)
 	where
-		T: Iterator<Item = &'a [u8]>,
+		I: Iterator<Item = &'a [u8]> + Debug,
+	{
+		while let Some(s) = args.next() {
+			let s = core::str::from_utf8(s).unwrap_or_default();
+			unsafe {
+				let addr = STRTAB
+					.get_name_index(s)
+					.and_then(|index| SYMTAB.get_addr(index));
+				addr.map(|addr| {
+					let func: fn() = core::mem::transmute(addr);
+					func();
+				});
+			}
+		}
+	}
+
+	fn execute_builtin<'a, I>(&mut self, kind: Builtin, args: I)
+	where
+		I: Iterator<Item = &'a [u8]> + Debug,
 	{
 		match kind {
 			Builtin::Help => self.builtin_help(),
 			Builtin::Clear => self.builtin_clear(),
 			Builtin::Halt => self.builtin_halt(),
 			Builtin::Mem => self.builtin_mem(),
+			Builtin::UnitTest => self.builtin_unit_test(args)
 		}
 	}
 
@@ -272,6 +291,7 @@ enum Builtin {
 	Halt,
 	Clear,
 	Mem,
+	UnitTest
 }
 
 impl Builtin {
@@ -281,6 +301,7 @@ impl Builtin {
 			b"halt" => Self::Halt,
 			b"clear" => Self::Clear,
 			b"mem" => Self::Mem,
+			b"unit_test" => Self::UnitTest,
 			_ => return None,
 		};
 

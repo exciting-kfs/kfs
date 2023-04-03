@@ -69,9 +69,10 @@ impl Write for Dmesg {
 		let suffix = "\x1b[s".bytes().into_iter();
 
 		for ch in prefix.chain(string).chain(suffix) {
-			if self.kern_buf.full() {
-				return Err(Error);
-			}
+			// FIXME BOOM hmm..?
+			// if self.kern_buf.full() {
+			// 	return Err(Error);
+			// }
 			self.kern_buf.push(ch);
 		}
 

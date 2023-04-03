@@ -17,6 +17,7 @@ if [ -p $SERIAL ]; then
 fi
 
 mkfifo $SERIAL
+mkfifo /tmp/serial1
 
 # -m 3968(4096 - 128): almost maximum memory in x86 (without PAE)
 qemu-system-i386                    \
@@ -26,4 +27,5 @@ qemu-system-i386                    \
     -vga std                        \
     -cdrom $RESCUE                  \
     -serial pipe:$SERIAL            \
+    -serial pipe:/tmp/serial1            \
     $@

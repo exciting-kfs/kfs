@@ -118,7 +118,7 @@ pub fn __printk(arg: Arguments) -> Result {
 	// FIXME: unlock ALREADY_PRINT in panic!() path.
 	unsafe {
 		ALREADY_PRINT = true;
-		result = serial::Serial
+		result = serial::COM1
 			.write_fmt(arg)
 			.and_then(|_| DMESG.write_fmt(arg));
 		ALREADY_PRINT = false;
