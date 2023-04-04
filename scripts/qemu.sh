@@ -1,7 +1,7 @@
 #! /bin/bash
 
-if [ $# -lt 2 ]; then
-	echo 'Usage: qemu.sh "ISO file" "serial backend" ...extraflags'; exit 1
+if [ $# -lt 3 ]; then
+	echo 'Usage: qemu.sh "ISO file" "kernbuf serial" "unit_test serial" ...extraflags'; exit 1
 fi
 
 RESCUE="$1"
@@ -13,19 +13,12 @@ shift
 UNIT_TEST="$1"
 shift
 
-trap "rm -f $SERIAL" EXIT
-trap "rm -f $UNIT_TEST" EXIT
+trap "rm -f $SERIAL $UNIT_TEST" EXIT
 
-if [ -p $SERIAL ]; then
-    rm -f $SERIAL
-fi
-
-if [ -p $UNIT_TEST ]; then
-    rm -f $UNIT_TEST
-fi
-
-mkfifo $SERIAL
-mkfifo $UNIT_TEST
+until [ -p $UNIT_TEST ] && [ -p $SERIAL ]
+do
+    sleep 1
+done
 
 # -m 3968(4096 - 128): almost maximum memory in x86 (without PAE)
 qemu-system-i386                    \

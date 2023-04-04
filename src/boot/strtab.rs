@@ -1,7 +1,5 @@
 use core::{ffi::{c_char, CStr}, marker::PhantomData};
 
-use rustc_demangle::demangle;
-
 /// String table in the '.strtab' section, used to get a symbol name.
 pub struct Strtab {
 	addr: *const u8,
@@ -17,19 +15,14 @@ impl Strtab {
 		*self = Strtab { addr, size }
 	}
 
+	pub fn addr(&self) -> *const u8 {
+		self.addr
+	}
+
 	/// Get the name formed C style string and transform to a string slice.
 	pub fn get_name(&self, index: isize) -> Option<&'static str> {
 		let start = unsafe { self.addr.offset(index) } as *const c_char;
 		unsafe { CStr::from_ptr(start).to_str().ok() }
-	}
-
-	pub fn get_name_index(&self, s: &str) -> Option<usize> {
-		// TODO contains ? eq
-		self.iter().find(|name| demangle(name).as_str().contains(s)).map(|name| {
-			let table = self.addr as usize;
-			let string = name.as_ptr() as usize;
-			string - table
-		})
 	}
 
 	pub fn iter(&self) -> Iter {

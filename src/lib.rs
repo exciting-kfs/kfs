@@ -71,8 +71,6 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 		b' ',
 	);
 
-	hello_world();
-
 	loop {
 		if let Some(event) = unsafe { KEYBOARD.get_keyboard_event() } {
 			if event.key == Code::Backtick && event.pressed() {
@@ -103,6 +101,21 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	}
 }
 
-pub fn hello_world() {
-	pr_info!("pr_info: hello world");
+mod tests {
+	use crate::pr_info;
+
+	#[allow(dead_code)]
+	pub fn hello_world() {
+		pr_info!("pr_info: hello world0");
+	}
+
+	#[no_mangle]
+	pub fn hello_world_asdfghasdf() {
+		pr_info!("pr_info: hello world1");
+	}
+
+	#[no_mangle]
+	pub fn hello_world_asdfghasdfasdfasdfasdfas() {
+		pr_info!("pr_info: hello world2");
+	}
 }

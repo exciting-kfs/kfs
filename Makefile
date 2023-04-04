@@ -28,8 +28,10 @@ GRUB2_I386_LIB=$(I386_GRUB2_PREFIX)/lib/grub/i386-pc
 ifeq ($(RELESE_MODE),y)
 TARGET_ROOT := target/i686-unknown-none-elf/release
 CARGO_FLAG :=  --release
+LD_FLAG = -n --no-warn-rwx-segments --no-warn-execstack --script=$(LINKER_SCRIPT) --gc-sections
 else
 TARGET_ROOT := target/i686-unknown-none-elf/debug
+LD_FLAG = -n --no-warn-rwx-segments --no-warn-execstack --script=$(LINKER_SCRIPT)
 endif
 
 LIB_KERNEL_NAME := libkernel.a
@@ -82,24 +84,22 @@ re : clean
 
 .PHONY : run
 run : rescue
+	@scripts/serial.sh $(DMESG_FIFO) $(UNITTEST_FIFO) &
 	@scripts/qemu.sh $(RESCUE_IMG) $(DMESG_FIFO) $(UNITTEST_FIFO) -monitor stdio
 
+.PHONY : debug
 ifeq ($(DEBUG_WITH_VSCODE),y)
-
-.PHONY : debug
 debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
-	@scripts/vsc-debug.py $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN) & \
-	scripts/qemu.sh $(RESCUE_IMG) $(DMESG_FIFO) $(UNITTEST_FIFO) -s -S -monitor stdio
-
+	@scripts/vsc-debug.py $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN) &
+	@scripts/serial.sh $(DMESG_FIFO) $(UNITTEST_FIFO) &
+	@scripts/qemu.sh $(RESCUE_IMG) $(DMESG_FIFO) $(UNITTEST_FIFO) -s -S -monitor stdio
 else
-
-.PHONY : debug
 debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
+	@scripts/serial.sh $(DMESG_FIFO) $(UNITTEST_FIFO) &
 	@scripts/qemu.sh $(RESCUE_IMG) $(DMESG_FIFO) $(UNITTEST_FIFO) -s -S -monitor stdio & rust-lldb   \
 		--one-line "target create --symfile $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN)"   \
 		--one-line "gdb-remote localhost:1234"                                      \
-		--source scripts/debug.lldb                                                 \
-
+		--source scripts/debug.lldb
 endif
 
 .PHONY : dmesg
@@ -133,6 +133,7 @@ size : $(KERNEL_BIN)
 
 .PHONY : test
 test : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
+	@scripts/serial.sh $(DMESG_FIFO) $(UNITTEST_FIFO) &
 	@scripts/test.sh $(RESCUE_IMG) $(DMESG_FIFO) $(UNITTEST_FIFO)
 
 
@@ -149,14 +150,10 @@ $(LIB_KERNEL) :
 
 $(KERNEL_ELF) : $(LIB_KERNEL) $(LINKER_SCRIPT)
 	@echo "[-] linking kernel image..."
-	@$(LD)                        \
-		-n                        \
-		--gc-sections             \
-		--no-warn-rwx-segments    \
-		--no-warn-execstack       \
-		--script=$(LINKER_SCRIPT) \
-		-o $@                     \
-		$(LIB_KERNEL) 
+	@$(LD)  $(LD_FLAG)		\
+		--whole-archive		\
+		$(LIB_KERNEL)		\
+		-o $@
 
 $(KERNEL_BIN) : $(KERNEL_ELF)
 	@echo "[-] stripping debug-symbols..."

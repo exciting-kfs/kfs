@@ -1,8 +1,3 @@
-
-if [ $# -lt 2 ]; then
-	echo 'Usage: qemu.sh "ISO file" "serial backend" ...extraflags'; exit 1
-fi
-
 RESCUE="$1"
 shift
 
@@ -12,20 +7,18 @@ shift
 UNIT_TEST="$1"
 shift
 
-trap "rm -f $SERIAL" EXIT
-trap "rm -f $UNIT_TEST" EXIT
+until [ -p $UNIT_TEST ] && [ -p $SERIAL ]
+do
+    sleep 1
+done
 
-if [ -p $SERIAL ]; then
-    rm -f $SERIAL
+trap "rm -f $SERIAL $UNIT_TEST" EXIT
+if [ -z $UNIT_TEST_FUNC ]; then
+    echo "Error: test.sh: MUST set 'UNIT_TEST_FUNC' env before running test."
+    exit
 fi
 
-if [ -p $UNIT_TEST ]; then
-    rm -f $UNIT_TEST
-fi
-
-mkfifo $SERIAL
-mkfifo $UNIT_TEST
-echo " unit_test hello_world" >> $UNIT_TEST & # why skipped 1st character)
+echo " unit_test $UNIT_TEST_FUNC" >> $UNIT_TEST & # why lost 1st character...?
 
 # -m 3968(4096 - 128): almost maximum memory in x86 (without PAE)
 qemu-system-i386                    \
@@ -36,7 +29,10 @@ qemu-system-i386                    \
     -cdrom $RESCUE                  \
     -serial pipe:$SERIAL            \
     -serial pipe:$UNIT_TEST         \
-    $@				    &
+    $@				                &
+
+QEMU_PID=$!
+
+trap "rm -f $SERIAL $UNIT_TEST && kill $!" EXIT
 
 cat $SERIAL
-    

@@ -2,7 +2,7 @@ use crate::{
 	collection,
 	console::{constants::*, Ascii, AsciiParser},
 	io::character::{Read as ChRead, Write as ChWrite, RW as ChRW},
-	boot::{BOOT_INFO, SYMTAB, STRTAB}, pr_info,
+	boot::{BOOT_INFO, SYMTAB, STRTAB},
 };
 
 use core::fmt::{self, Write, Debug};
@@ -182,12 +182,13 @@ impl Shell {
 		while let Some(s) = args.next() {
 			let s = core::str::from_utf8(s).unwrap_or_default();
 			unsafe {
-				let addr = STRTAB
-					.get_name_index(s)
-					.and_then(|index| SYMTAB.get_addr(index));
-				addr.map(|addr| {
-					let func: fn() = core::mem::transmute(addr);
-					func();
+				STRTAB.iter().filter(|name| name.contains(s)).for_each(|name| {
+					let index = name.as_ptr() as usize - STRTAB.addr() as usize;
+
+					SYMTAB.get_addr(index).map(|addr| {
+						let func: fn() = core::mem::transmute(addr);
+						func();
+					});
 				});
 			}
 		}
