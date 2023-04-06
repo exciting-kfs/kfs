@@ -103,19 +103,20 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 
 mod tests {
 	use crate::pr_info;
+	use kfs_macro::kernel_test;
 
-	#[allow(dead_code)]
+	#[kernel_test]
 	pub fn hello_world() {
-		pr_info!("pr_info: hello world0");
+		pr_info!("This function expanded to 'kernel_test_hello_world'");
+	}
+
+	#[kernel_test(example)]
+	pub fn hello_world() {
+		pr_info!("This function expanded to 'kernel_test_example_hello_world'");
 	}
 
 	#[no_mangle]
-	pub fn hello_world_asdfghasdf() {
-		pr_info!("pr_info: hello world1");
-	}
-
-	#[no_mangle]
-	pub fn hello_world_asdfghasdfasdfasdfasdfas() {
-		pr_info!("pr_info: hello world2");
+	pub fn hello_world() {
+		pr_info!("unit_test NEVER run this function.");
 	}
 }

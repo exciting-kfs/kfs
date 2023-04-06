@@ -179,10 +179,11 @@ impl Shell {
 	where
 		I: Iterator<Item = &'a [u8]> + Debug,
 	{
+		const PREFIX: &'static str = "kernel_test";
 		while let Some(s) = args.next() {
 			let s = core::str::from_utf8(s).unwrap_or_default();
 			unsafe {
-				STRTAB.iter().filter(|name| name.contains(s)).for_each(|name| {
+				STRTAB.iter().filter(|name| name.contains(s) && name.contains(PREFIX)).for_each(|name| {
 					let index = name.as_ptr() as usize - STRTAB.addr() as usize;
 
 					SYMTAB.get_addr(index).map(|addr| {

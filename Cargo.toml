@@ -16,3 +16,7 @@ name = "kernel"
 [dependencies]
 multiboot2 = "0.14.0"
 rustc-demangle = "0.1.21"
+kfs_macro = { path = "./kfs_macro" }
+
+[workspace]
+members = ["kfs_macro"]

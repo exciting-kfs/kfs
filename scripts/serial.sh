@@ -4,16 +4,16 @@ if [ $# -lt 2 ]; then
 	echo 'Usage: serial.sh "kernbuf serial" "unit_test serial"'; exit 1
 fi
 
-SERIAL="$1"
-UNIT_TEST="$2"
+COM1="$1"
+COM2="$2"
 
-if [ -p $SERIAL ]; then
-    rm -f $SERIAL
+if [ -p $COM1 ]; then
+    rm -f $COM1
 fi
 
-if [ -p $UNIT_TEST ]; then
-    rm -f $UNIT_TEST
+if [ -p $COM2 ]; then
+    rm -f $COM2
 fi
 
-mkfifo $SERIAL
-mkfifo $UNIT_TEST
+mkfifo $COM1
+mkfifo $COM2

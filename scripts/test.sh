@@ -1,24 +1,24 @@
 RESCUE="$1"
 shift
 
-SERIAL="$1"
+COM1="$1"
 shift
 
-UNIT_TEST="$1"
+COM2="$1"
 shift
 
-until [ -p $UNIT_TEST ] && [ -p $SERIAL ]
+until [ -p $COM2 ] && [ -p $COM1 ]
 do
     sleep 1
 done
 
-trap "rm -f $SERIAL $UNIT_TEST" EXIT
-if [ -z $UNIT_TEST_FUNC ]; then
-    echo "Error: test.sh: MUST set 'UNIT_TEST_FUNC' env before running test."
+trap "rm -f $COM1 $COM2" EXIT
+if [ -z $UNIT_TEST ]; then
+    echo "Error: test.sh: MUST set 'UNIT_TEST' env before running test."
     exit
 fi
 
-echo " unit_test $UNIT_TEST_FUNC" >> $UNIT_TEST & # why lost 1st character...?
+echo " unit_test $UNIT_TEST" >> $COM2 & # why this command lost 1st character...?
 
 # -m 3968(4096 - 128): almost maximum memory in x86 (without PAE)
 qemu-system-i386                    \
@@ -27,12 +27,13 @@ qemu-system-i386                    \
     -boot d                         \
     -vga std                        \
     -cdrom $RESCUE                  \
-    -serial pipe:$SERIAL            \
-    -serial pipe:$UNIT_TEST         \
+    -serial pipe:$COM1              \
+    -serial pipe:$COM2              \
+    -display none                   \
     $@				                &
 
 QEMU_PID=$!
 
-trap "rm -f $SERIAL $UNIT_TEST && kill $!" EXIT
+trap "rm -f $COM1 $COM2 && kill $!" EXIT
 
-cat $SERIAL
+cat $COM1

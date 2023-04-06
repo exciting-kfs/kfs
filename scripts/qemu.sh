@@ -7,15 +7,15 @@ fi
 RESCUE="$1"
 shift
 
-SERIAL="$1"
+COM1="$1"
 shift
 
-UNIT_TEST="$1"
+COM2="$1"
 shift
 
-trap "rm -f $SERIAL $UNIT_TEST" EXIT
+trap "rm -f $COM1 $COM2" EXIT
 
-until [ -p $UNIT_TEST ] && [ -p $SERIAL ]
+until [ -p $COM2 ] && [ -p $COM1 ]
 do
     sleep 1
 done
@@ -27,6 +27,6 @@ qemu-system-i386                    \
     -boot d                         \
     -vga std                        \
     -cdrom $RESCUE                  \
-    -serial pipe:$SERIAL            \
-    -serial pipe:$UNIT_TEST         \
+    -serial pipe:$COM1              \
+    -serial pipe:$COM2              \
     $@
