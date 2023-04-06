@@ -1,9 +1,14 @@
 mod strtab;
 mod symtab;
 
+use core::ffi::c_char;
+
 use multiboot2::ElfSection;
 
-use self::{symtab::{Symtab, SymtabEntry}, strtab::Strtab};
+use self::{
+	strtab::Strtab,
+	symtab::{Symtab, SymtabEntry},
+};
 
 pub static mut BOOT_INFO: usize = 0;
 pub static mut SYMTAB: Symtab = Symtab::new();
@@ -35,7 +40,7 @@ fn check_magic(magic: u32) {
 	}
 }
 
-fn get_info(bi_header: usize) -> (ElfSection, ElfSection, usize){
+fn get_info(bi_header: usize) -> (ElfSection, ElfSection, usize) {
 	let info = unsafe { multiboot2::load(bi_header).unwrap() };
 
 	let mut symtab = None;
@@ -52,20 +57,19 @@ fn get_info(bi_header: usize) -> (ElfSection, ElfSection, usize){
 		}
 	}
 
-	let symtab = symtab.expect("There is no symtab."); // TODO release?
+	let symtab = symtab.expect("There is no symtab.");
 	let strtab = strtab.expect("There is no strtab.");
 
 	(symtab, strtab, last_address)
 }
 
 fn set_tables(symtab: ElfSection, strtab: ElfSection) {
-
 	unsafe {
 		let addr = symtab.start_address() as *const SymtabEntry;
 		let count = symtab.size() as usize / core::mem::size_of::<SymtabEntry>();
 		SYMTAB.init(addr, count);
 
-		let addr = strtab.start_address() as *const u8;
+		let addr = strtab.start_address() as *const c_char;
 		let size = strtab.size() as usize;
 		STRTAB.init(addr, size);
 	}

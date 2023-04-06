@@ -1,27 +1,34 @@
-use core::{ffi::{c_char, CStr}, marker::PhantomData};
+use core::{
+	ffi::{c_char, CStr},
+	marker::PhantomData,
+	ptr,
+};
 
 /// String table in the '.strtab' section, used to get a symbol name.
 pub struct Strtab {
-	addr: *const u8,
-	size: usize
+	addr: *const c_char,
+	size: usize,
 }
 
 impl Strtab {
 	pub const fn new() -> Self {
-		Strtab { addr: 0 as *const u8, size: 0 }
+		Strtab {
+			addr: ptr::null(),
+			size: 0,
+		}
 	}
 
-	pub fn init(&mut self, addr: *const u8, size: usize) {
+	pub fn init(&mut self, addr: *const c_char, size: usize) {
 		*self = Strtab { addr, size }
 	}
 
-	pub fn addr(&self) -> *const u8 {
+	pub fn addr(&self) -> *const c_char {
 		self.addr
 	}
 
 	/// Get the name formed C style string and transform to a string slice.
 	pub fn get_name(&self, index: isize) -> Option<&'static str> {
-		let start = unsafe { self.addr.offset(index) } as *const c_char;
+		let start = unsafe { self.addr.offset(index) };
 		unsafe { CStr::from_ptr(start).to_str().ok() }
 	}
 
@@ -39,9 +46,9 @@ impl<'a> IntoIterator for &'a Strtab {
 }
 
 pub struct Iter<'a> {
-	ptr: *const u8,
-	end: *const u8,
-	p: PhantomData<&'a u8>
+	ptr: *const c_char,
+	end: *const c_char,
+	_p: PhantomData<&'a c_char>,
 }
 
 impl<'a> Iter<'a> {
@@ -49,7 +56,7 @@ impl<'a> Iter<'a> {
 		Iter {
 			ptr: cont.addr,
 			end: unsafe { cont.addr.add(cont.size) },
-			p: PhantomData
+			_p: PhantomData,
 		}
 	}
 }
@@ -61,19 +68,14 @@ impl<'a> Iterator for Iter<'a> {
 			return None;
 		}
 
-		let len = c_strlen(self.ptr);
-		let ret = unsafe { core::slice::from_raw_parts(self.ptr, len) };
-		let ret = core::str::from_utf8(ret).ok();
-		self.ptr = unsafe { self.ptr.add(len + 1) };
+		let ret = unsafe {
+			CStr::from_ptr(self.ptr)
+				.to_str()
+				.expect("Invalid .strtab contents")
+		};
 
-		ret
-	}
-}
+		self.ptr = unsafe { self.ptr.add(ret.len() + 1) };
 
-fn c_strlen(ptr: *const u8) -> usize {
-	let mut len = 0;
-	while unsafe { *ptr.add(len) } != 0 {
-		len += 1
+		return Some(ret);
 	}
-	len
 }
