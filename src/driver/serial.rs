@@ -57,6 +57,9 @@ impl Serial {
 		self.line_status.read_byte() & (1 << 0) != 0
 	}
 
+	pub fn wait_readable(&self) {
+		while !self.read_available() {}
+	}
 
 	pub fn get_byte(&self) -> Option<u8> {
 		self.read_available().then_some(self.data.read_byte())
