@@ -4,7 +4,7 @@ use crate::{
 	io::character::{Read as CRead, Write as CWrite, RW},
 };
 
-use core::fmt::{Error, Result, Write};
+use core::fmt::{Result, Write};
 
 pub struct Dmesg {
 	parser: AsciiParser,
