@@ -1,9 +1,3 @@
-#! /bin/bash
-
-if [ $# -lt 3 ]; then
-	echo 'Usage: qemu.sh "ISO file" "kernbuf serial" "unit_test serial" ...extraflags'; exit 1
-fi
-
 RESCUE="$1"
 shift
 
@@ -13,12 +7,18 @@ shift
 COM2="$1"
 shift
 
-trap "rm -f $COM1 $COM2" EXIT
-
 until [ -p $COM2 ] && [ -p $COM1 ]
 do
     sleep 1
 done
+
+trap "rm -f $COM1 $COM2" EXIT
+if [ -z $UNIT_TEST ]; then
+    echo "Error: test.sh: MUST set 'UNIT_TEST' env before running test."
+    exit
+fi
+
+echo " unit_test $UNIT_TEST" >> $COM2 & # why this command lost 1st character...?
 
 # -m 3968(4096 - 128): almost maximum memory in x86 (without PAE)
 qemu-system-i386                    \
@@ -29,4 +29,11 @@ qemu-system-i386                    \
     -cdrom $RESCUE                  \
     -serial pipe:$COM1              \
     -serial pipe:$COM2              \
-    $@
+    -display none                   \
+    $@				                &
+
+QEMU_PID=$!
+
+trap "rm -f $COM1 $COM2 && kill $!" EXIT
+
+cat $COM1
