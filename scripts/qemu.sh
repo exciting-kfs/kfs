@@ -20,6 +20,8 @@ do
     sleep 1
 done
 
+echo " " >> $COM2 & # TODO find better way.
+
 # -m 3968(4096 - 128): almost maximum memory in x86 (without PAE)
 qemu-system-i386                    \
     -machine pc,max-ram-below-4g=4G \
