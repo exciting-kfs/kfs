@@ -4,6 +4,8 @@
 #![feature(const_cmp)]
 #![feature(allocator_api)]
 
+extern crate alloc;
+
 mod backtrace;
 mod boot;
 mod collection;
@@ -19,6 +21,7 @@ mod test;
 mod util;
 
 use core::{panic::PanicInfo, ptr::NonNull};
+use core::arch::asm;
 
 use boot::BOOT_INFO;
 use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
@@ -35,7 +38,6 @@ use io::character::Write;
 use kfs_macro::kernel_test;
 use subroutine::SHELL;
 
-use core::arch::asm;
 use mm::page_allocator::buddy_allocator::{BuddyAllocator, Page};
 use mm::x86_page::{PageFlag, PDE, PTE};
 
