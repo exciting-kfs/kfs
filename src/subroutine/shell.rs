@@ -1,8 +1,10 @@
+use rustc_demangle::demangle;
+
 use crate::{
 	collection,
 	console::{constants::*, Ascii, AsciiParser},
 	io::character::{Read as ChRead, Write as ChWrite, RW as ChRW},
-	boot::{BOOT_INFO, SYMTAB, STRTAB},
+	boot::{BOOT_INFO, SYMTAB, STRTAB}, printk, pr_info,
 };
 
 use core::fmt::{self, Write, Debug};
@@ -188,7 +190,9 @@ impl Shell {
 
 					SYMTAB.get_addr(index).map(|addr| {
 						let func: fn() = core::mem::transmute(addr);
+						printk!("TEST: {} ", demangle(name));
 						func();
+						pr_info!("\x1b[32mok!\x1b[0m");
 					});
 				});
 			}
