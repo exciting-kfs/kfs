@@ -21,6 +21,12 @@ SECTIONS {
 		*(.rodata .rodata.*)
 	}
 
+	.test : ALIGN(4K) {
+		__test_start = .;
+		*(.test .test.*)
+		__test_end = .;
+	}
+
 	.bss : ALIGN(4K) {
 		*(.bss .bss.*)
 		. = ALIGN(4K);

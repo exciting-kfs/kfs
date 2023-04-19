@@ -28,6 +28,7 @@ qemu-system-i386                    \
     -m 3968                         \
     -boot d                         \
     -vga std                        \
+    -device pvpanic                 \
     -cdrom $RESCUE                  \
     -serial pipe:$COM1              \
     -serial pipe:$COM2              \
