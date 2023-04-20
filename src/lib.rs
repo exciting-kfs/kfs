@@ -1,8 +1,6 @@
 #![no_std]
 #![no_main]
 #![allow(dead_code)]
-// #![feature(custom_test_frameworks)]
-// #![test_runner(crate::test_runner)]
 
 mod backtrace;
 mod boot;
@@ -14,21 +12,17 @@ mod io;
 mod mm;
 mod printk;
 mod subroutine;
+
 mod test;
 mod util;
 
 use core::panic::PanicInfo;
 
 use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
-use driver::{
-	serial::{self, COM2},
-	vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color},
-};
+use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use input::{key_event::Code, keyboard::KEYBOARD};
-use io::character::Write;
-use subroutine::SHELL;
 
-use test::TEST_FUNCTION_ARRAY;
+use test::TEST_ARRAY;
 
 /// very simple panic handler.
 /// that just print panic infomation and fall into infinity loop.
@@ -47,8 +41,10 @@ fn panic_handler_impl(info: &PanicInfo) -> ! {
 		CONSOLE_MANAGER.get().draw();
 	};
 
-	// Report panic to supervisor
-	io::pmio::Port::new(0x505).write_byte(1);
+	// Report panic to supervisor (qemu - pvpanic)
+	if cfg!(ktest) {
+		io::pmio::Port::new(0x505).write_byte(1);
+	}
 
 	loop {}
 }
@@ -59,41 +55,26 @@ fn init_hardware() {
 	driver::serial::init_serial();
 }
 
-fn run_test() {
-	unsafe {
-		COM2.wait_readable();
-		while let Some(byte) = serial::COM2.get_byte() {
-			SHELL.write_one(byte);
-			CONSOLE_MANAGER.get().flush_all();
-			CONSOLE_MANAGER.get().draw();
-		}
+fn run_test() -> ! {
+	for test in TEST_ARRAY.as_slice() {
+		test.run();
 	}
+
+	loop {}
 }
 
-#[no_mangle]
-pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
-	init_hardware();
-
-	let _kernel_end = boot::init_bootinfo(bi_header, magic);
-
+fn run_io() -> ! {
 	let cyan = VGAChar::styled(VGAAttr::new(false, Color::Cyan, false, Color::Cyan), b' ');
 	let magenta = VGAChar::styled(
 		VGAAttr::new(false, Color::Magenta, false, Color::Magenta),
 		b' ',
 	);
 
-	for func in &*TEST_FUNCTION_ARRAY {
-		func();
-	}
-
-	// run_test();
-
 	loop {
 		if let Some(event) = unsafe { KEYBOARD.get_keyboard_event() } {
 			if event.key == Code::Backtick && event.pressed() {
 				static mut I: usize = 0;
 				unsafe {
-					// unsafe { *(0 as *mut u8) = 42 };
 					pr_warn!("BACKTICK PRESSED {} TIMES!!", I);
 					I += 1;
 					panic!("panic!!");
@@ -113,29 +94,40 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	}
 }
 
-use kfs_macro::ktest;
+#[no_mangle]
+pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
+	init_hardware();
 
-#[ktest]
-pub fn do_something() {
-	pr_info!("!!!!!");
+	let _kernel_end = boot::init_bootinfo(bi_header, magic);
+
+	match cfg!(ktest) {
+		true => run_test(),
+		false => run_io(),
+	};
 }
 
-// mod tests {
-// 	use crate::pr_info;
-// 	use kfs_macro::kernel_test;
+mod test1111 {
+	use super::*;
+	use kfs_macro::ktest;
 
-// 	#[kernel_test]
-// 	pub fn hello_world() {
-// 		pr_info!("This function expanded to 'kernel_test_hello_world'");
-// 	}
-
-// 	#[kernel_test(example)]
-// 	pub fn hello_world() {
-// 		pr_info!("This function expanded to 'kernel_test_example_hello_world'");
-// 	}
-
-// 	#[no_mangle]
-// 	pub fn hello_world() {
-// 		pr_info!("unit_test NEVER run this function.");
-// 	}
-// }
+	#[ktest]
+	pub fn do_something0() {
+		pr_info!("DS: 0");
+	}
+	#[ktest]
+	pub fn do_something1() {
+		pr_info!("DS: 1");
+	}
+	#[ktest]
+	pub fn do_something2() {
+		pr_info!("DS: 2");
+	}
+	#[ktest]
+	pub fn do_something3() {
+		pr_info!("DS: 3");
+	}
+	#[ktest]
+	pub fn do_something4() {
+		pr_info!("DS: 4");
+	}
+}

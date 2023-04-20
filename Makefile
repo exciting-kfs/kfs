@@ -1,7 +1,7 @@
 # === User settings / toolchain ===
 
 RELEASE_MODE := n
-DEBUG_WITH_VSCODE := n
+DEBUG_WITH_VSCODE := y
 
 I386_GRUB2_PREFIX := $(I386_GRUB2_PREFIX)
 
@@ -25,13 +25,13 @@ GRUB2_I386_LIB=$(I386_GRUB2_PREFIX)/lib/grub/i386-pc
 
 # === Targets ===
 
+LDFLAG = -n --no-warn-rwx-segments --no-warn-execstack --script=$(LINKER_SCRIPT) --gc-sections
+
 ifeq ($(RELESE_MODE),y)
 TARGET_ROOT := target/i686-unknown-none-elf/release
 CARGO_FLAG :=  --release
-LD_FLAG = -n --no-warn-rwx-segments --no-warn-execstack --script=$(LINKER_SCRIPT) --gc-sections
 else
 TARGET_ROOT := target/i686-unknown-none-elf/debug
-LD_FLAG = -n --no-warn-rwx-segments --no-warn-execstack --script=$(LINKER_SCRIPT)
 endif
 
 LIB_KERNEL_NAME := libkernel.a
@@ -132,16 +132,18 @@ size : $(KERNEL_BIN)
 	@ls -lh $<
 
 .PHONY : test
-test : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
-	@scripts/serial.sh $(DMESG_FIFO) $(UNITTEST_FIFO) &
-	@scripts/test.sh $(RESCUE_IMG) $(DMESG_FIFO) $(UNITTEST_FIFO)
+test : RUSTC_FLAG += --cfg ktest
+test : run
+# test : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
+# 	@scripts/serial.sh $(DMESG_FIFO) $(UNITTEST_FIFO) &
+# 	@scripts/test.sh $(RESCUE_IMG) $(DMESG_FIFO) $(UNITTEST_FIFO)
 
 
 # === Main recipes ===
 
 .PHONY : $(LIB_KERNEL)
 $(LIB_KERNEL) :
-	@cargo build $(CARGO_FLAG)
+	@cargo rustc $(CARGO_FLAG) -- $(RUSTC_FLAG)
 
 # TODO: better dependency tracking.
 #
@@ -150,7 +152,7 @@ $(LIB_KERNEL) :
 
 $(KERNEL_ELF) : $(LIB_KERNEL) $(LINKER_SCRIPT)
 	@echo "[-] linking kernel image..."
-	@$(LD)  $(LD_FLAG)		\
+	@$(LD) $(LDFLAG)		\
 		--whole-archive		\
 		$(LIB_KERNEL)		\
 		-o $@

@@ -21,10 +21,10 @@ SECTIONS {
 		*(.rodata .rodata.*)
 	}
 
-	.test : ALIGN(4K) {
-		__test_start = .;
-		*(.test .test.*)
-		__test_end = .;
+	.test_array : ALIGN(4K) {
+		__test_array_start = .;
+		KEEP(*(.test_array))
+		__test_array_end = .;
 	}
 
 	.bss : ALIGN(4K) {
