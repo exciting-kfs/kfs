@@ -1,25 +1,39 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse::Nothing, parse_macro_input, ItemFn};
+use syn::{parse::Nothing, parse_macro_input, ItemFn, ReturnType};
 
 #[proc_macro_attribute]
 pub fn ktest(attr: TokenStream, input: TokenStream) -> TokenStream {
 	parse_macro_input!(attr as Nothing);
 
-	let test_func = parse_macro_input!(input as ItemFn);
+	let func = parse_macro_input!(input as ItemFn);
 
-	let ident = &test_func.sig.ident;
-	let name = ident.to_string();
-	let static_name = format_ident!("__TEST_CASE_{}", name.to_uppercase());
+	let sig = &func.sig;
+	let ident = &sig.ident;
+
+	let input = &sig.inputs;
+	let output = &sig.output;
+	let is_output_unit = match output {
+		ReturnType::Default => true,
+		_ => false,
+	};
+
+	if !input.is_empty() || !is_output_unit {
+		panic!("The type of test function must be `fn()`");
+	}
+
+	let func_name = ident.to_string();
+	let func_full_name = quote!(concat!(module_path!(), "::", #func_name));
+	let static_name = format_ident!("__TEST_CASE_{}", func_name.to_uppercase());
 
 	let expanded = quote! {
 		#[cfg(ktest)]
 		#[link_section = ".test_array"]
 		static #static_name: crate::test::TestCase = crate::test::TestCase::new(
-			concat!(module_path!(), "::", #name),
+			#func_full_name,
 			#ident,
 		);
-		#test_func
+		#func
 	};
 
 	TokenStream::from(expanded)
