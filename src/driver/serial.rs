@@ -13,7 +13,7 @@ const COM1_PORT: u16 = 0x3f8;
 const COM2_PORT: u16 = 0x2f8;
 
 pub static mut COM1: Serial = Serial::new(COM1_PORT);
-pub static mut COM2: Serial = Serial::new(COM2_PORT);
+// pub static mut COM2: Serial = Serial::new(COM2_PORT);
 
 pub struct Serial {
 	data: Port,
@@ -36,7 +36,16 @@ impl Serial {
 		let line_status = Port::new(base + 5);
 		let modem_status = Port::new(base + 6);
 		let scratch = Port::new(base + 7);
-		Serial { data, interrupt_enable, fifo_control, line_control, modem_control, line_status, modem_status, scratch }
+		Serial {
+			data,
+			interrupt_enable,
+			fifo_control,
+			line_control,
+			modem_control,
+			line_status,
+			modem_status,
+			scratch,
+		}
 	}
 
 	pub fn init(&self) -> Result {
@@ -52,7 +61,7 @@ impl Serial {
 	pub fn write_available(&self) -> bool {
 		self.line_status.read_byte() & (1 << 5) != 0
 	}
-	
+
 	pub fn read_available(&self) -> bool {
 		self.line_status.read_byte() & (1 << 0) != 0
 	}
@@ -119,7 +128,6 @@ impl Serial {
 		self.modem_control.write_byte(0x0f);
 		Ok(())
 	}
-
 }
 
 unsafe impl Sync for Serial {}
@@ -135,10 +143,9 @@ impl core::fmt::Write for Serial {
 	}
 }
 
-
 pub fn init_serial() {
 	unsafe {
 		COM1.init().expect("failed to init COM1 serial port");
-		COM2.init().expect("failed to init COM2 serial port");
+		// COM2.init().expect("failed to init COM2 serial port");
 	}
 }

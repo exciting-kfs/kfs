@@ -22,7 +22,7 @@ use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
 use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use input::{key_event::Code, keyboard::KEYBOARD};
 
-use test::TEST_ARRAY;
+use test::{exit_qemu_with, TEST_ARRAY};
 
 /// very simple panic handler.
 /// that just print panic infomation and fall into infinity loop.
@@ -41,9 +41,8 @@ fn panic_handler_impl(info: &PanicInfo) -> ! {
 		CONSOLE_MANAGER.get().draw();
 	};
 
-	// Report panic to supervisor (qemu - pvpanic)
 	if cfg!(ktest) {
-		io::pmio::Port::new(0x505).write_byte(1);
+		exit_qemu_with(1);
 	}
 
 	loop {}
@@ -56,11 +55,18 @@ fn init_hardware() {
 }
 
 fn run_test() -> ! {
-	for test in TEST_ARRAY.as_slice() {
+	let tests = TEST_ARRAY.as_slice();
+	let n_test = tests.len();
+
+	for (i, test) in tests.iter().enumerate() {
+		pr_info!("Test [{}/{}]: {}", i + 1, n_test, test.get_name());
 		test.run();
+		pr_info!("...\x1b[32mPASS\x1b[39m");
 	}
 
-	loop {}
+	pr_info!("All test PASSED.");
+
+	exit_qemu_with(0);
 }
 
 fn run_io() -> ! {
@@ -114,18 +120,22 @@ mod test1111 {
 	pub fn do_something0() {
 		pr_info!("DS: 0");
 	}
+
 	#[ktest]
 	pub fn do_something1() {
 		pr_info!("DS: 1");
 	}
+
 	#[ktest]
 	pub fn do_something2() {
 		pr_info!("DS: 2");
 	}
+
 	#[ktest]
 	pub fn do_something3() {
 		pr_info!("DS: 3");
 	}
+
 	#[ktest]
 	pub fn do_something4() {
 		pr_info!("DS: 4");
