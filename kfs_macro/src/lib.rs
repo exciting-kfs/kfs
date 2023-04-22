@@ -1,30 +1,40 @@
-extern crate alloc;
-
-use alloc::{format, string::ToString};
-use proc_macro::{TokenStream};
-use quote::quote;
-use syn::{parse_macro_input, ItemFn, Ident};
-
-const PREFIX: &'static str = "kernel_test";
+use proc_macro::TokenStream;
+use quote::{format_ident, quote};
+use syn::{parse::Nothing, parse_macro_input, ItemFn, ReturnType};
 
 #[proc_macro_attribute]
-pub fn kernel_test(attr: TokenStream, input: TokenStream) -> TokenStream {
-	let mut input_fn  = parse_macro_input!(input as ItemFn);
-	let attr = attr.to_string();
+pub fn ktest(attr: TokenStream, input: TokenStream) -> TokenStream {
+	parse_macro_input!(attr as Nothing);
 
-	let prefix = match attr.is_empty() {
-		true => format!("{}_", PREFIX),
-		false => format!("{}_{}_", PREFIX, attr),
+	let func = parse_macro_input!(input as ItemFn);
+
+	let sig = &func.sig;
+	let ident = &sig.ident;
+
+	let input = &sig.inputs;
+	let output = &sig.output;
+	let is_output_unit = match output {
+		ReturnType::Default => true,
+		_ => false,
 	};
 
-	let new_name = format!("{}{}", prefix, input_fn.sig.ident.to_string());
-	input_fn.sig.ident = Ident::new(&new_name, input_fn.sig.ident.span());
+	if !input.is_empty() || !is_output_unit {
+		panic!("The type of test function must be `fn()`");
+	}
 
-	let expanded = quote!{
-		#[no_mangle]
-		#input_fn
+	let func_name = ident.to_string();
+	let func_full_name = quote!(concat!(module_path!(), "::", #func_name));
+	let static_name = format_ident!("__TEST_CASE_{}", func_name.to_uppercase());
+
+	let expanded = quote! {
+		#[cfg(ktest)]
+		#[link_section = ".test_array"]
+		static #static_name: crate::test::TestCase = crate::test::TestCase::new(
+			#func_full_name,
+			#ident,
+		);
+		#func
 	};
 
-	let output = TokenStream::from(expanded);
-	output
+	TokenStream::from(expanded)
 }

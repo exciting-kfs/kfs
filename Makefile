@@ -15,9 +15,6 @@ LD := i686-elf-ld
 
 PAGER := vim -
 
-DMESG_FIFO := /tmp/serial0
-UNITTEST_FIFO := /tmp/serial1
-
 # === toolchain (inferred from above) ===
 
 GRUB2_MKRESCUE=$(I386_GRUB2_PREFIX)/bin/grub-mkrescue
@@ -25,13 +22,13 @@ GRUB2_I386_LIB=$(I386_GRUB2_PREFIX)/lib/grub/i386-pc
 
 # === Targets ===
 
+LDFLAG = -n --no-warn-rwx-segments --no-warn-execstack --script=$(LINKER_SCRIPT) --gc-sections
+
 ifeq ($(RELESE_MODE),y)
 TARGET_ROOT := target/i686-unknown-none-elf/release
 CARGO_FLAG :=  --release
-LD_FLAG = -n --no-warn-rwx-segments --no-warn-execstack --script=$(LINKER_SCRIPT) --gc-sections
 else
 TARGET_ROOT := target/i686-unknown-none-elf/debug
-LD_FLAG = -n --no-warn-rwx-segments --no-warn-execstack --script=$(LINKER_SCRIPT)
 endif
 
 LIB_KERNEL_NAME := libkernel.a
@@ -84,27 +81,20 @@ re : clean
 
 .PHONY : run
 run : rescue
-	@scripts/serial.sh $(DMESG_FIFO) $(UNITTEST_FIFO) &
-	@scripts/qemu.sh $(RESCUE_IMG) $(DMESG_FIFO) $(UNITTEST_FIFO) -monitor stdio
+	@scripts/qemu.sh $(RESCUE_IMG) stdio
 
 .PHONY : debug
 ifeq ($(DEBUG_WITH_VSCODE),y)
 debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
 	@scripts/vsc-debug.py $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN) &
-	@scripts/serial.sh $(DMESG_FIFO) $(UNITTEST_FIFO) &
-	@scripts/qemu.sh $(RESCUE_IMG) $(DMESG_FIFO) $(UNITTEST_FIFO) -s -S -monitor stdio
+	@scripts/qemu.sh $(RESCUE_IMG) stdio -s -S
 else
 debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
-	@scripts/serial.sh $(DMESG_FIFO) $(UNITTEST_FIFO) &
-	@scripts/qemu.sh $(RESCUE_IMG) $(DMESG_FIFO) $(UNITTEST_FIFO) -s -S -monitor stdio & rust-lldb   \
+	@scripts/qemu.sh $(RESCUE_IMG) stdio -s -S & rust-lldb   \
 		--one-line "target create --symfile $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN)"   \
 		--one-line "gdb-remote localhost:1234"                                      \
 		--source scripts/debug.lldb
 endif
-
-.PHONY : dmesg
-dmesg :
-	@cat $(DMESG_FIFO)
 
 .PHONY : doc
 doc :
@@ -132,16 +122,15 @@ size : $(KERNEL_BIN)
 	@ls -lh $<
 
 .PHONY : test
-test : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
-	@scripts/serial.sh $(DMESG_FIFO) $(UNITTEST_FIFO) &
-	@scripts/test.sh $(RESCUE_IMG) $(DMESG_FIFO) $(UNITTEST_FIFO)
-
+test : RUSTC_FLAG += --cfg ktest
+test : rescue
+	@scripts/qemu.sh $(RESCUE_IMG) stdio -display none
 
 # === Main recipes ===
 
 .PHONY : $(LIB_KERNEL)
 $(LIB_KERNEL) :
-	@cargo build $(CARGO_FLAG)
+	@cargo rustc $(CARGO_FLAG) -- $(RUSTC_FLAG)
 
 # TODO: better dependency tracking.
 #
@@ -150,7 +139,7 @@ $(LIB_KERNEL) :
 
 $(KERNEL_ELF) : $(LIB_KERNEL) $(LINKER_SCRIPT)
 	@echo "[-] linking kernel image..."
-	@$(LD)  $(LD_FLAG)		\
+	@$(LD) $(LDFLAG)		\
 		--whole-archive		\
 		$(LIB_KERNEL)		\
 		-o $@

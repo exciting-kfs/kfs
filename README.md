@@ -56,7 +56,7 @@
 
 - `debug`: Debug kernel with LLDB.
 
-- `dmesg`: Read kernel message buffer.
+- `test`: Run tests.
 
 ### Utils
 

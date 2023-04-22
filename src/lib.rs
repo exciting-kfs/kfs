@@ -3,6 +3,7 @@
 #![allow(dead_code)]
 
 mod backtrace;
+mod boot;
 mod collection;
 mod console;
 mod driver;
@@ -11,16 +12,17 @@ mod io;
 mod mm;
 mod printk;
 mod subroutine;
+
+mod test;
 mod util;
-mod boot;
 
 use core::panic::PanicInfo;
 
 use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
-use driver::{vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color}, serial::{self, COM2}};
+use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use input::{key_event::Code, keyboard::KEYBOARD};
-use io::character::Write;
-use subroutine::SHELL;
+
+use test::{exit_qemu_with, TEST_ARRAY};
 
 /// very simple panic handler.
 /// that just print panic infomation and fall into infinity loop.
@@ -39,6 +41,10 @@ fn panic_handler_impl(info: &PanicInfo) -> ! {
 		CONSOLE_MANAGER.get().draw();
 	};
 
+	if cfg!(ktest) {
+		exit_qemu_with(1);
+	}
+
 	loop {}
 }
 
@@ -48,41 +54,27 @@ fn init_hardware() {
 	driver::serial::init_serial();
 }
 
+fn run_test() -> ! {
+	let tests = TEST_ARRAY.as_slice();
+	let n_test = tests.len();
 
-#[inline]
-fn current_or_next_aligned(p: usize, align: usize) -> usize {
-	(p + align - 1) & !(align - 1)
-}
-
-#[inline]
-fn next_aligned(p: usize, align: usize) -> usize {
-	(p + align) & !(align - 1)
-}
-
-fn run_test() {
-	unsafe {
-		COM2.wait_readable();
-		while let Some(byte) = serial::COM2.get_byte() {
-			SHELL.write_one(byte);
-			CONSOLE_MANAGER.get().flush_all();
-			CONSOLE_MANAGER.get().draw();
-		}
+	for (i, test) in tests.iter().enumerate() {
+		pr_info!("Test [{}/{}]: {}", i + 1, n_test, test.get_name());
+		test.run();
+		pr_info!("...\x1b[32mPASS\x1b[39m");
 	}
+
+	pr_info!("All test PASSED.");
+
+	exit_qemu_with(0);
 }
 
-#[no_mangle]
-pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
-	init_hardware();
-
-	let _kernel_end = boot::init_bootinfo(bi_header, magic);
-
+fn run_io() -> ! {
 	let cyan = VGAChar::styled(VGAAttr::new(false, Color::Cyan, false, Color::Cyan), b' ');
 	let magenta = VGAChar::styled(
 		VGAAttr::new(false, Color::Magenta, false, Color::Magenta),
 		b' ',
 	);
-
-	run_test();
 
 	loop {
 		if let Some(event) = unsafe { KEYBOARD.get_keyboard_event() } {
@@ -108,22 +100,44 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	}
 }
 
-mod tests {
-	use crate::pr_info;
-	use kfs_macro::kernel_test;
+#[no_mangle]
+pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
+	init_hardware();
 
-	#[kernel_test]
-	pub fn hello_world() {
-		pr_info!("This function expanded to 'kernel_test_hello_world'");
+	let _kernel_end = boot::init_bootinfo(bi_header, magic);
+
+	match cfg!(ktest) {
+		true => run_test(),
+		false => run_io(),
+	};
+}
+
+mod test1111 {
+	use super::*;
+	use kfs_macro::ktest;
+
+	#[ktest]
+	pub fn do_something0() {
+		pr_info!("DS: 0");
 	}
 
-	#[kernel_test(example)]
-	pub fn hello_world() {
-		pr_info!("This function expanded to 'kernel_test_example_hello_world'");
+	#[ktest]
+	pub fn do_something1() {
+		pr_info!("DS: 1");
 	}
 
-	#[no_mangle]
-	pub fn hello_world() {
-		pr_info!("unit_test NEVER run this function.");
+	#[ktest]
+	pub fn do_something2() {
+		pr_info!("DS: 2");
+	}
+
+	#[ktest]
+	pub fn do_something3() {
+		pr_info!("DS: 3");
+	}
+
+	#[ktest]
+	pub fn do_something4() {
+		pr_info!("DS: 4");
 	}
 }

@@ -13,7 +13,7 @@ impl Port {
 
 	/// read single byte from port
 	pub fn read_byte(&self) -> u8 {
-		let mut byte: u8;
+		let byte: u8;
 
 		unsafe {
 			asm!(
@@ -35,5 +35,31 @@ impl Port {
 				in("al") byte,
 			)
 		};
+	}
+
+	/// write 4 byte into port
+	pub fn write_u32(&self, data: u32) {
+		unsafe {
+			asm!(
+				"out dx, eax",
+				in("dx") self.port,
+				in("eax") data,
+			)
+		};
+	}
+
+	/// read 4 byte from port
+	pub fn read_u32(&self) -> u32 {
+		let data: u32;
+
+		unsafe {
+			asm!(
+				"in al, eax",
+				in("dx") self.port,
+				out("eax") data,
+			)
+		};
+
+		data
 	}
 }
