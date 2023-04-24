@@ -1,7 +1,9 @@
+mod free_node;
+
 use core::ptr::NonNull;
 use core::fmt::Debug;
 
-use super::free_node::FreeNode;
+pub use self::free_node::FreeNode;
 
 pub struct FreeList {
         head: Option<NonNull<FreeNode>>,
@@ -17,8 +19,13 @@ impl FreeList {
                 self.iter().count()
         }
 
+        pub fn head(&self) -> Option<NonNull<FreeNode>> {
+                self.head
+        }
+
         pub fn last(&mut self) -> Option<NonNull<FreeNode>> {
-                self.iter_mut().last().map(|n| n.as_non_null())
+                let head = unsafe { self.head.as_ref()?.as_ref() };
+                Some(head.prev)
         }
 
         pub fn find_if<F>(&mut self, mut f: F) -> Option<NonNull<FreeNode>>
@@ -95,25 +102,6 @@ impl FreeList {
 
                         node.disjoint()
                 });
-        }
-
-         // for Test
-        #[allow(unused)]
-        pub(crate) fn head(&self) -> Option<NonNull<FreeNode>> {
-                self.head
-        }
-
-        // for Test
-        #[allow(unused)]
-        fn index_of(&self, node: &FreeNode) -> usize {
-                let mut count = 0;
-                for n in self.iter() {
-                        if n == node {
-                                break;
-                        }
-                        count += 1;
-                }
-                count
         }
 }
 
@@ -238,23 +226,14 @@ impl<'iter> Iterator for Iter<'iter> {
 }
 
 pub(super) mod test {
-        use crate::{mm::cache_sw::cache::utils::free_node::node_tests::new_node, pr_info};
+        use super::free_node::node_tests::new_node;
         use super::*;
-        use kfs_macro::kernel_test;
+        use kfs_macro::ktest;
 
         const PAGE_SIZE: usize = 4096;
         static mut PAGE1: [u8; PAGE_SIZE] = [0; PAGE_SIZE];
 
-        #[allow(unused)]
-        pub fn print_list(idx: usize, list: &FreeList) {
-                pr_info!("{}:", idx);
-                list.iter().for_each(|n| {
-                        let ptr = n.as_ptr();
-                        pr_info!("\taddr: {:?}, {:?}", ptr, n);
-                });
-        }
-
-        #[kernel_test(cache_free_list)]
+        #[ktest]
         fn test_new() {
                 let mut list = FreeList::new();
                 let page = unsafe { &mut PAGE1 };
@@ -264,7 +243,7 @@ pub(super) mod test {
                 assert_eq!(head, unsafe { PAGE1.as_ptr() })
         }
 
-        #[kernel_test(cache_free_list)]
+        #[ktest]
         fn test_last() {
                 let mut list = FreeList::new();
                 let page = unsafe { &mut PAGE1 };
@@ -277,103 +256,132 @@ pub(super) mod test {
                 assert_eq!(last.addr(), node.as_mut_ptr());
         }
 
-        fn insert_merged_init_list() -> FreeList {
-                let page = unsafe { &mut PAGE1 };
-                let mut list = FreeList::new();
-                list.insert(new_node(page, 0, 30));
-                list.insert(new_node(page, 30, 20));
-                list
-        }
 
-        #[kernel_test(cache_free_list)]
+        #[ktest]
         fn test_insert_merged() {
-                let list = insert_merged_init_list();
+
+                fn init_list() -> FreeList {
+                        let page = unsafe { &mut PAGE1 };
+                        let mut list = FreeList::new();
+                        list.insert(new_node(page, 0, 30));
+                        list.insert(new_node(page, 30, 20));
+                        list
+                }
+
+                let list = init_list();
                 let head = unsafe { list.head.unwrap().as_mut() };
                 assert_eq!(head.bytes(), 50) // 30 + 20 = 50
         }
 
-        fn insert_init_list() -> FreeList {
-                let page = unsafe { &mut PAGE1 };
-                let mut list = FreeList::new();
-
-                // insert tail
-                list.insert(new_node(page, 100, 30));
-                list.insert(new_node(page, 500, 20));
-                list.insert(new_node(page, 1000, 100));
-                list
-        }
-
-        #[kernel_test(cache_free_list)]
+        #[ktest]
         fn test_insert() {
 
+                fn init_list() -> FreeList {
+                        let page = unsafe { &mut PAGE1 };
+                        let mut list = FreeList::new();
+
+                        // insert tail
+                        list.insert(new_node(page, 100, 30));
+                        list.insert(new_node(page, 500, 20));
+                        list.insert(new_node(page, 1000, 100));
+                        list
+                }
+
+                fn index_of(list: &FreeList, node: &FreeNode) -> usize {
+                        let mut count = 0;
+                        for n in list.iter() {
+                                if n == node {
+                                        break;
+                                }
+                                count += 1;
+                        }
+                        count
+                }
+
                 let page = unsafe { &mut PAGE1 };
-                let mut list = insert_init_list();
+                let mut list = init_list();
+
+                // list:
+                // addr 100 - 500 - 1000
+                // size 30  - 20  - 100
 
                 // insert head
                 let node = new_node(page, 0, 31);
                 list.insert(node);
-                assert_eq!(list.index_of(node), 0);
+                assert_eq!(index_of(&list, node), 0);
+
+                // list:
+                // addr 0  - 100 - 500 - 1000
+                // size 31 - 30  - 20  - 100
 
                 // insert mid
                 let node = new_node(page, 50, 25);
                 list.insert(node);
-                assert_eq!(list.index_of(node), 1);
+                assert_eq!(index_of(&list, node), 1);
         }
 
-        fn remove_init_list<'a>() -> (FreeList,(&'a mut FreeNode, &'a mut FreeNode, &'a mut FreeNode)) {
-                let page = unsafe { &mut PAGE1 };
-                let mut list = FreeList::new();
-
-                let node0 = unsafe { new_node(page, 0, 30).as_non_null().as_mut() };
-                let node1 = unsafe { new_node(page, 50, 20).as_non_null().as_mut() };
-                let node2 = unsafe { new_node(page, 100, 100).as_non_null().as_mut() };
-                
-                list.insert(node0);
-                list.insert(node1);
-                list.insert(node2);
-                (list, (node0, node1, node2))
-        }
-
-        #[kernel_test(cache_free_list)]
+        #[ktest]
         fn test_remove() {
+                fn init_list<'a>() -> (FreeList,(&'a mut FreeNode, &'a mut FreeNode, &'a mut FreeNode)) {
+                        let page = unsafe { &mut PAGE1 };
+                        let mut list = FreeList::new();
+        
+                        let node0 = unsafe { new_node(page, 0, 30).as_non_null().as_mut() };
+                        let node1 = unsafe { new_node(page, 50, 20).as_non_null().as_mut() };
+                        let node2 = unsafe { new_node(page, 100, 100).as_non_null().as_mut() };
+                        
+                        list.insert(node0);
+                        list.insert(node1);
+                        list.insert(node2);
+                        (list, (node0, node1, node2))
+                }
 
-                let ( mut list, nodes) = remove_init_list();
+                // remove last
+                let ( mut list, nodes) = init_list();
                 list.remove(nodes.2);
                 assert_eq!(list.count(), 2);
                 assert_eq!(list.head.unwrap(), nodes.0.as_non_null());
 
-                let ( mut list, nodes) = remove_init_list();
+                // remove second
+                let ( mut list, nodes) = init_list();
                 list.remove(nodes.1);
                 assert_eq!(list.count(), 2);
                 assert_eq!(list.head.unwrap(), nodes.0.as_non_null());
 
-                let ( mut list, nodes) = remove_init_list();
+                // remove first
+                let ( mut list, nodes) = init_list();
                 list.remove(nodes.0);
                 assert_eq!(list.count(), 2);
                 assert_eq!(list.head.unwrap(), nodes.1.as_non_null());
 
-                list.remove(nodes.1);
+                // remove last
                 list.remove(nodes.2);
+                assert_eq!(list.count(), 1);
+                assert_eq!(list.head.unwrap(), nodes.1.as_non_null());
+
+                // remove first
+                list.remove(nodes.1);
                 assert_eq!(list.head, None);
         }
 
-        fn remove_if_init_list<'a>() -> (FreeList,(&'a mut FreeNode, &'a mut FreeNode, &'a mut FreeNode)) {
-                let page = unsafe { &mut PAGE1 };
-                let mut list = FreeList::new();
-
-                let node0 = unsafe { new_node(page, 0, 30).as_non_null().as_mut() };
-                let node1 = unsafe { new_node(page, 50, 20).as_non_null().as_mut() };
-                let node2 = unsafe { new_node(page, 100, 100).as_non_null().as_mut() };
-                
-                list.insert(node0);
-                list.insert(node1);
-                list.insert(node2);
-                (list, (node0, node1, node2))
-        }
-
-        #[kernel_test(cache_free_list)]
+        #[ktest]
         fn test_remove_if() {
-                let ( mut list, nodes) = remove_if_init_list();
+
+                fn init_list<'a>() -> (FreeList,(&'a mut FreeNode, &'a mut FreeNode, &'a mut FreeNode)) {
+                        let page = unsafe { &mut PAGE1 };
+                        let mut list = FreeList::new();
+
+                        let node0 = unsafe { new_node(page, 0, 30).as_non_null().as_mut() };
+                        let node1 = unsafe { new_node(page, 50, 20).as_non_null().as_mut() };
+                        let node2 = unsafe { new_node(page, 100, 100).as_non_null().as_mut() };
+                        
+                        list.insert(node0);
+                        list.insert(node1);
+                        list.insert(node2);
+                        (list, (node0, node1, node2))
+                }
+
+                let (mut list, nodes) = init_list();
 
                 list.remove_if(|n| n.bytes() > 25);
                 assert_eq!(list.count(), 2);
@@ -381,34 +389,29 @@ pub(super) mod test {
                 assert_eq!(list.last().unwrap(), nodes.2.as_non_null());
         }
 
-
-        fn partition_init_list() -> FreeList {
-                let page = unsafe { &mut PAGE1 };
-                let mut list = FreeList::new();
-                list.insert(new_node(page, 0, 30));
-                list.insert(new_node(page, 50, 20));
-                list.insert(new_node(page, 100, 100));
-                list
-        }
-
-        fn partition_do_test<F: FnMut(&&mut FreeNode)->bool>(condition: F, ans:(usize, usize)) {
-                let mut list = partition_init_list();
-                let (x, y) = list.iter_mut()
-                        .partition::<FreeList, _>(condition);
-
-                assert_eq!(x.count(), ans.0);
-                assert_eq!(y.count(), ans.1);
-        }
-
-        #[kernel_test(cache_free_list)]
+        #[ktest]
         fn test_partition() {
-                partition_do_test(|n| n.bytes() > 0, (3, 0));
-                partition_do_test(|n| n.bytes() > 30, (1, 2));
-                partition_do_test(|n| n.bytes() > 100, (0, 3));
+
+                fn init_list() -> FreeList {
+                        let page = unsafe { &mut PAGE1 };
+                        let mut list = FreeList::new();
+                        list.insert(new_node(page, 0, 30));
+                        list.insert(new_node(page, 50, 20));
+                        list.insert(new_node(page, 100, 100));
+                        list
+                }
+
+                fn do_test<F: FnMut(&&mut FreeNode)->bool>(condition: F, ans:(usize, usize)) {
+                        let mut list = init_list();
+                        let (x, y) = list.iter_mut()
+                                .partition::<FreeList, _>(condition);
+
+                        assert_eq!(x.count(), ans.0);
+                        assert_eq!(y.count(), ans.1);
+                }
+
+                do_test(|n| n.bytes() > 0, (3, 0));
+                do_test(|n| n.bytes() > 30, (1, 2));
+                do_test(|n| n.bytes() > 100, (0, 3));
         }
 }
-
-
-
-
-

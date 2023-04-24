@@ -31,10 +31,6 @@ impl<T> Node<T> {
                 &mut self.data
         }
 
-        pub fn from_non_null<'a>(mut ptr: NonNull<Self>) -> &'a mut Self { // safety ?
-                unsafe { ptr.as_mut() }
-        }
-
         #[inline(always)]
 	pub fn as_non_null(&mut self) -> NonNull<Node<T>> {
 		unsafe { NonNull::new_unchecked(self as *mut Node<T>) }
@@ -56,8 +52,8 @@ impl<T> Node<T> {
         }
 
 	pub fn disjoint(&mut self) {
-                let prev = Self::from_non_null(self.prev);
-                let next = Self::from_non_null(self.next);
+                let prev = unsafe { self.prev.as_mut() };
+                let next = unsafe { self.next.as_mut() };
 
                 prev.next = self.next;
                 next.prev = self.prev;
@@ -116,8 +112,8 @@ impl<T> NAList<T> {
 
 
         fn insert(&mut self, node: &mut Node<T>) {
-		let head = Node::from_non_null(self.head.unwrap());
-                let prev = Node::from_non_null(head.prev);
+		let head = unsafe { self.head.unwrap().as_mut() };
+                let prev = unsafe { head.prev.as_mut() };
                 let node_ptr = node.as_non_null();
 
                 prev.next = node_ptr;
@@ -131,8 +127,8 @@ impl<T> NAList<T> {
         pub fn remove_if<'page, F>(&mut self, f: F) -> Option<&'page mut Node<T>>
         where F: FnMut(&Node<T>) -> bool
         {
-                self.find_if(f).map(|node_ptr|{
-                        let node = Node::from_non_null(node_ptr);
+                self.find_if(f).map(|mut node_ptr|{
+                        let node = unsafe { node_ptr.as_mut() };
                         self.remove(node);
                         node
                 })

@@ -4,10 +4,11 @@ use core::cell::UnsafeCell;
 
 use crate::kmem_cache_register;
 
-use super::alloc_pages_from_buddy;
-use super::dealloc_pages_to_buddy;
-use super::cache::bit_scan_reverse;
-use super::cache::{CM, SizeCache, ForSizeCache};
+use super::cache_sw::ForSizeCache;
+use super::cache_sw::SizeCache;
+use super::cache_sw::alloc_pages_from_buddy;
+use super::cache_sw::dealloc_pages_to_buddy;
+use super::util::bit_scan_reverse;
 
 static mut SIZE64: SizeCache<'static, 64> = SizeCache::new();		// RANK 6
 static mut SIZE128: SizeCache<'static, 128> = SizeCache::new();
@@ -17,7 +18,7 @@ static mut SIZE1024: SizeCache<'static, 1024> = SizeCache::new();
 static mut SIZE2048: SizeCache<'static, 2048> = SizeCache::new();	// RANK 11
 
 const RANK_MIN: usize = 6;
-const RANK_MAX: usize = 11;
+const RANK_END: usize = 12;
 
 
 /// trait Allocator vs trait GlobalAlloc
@@ -29,7 +30,7 @@ const RANK_MAX: usize = 11;
 #[global_allocator]
 pub static G: GlobalAllocator = GlobalAllocator::new();
 
-pub struct GlobalAllocator(UnsafeCell<bool>); // Atomic?
+pub struct GlobalAllocator(UnsafeCell<bool>); // TODO Atomic?
 
 unsafe impl Sync for GlobalAllocator {} // ?
 
@@ -56,11 +57,9 @@ unsafe impl GlobalAlloc for GlobalAllocator {
 		self.lazy_init();
 
 		let rank = rank_of(layout);
-		if rank <= RANK_MAX {
-			get_allocator(rank).allocate()
-		} else {
-			let page_count = rank - RANK_MAX;
-			match alloc_pages_from_buddy(page_count) {
+		match rank.checked_sub(RANK_END) {
+			None => get_allocator(rank).allocate(),
+			Some(r) => match alloc_pages_from_buddy(1 << r) {
 				Some(ptr) => ptr.as_mut_ptr(),
 				None => 0 as *mut u8
 			}
@@ -71,11 +70,9 @@ unsafe impl GlobalAlloc for GlobalAllocator {
 		self.lazy_init();
 
 		let rank = rank_of(layout);
-		if rank <= RANK_MAX {
-			get_allocator(rank).deallocate(ptr);
-		} else {
-			let page_count = rank - RANK_MAX;
-			dealloc_pages_to_buddy(ptr, page_count);
+		match rank.checked_sub(RANK_END) {
+			None => get_allocator(rank).deallocate(ptr),
+			Some(r) => dealloc_pages_to_buddy(ptr, 1 << r)
 		}
 	}
 }
@@ -126,7 +123,7 @@ pub unsafe fn kfree(ptr: &mut [u8]) {
 
 mod test {
 
-use kfs_macro::kernel_test;
+	use kfs_macro::ktest;
 	use alloc::{vec::Vec};
 	use alloc::vec;
 
@@ -134,7 +131,7 @@ use kfs_macro::kernel_test;
 
 	use super::*;
 
-	#[kernel_test(ga)]
+	#[ktest]
 	fn test_alloc() {
 		unsafe { SIZE64.print_statistics() };
 
@@ -156,8 +153,8 @@ use kfs_macro::kernel_test;
 		unsafe { SIZE1024.print_statistics() };
 	}
 
-	#[kernel_test(kmalloc)]
-	fn test() {
+	#[ktest]
+	fn test_kmalloc() {
 		let a = kmalloc(123);
 
 		pr_info!("{}", a.len());

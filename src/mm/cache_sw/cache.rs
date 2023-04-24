@@ -1,24 +1,10 @@
-mod utils;
-mod obj_cache;
-mod size_cache;
-mod cache_manager;
-
-pub use size_cache::SizeCache;
-pub use size_cache::ForSizeCache;
-pub use cache_manager::CM;
-pub use cache_manager::REGISTER_TRY;
-pub use utils::{bit_scan_forward, bit_scan_reverse};
-
-use self::utils::Error;
-use self::utils::free_list::FreeList;
-
 use super::PAGE_SIZE;
-use super::alloc_pages_from_buddy;
 use super::dealloc_pages_to_buddy;
+use super::size_cache::free_list::FreeList;
 
 pub trait CacheBase {
 	fn free_list(&mut self) -> &mut FreeList;
-	fn page_count(&mut self) -> &mut usize;
+	fn inuse(&self) -> usize;
 }
 
 pub trait CacheShrink: CacheBase {
@@ -31,30 +17,15 @@ pub trait CacheShrink: CacheBase {
 		(*free_list) = not;
 
 		satisfied.iter_mut().for_each(|node| {
-			let (ptr, count, bot) = node.shrink();
-			if let Some(new_node) = bot {
+			let (page_ptr, page_count, extra) = node.shrink();
+			if let Some(new_node) = extra {
 				free_list.insert(new_node);
 			}
 			if node.bytes() > 0 {
 				free_list.insert(node);
 			}
-			unsafe { dealloc_pages_to_buddy(ptr, count) };
+			unsafe { dealloc_pages_to_buddy(page_ptr, page_count) };
 		});
-	}
-}
-
-trait PageAlloc<'page>: CacheBase {
-	fn alloc_pages(&mut self, count: usize) -> Result<&'page mut [u8], Error> {
-		let page = alloc_pages_from_buddy::<'page>(count).ok_or(Error::Alloc)?;
-		let page_count = self.page_count();
-		(*page_count) += count;
-		Ok(page)
-	}
-
-	fn dealloc_pages(&mut self, ptr: *mut u8, count: usize) {
-		unsafe { dealloc_pages_to_buddy(ptr, count) };
-		let page_count = self.page_count();
-		(*page_count) -= count;
 	}
 }
 
@@ -71,3 +42,12 @@ pub trait CacheInit: Default {
 	}
 }
 
+pub const fn align_with_hw_cache(bytes: usize) -> usize {
+	const CACHE_LINE_SIZE : usize = 64; // L1
+
+	match bytes {
+		0..=16 => 16,
+		17..=32 => 32,
+		_ => CACHE_LINE_SIZE * ((bytes - 1) / CACHE_LINE_SIZE + 1)
+	}
+}

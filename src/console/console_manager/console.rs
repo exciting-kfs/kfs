@@ -1,7 +1,7 @@
 //! Manage console screen buffer and interpret ascii text / control sequences.
 //!
 //! #### implemented control sequences
-//!		- CSI s: save current cursor position.
+//!	- CSI s: save current cursor position.
 //! 	- CSI u: restore last saved cursor position.
 //! 	- CSI N A: move cursor up `N` times.
 //! 	- CSI N B: move cursor down `N` times.

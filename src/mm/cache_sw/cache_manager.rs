@@ -1,21 +1,18 @@
-use super::obj_cache::ObjCache;
-use super::size_cache::SizeCache;
-use super::{CacheShrink, CacheInit};
-use super::utils::{
-	Error,
-	no_alloc_list::{NAList, Node}
-};
+mod no_alloc_list;
 
 use core::mem::size_of;
-use core::cmp::max;
 use core::ptr::NonNull;
+use core::alloc::AllocError;
 
-type Result<T> = core::result::Result<T, Error>;
+use self::no_alloc_list::{Node, NAList};
+
+use super::{cache::{CacheShrink, CacheInit}, size_cache::SizeCache};
+
+type Result<T> = core::result::Result<T, AllocError>;
 
 pub static mut CM: CacheManager<'static> = CacheManager::new();
 
-pub const REGISTER_TRY: usize = 3;
-const CACHE_ALLOCATOR_SIZE: usize = max(size_of::<ObjCache<u32>>(), size_of::<SizeCache<2>>());
+const CACHE_ALLOCATOR_SIZE: usize = size_of::<SizeCache<42>>();
 const NODE_SIZE: usize = size_of::<Node::<NonNull<dyn CacheShrink>>>();
 
 pub struct CacheManager<'a> {
@@ -59,12 +56,12 @@ impl<'a> CacheManager<'a> {
 		Ok(())
 	}
 
-	pub unsafe fn drop_allocator<A>(&mut self, ptr: *mut A) -> Result<()> // TODO ? return, unsafe
+	pub unsafe fn drop_allocator<A>(&mut self, ptr: *mut A)
 	where A: CacheShrink + 'static
 	{
 		let cache = &mut *(ptr as *mut dyn CacheShrink);
 		cache.cache_shrink();
-		if *cache.page_count() != 0 {
+		if cache.inuse() != 0 {
 			panic!("It can cause memory leak!");
 		}
 		
@@ -73,7 +70,6 @@ impl<'a> CacheManager<'a> {
 			self.node_space.dealloc(node.as_mut_ptr().cast());
 			self.cache_space.dealloc(ptr as *mut u8);
 		});
-		Ok(())
 	}
 
 	pub fn unregister(&mut self, cache: &'static mut dyn CacheShrink) {
@@ -99,12 +95,12 @@ impl<'a> CacheManager<'a> {
 #[macro_export]
 macro_rules! kmem_cache_register {
 	($cache:ident) => {
-		for _ in 0..$crate::mm::cache_sw::cache::REGISTER_TRY {
-			match CM.register(&mut $cache) {
+		for _ in 0..$crate::mm::cache_sw::REGISTER_TRY {
+			match $crate::mm::cache_sw::CM.register(&mut $cache) {
 				Ok(_) => break,
 				Err(_) => {
 					// pr_debug;
-					CM.cache_shrink();
+					$crate::mm::cache_sw::CM.cache_shrink();
 				},
 			}
 		}
@@ -112,24 +108,33 @@ macro_rules! kmem_cache_register {
 }
 
 mod tests {
-	use kfs_macro::kernel_test;
+	use kfs_macro::ktest;
+
+	use crate::{mm::cache_sw::{
+		cache::{align_with_hw_cache, CacheBase},
+		size_cache::SizeCache
+	}};
 
 	use super::CacheManager;
 	use super::super::{
 		PAGE_SIZE,
-		SizeCache,
-		CacheBase,
-		utils::{free_node::FreeNode, align_with_hw_cache},
 		cache_manager::{CACHE_ALLOCATOR_SIZE, NODE_SIZE}
 	};
  	
 	fn check_remains<'a, const N: usize>(space: &mut SizeCache<'a, N>, alloc_size: usize) {
-		let head_ptr = space.free_list().head().unwrap();
-		let head = FreeNode::from_non_null(head_ptr);
-		assert_eq!(head.bytes(), PAGE_SIZE - align_with_hw_cache(alloc_size));
+		let mut head_ptr = space.free_list().head().unwrap();
+		let head = unsafe { head_ptr.as_mut() };
+
+		let offset = if alloc_size == 0 {
+			0
+		} else {
+			align_with_hw_cache(alloc_size)
+		};
+
+		assert_eq!(head.bytes(), PAGE_SIZE - offset);
 	}
 
-	#[kernel_test(cache_manager)]
+	#[ktest]
 	fn test_cache_alloc_dealloc() {		
 		let mut cm = CacheManager::new();
 		let cache = unsafe { &mut *cm.new_allocator::<SizeCache<2048>>().unwrap() };
@@ -138,7 +143,7 @@ mod tests {
 		check_remains(&mut cm.node_space, NODE_SIZE);
 		assert_eq!(1, cm.list.count());
 
-		unsafe { cm.drop_allocator(cache as *mut SizeCache<2048>) }.unwrap();
+		unsafe { cm.drop_allocator(cache as *mut SizeCache<2048>) };
 		
 		check_remains(&mut cm.cache_space, 0);
 		check_remains(&mut cm.node_space, 0);
@@ -147,13 +152,12 @@ mod tests {
 
 	static mut SIZE_CACHE : SizeCache<1024> = SizeCache::new();
 
-	#[kernel_test(cache_manager)]
+	#[ktest]
 	fn test_register_unregister() {
 		let mut cm = CacheManager::new();
 
 		cm.register(unsafe { &mut SIZE_CACHE }).unwrap();
 
-		
 		check_remains(&mut cm.node_space, NODE_SIZE);
 		assert_eq!(1, cm.list.count());
 
