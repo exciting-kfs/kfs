@@ -65,7 +65,7 @@ unsafe impl GlobalAlloc for GlobalAllocator {
 			}
 		}
 	}
-	
+
 	unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
 		self.lazy_init();
 

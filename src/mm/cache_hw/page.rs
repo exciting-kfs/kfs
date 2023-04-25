@@ -14,7 +14,9 @@ macro_rules! flush_global_page_cache {
     () => {
 	asm!(
 		"mov eax, cr4",
-		"or eax, 0x80", // PGE
+		"xor eax, 0x80", // PGE
+		"mov cr4, eax",
+		"or eax, 0x80",
 		"mov cr4, eax"
 	)
     };
