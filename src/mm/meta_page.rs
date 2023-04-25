@@ -3,8 +3,6 @@ use core::mem::{align_of, size_of};
 use core::ptr::NonNull;
 use core::slice::from_raw_parts_mut;
 
-use crate::mm::util::to_virtual_addr;
-
 use super::page_allocator::util::{addr_to_pfn, rank_to_pages};
 use super::util::current_or_next_aligned;
 use super::x86::init::ZoneInfo;

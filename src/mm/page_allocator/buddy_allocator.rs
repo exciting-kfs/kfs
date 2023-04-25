@@ -6,7 +6,7 @@ use super::free_list::FreeList;
 use super::util::{addr_to_pfn, pfn_to_addr, rank_to_pages};
 
 use crate::mm::meta_page::MetaPage;
-use crate::mm::util::{current_or_next_aligned, to_physical_addr, to_virtual_addr};
+use crate::mm::util::{current_or_next_aligned, phys_to_virt, virt_to_phys};
 
 use core::fmt::{self, Display};
 use core::mem::size_of;
@@ -33,7 +33,7 @@ impl BuddyAllocator {
 
 		for mut entry in cover_mem
 			.step_by(BLOCK_SIZE)
-			.map(|addr| addr_to_pfn(to_physical_addr(addr)))
+			.map(|addr| addr_to_pfn(virt_to_phys(addr)))
 			.map(|pfn| NonNull::from(&mut table[pfn]))
 		{
 			entry.as_mut().rank = MAX_RANK;
@@ -103,11 +103,11 @@ impl BuddyAllocator {
 	fn metapage_to_ptr(&self, page: NonNull<MetaPage>) -> NonNull<Page> {
 		let index = self.metapage_to_index(page);
 
-		return unsafe { NonNull::new_unchecked(to_virtual_addr(pfn_to_addr(index)) as *mut Page) };
+		return unsafe { NonNull::new_unchecked(phys_to_virt(pfn_to_addr(index)) as *mut Page) };
 	}
 
 	fn ptr_to_metapage(&mut self, ptr: NonNull<Page>) -> NonNull<MetaPage> {
-		let index = addr_to_pfn(to_physical_addr(ptr.as_ptr() as usize));
+		let index = addr_to_pfn(virt_to_phys(ptr.as_ptr() as usize));
 
 		return self.index_to_metapage(index);
 	}

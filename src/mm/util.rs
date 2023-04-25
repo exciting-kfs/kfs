@@ -1,26 +1,26 @@
 use super::constant::VM_OFFSET;
 
 #[inline]
-pub const fn to_virtual_addr(addr: usize) -> usize {
+pub const fn phys_to_virt(addr: usize) -> usize {
 	addr.wrapping_add(VM_OFFSET)
 }
 
 #[inline]
-pub const fn to_physical_addr(addr: usize) -> usize {
+pub const fn virt_to_phys(addr: usize) -> usize {
 	addr.wrapping_sub(VM_OFFSET)
 }
 
 #[inline]
-pub const fn to_virtual_addr_checked(addr: usize) -> usize {
-	addr + match addr < VM_OFFSET {
+pub const fn to_phys(addr: usize) -> usize {
+	addr - match addr >= VM_OFFSET {
 		true => VM_OFFSET,
 		false => 0,
 	}
 }
 
 #[inline]
-pub const fn to_physical_addr_checked(addr: usize) -> usize {
-	addr - match addr >= VM_OFFSET {
+pub const fn to_virt(addr: usize) -> usize {
+	addr + match addr < VM_OFFSET {
 		true => VM_OFFSET,
 		false => 0,
 	}

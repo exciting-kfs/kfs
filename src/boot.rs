@@ -4,8 +4,7 @@ mod symtab;
 use core::ffi::c_char;
 use core::ops::Range;
 
-use crate::mm::util::to_physical_addr_checked;
-use crate::pr_info;
+use crate::mm::util::to_phys;
 use multiboot2::ElfSection;
 
 use self::{
@@ -39,10 +38,13 @@ pub fn init_bootinfo(bi_header: usize, magic: u32) -> MemInfo {
 
 	let linear = (linear.start_address() as usize)..(linear.end_address() as usize);
 
-	let kernel_end = info.elf_sections_tag().unwrap().sections().fold(
-		to_physical_addr_checked(bi_header + info.total_size()),
-		|acc, cur| acc.max(to_physical_addr_checked(cur.end_address() as usize)),
-	);
+	let kernel_end = info
+		.elf_sections_tag()
+		.unwrap()
+		.sections()
+		.fold(to_phys(bi_header + info.total_size()), |acc, cur| {
+			acc.max(to_phys(cur.end_address() as usize))
+		});
 
 	return MemInfo { linear, kernel_end };
 }

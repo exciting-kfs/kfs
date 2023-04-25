@@ -3,7 +3,7 @@ use super::x86_page::{PageFlag, PD, PDE};
 
 use crate::boot::MemInfo;
 use crate::mm::constant::*;
-use crate::mm::util::to_virtual_addr;
+use crate::mm::util::phys_to_virt;
 
 use core::ops::Range;
 
@@ -36,12 +36,12 @@ pub unsafe fn init_linear_map(mem_info: &MemInfo) -> ZoneInfo {
 
 	reload_cr3(&GLOBAL_PD);
 
-	let zone_high_start = to_virtual_addr(p_idx * PT_COVER_SIZE);
-	let zone_normal_end = to_virtual_addr((p_idx - 1) * PT_COVER_SIZE);
+	let zone_high_start = phys_to_virt(p_idx * PT_COVER_SIZE);
+	let zone_normal_end = phys_to_virt((p_idx - 1) * PT_COVER_SIZE);
 
 	return ZoneInfo {
-		normal: to_virtual_addr(mem_info.kernel_end)..zone_normal_end,
-		high: zone_high_start..to_virtual_addr(mem_info.linear.end),
+		normal: phys_to_virt(mem_info.kernel_end)..zone_normal_end,
+		high: zone_high_start..phys_to_virt(mem_info.linear.end),
 		size: mem_info.linear.end,
 	};
 }
