@@ -6,3 +6,8 @@ use core::arch::asm;
 pub unsafe fn reload_cr3(page_directory: &PD) {
 	asm!("mov cr3, eax", in("eax") page_directory);
 }
+
+/// Invalidate all tlb (global page included).
+pub fn invalidate_all_tlb() {
+	unsafe { asm!("mov eax, cr4", "mov cr4, eax") };
+}

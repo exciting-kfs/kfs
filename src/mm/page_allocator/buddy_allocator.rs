@@ -7,6 +7,7 @@ use super::util::{addr_to_pfn, pfn_to_addr, rank_to_pages};
 
 use crate::mm::meta_page::MetaPage;
 use crate::mm::util::{current_or_next_aligned, phys_to_virt, virt_to_phys};
+use crate::pr_info;
 
 use core::fmt::{self, Display};
 use core::mem::size_of;
@@ -30,7 +31,9 @@ impl BuddyAllocator {
 		let free_list = FreeList::construct_at((&mut (*ptr).free_list) as *mut FreeList);
 
 		cover_mem.start = current_or_next_aligned(cover_mem.start, BLOCK_SIZE);
+		pr_info!("note: begin at {:#0x}", cover_mem.start);
 
+		let mut k = 0;
 		for mut entry in cover_mem
 			.step_by(BLOCK_SIZE)
 			.map(|addr| addr_to_pfn(virt_to_phys(addr)))
@@ -38,9 +41,12 @@ impl BuddyAllocator {
 		{
 			entry.as_mut().rank = MAX_RANK;
 			free_list.add(entry);
+			k += 1;
 		}
 
 		(*ptr).meta_page_table = table;
+
+		pr_info!("note: {} entries.", k);
 
 		return &mut *ptr;
 	}

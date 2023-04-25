@@ -1,4 +1,4 @@
-use super::util::reload_cr3;
+use super::util::invalidate_all_tlb;
 use super::x86_page::{PageFlag, PD, PDE};
 
 use crate::boot::MemInfo;
@@ -30,11 +30,11 @@ pub unsafe fn init_linear_map(mem_info: &MemInfo) -> ZoneInfo {
 			);
 			p_idx += 1;
 		} else {
-			GLOBAL_PD.entries[idx] = PDE::new_4m(0, PageFlag::Global);
+			GLOBAL_PD.entries[idx] = PDE::new_4m(0, PageFlag::empty());
 		}
 	}
 
-	reload_cr3(&GLOBAL_PD);
+	invalidate_all_tlb();
 
 	let zone_high_start = phys_to_virt(p_idx * PT_COVER_SIZE);
 	let zone_normal_end = phys_to_virt((p_idx - 1) * PT_COVER_SIZE);
