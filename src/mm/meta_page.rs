@@ -1,11 +1,12 @@
 use core::marker::{PhantomData, PhantomPinned};
-use core::mem::{align_of, size_of};
+use core::mem::MaybeUninit;
+use core::ops::{Deref, DerefMut};
 use core::ptr::NonNull;
 use core::slice::from_raw_parts_mut;
 
-use super::page_allocator::util::{addr_to_pfn, rank_to_pages};
-use super::util::current_or_next_aligned;
-use super::x86::init::ZoneInfo;
+use super::boot_alloc;
+use super::page_allocator::util::{addr_to_pfn_64, rank_to_pages};
+use super::x86::init::VMEMORY;
 
 #[repr(C, align(8))]
 pub struct MetaPage {
@@ -16,21 +17,36 @@ pub struct MetaPage {
 	_pin: PhantomPinned,
 }
 
-pub unsafe fn init_meta_page_table(mem: &mut ZoneInfo) -> &'static mut [MetaPage] {
-	let table_start = current_or_next_aligned(mem.normal.start, align_of::<MetaPage>());
-	let entry_count = addr_to_pfn(mem.normal.end);
-	let table_end = table_start + entry_count * size_of::<MetaPage>();
+#[repr(transparent)]
+pub struct MetaPageTable(&'static mut [MetaPage]);
 
-	assert!(table_end < mem.normal.end);
+pub static mut META_PAGE_TABLE: MaybeUninit<MetaPageTable> = MaybeUninit::uninit();
 
-	mem.normal.start = table_end;
+impl MetaPageTable {
+	pub unsafe fn init() {
+		let page_count = addr_to_pfn_64(VMEMORY.assume_init_ref().normal.end) as usize;
 
-	for pfn in 0..addr_to_pfn(mem.size) {
-		let entry = (table_start as *mut MetaPage).add(pfn);
-		MetaPage::construct_at(entry);
+		let base = boot_alloc::alloc_n::<MetaPage>(page_count);
+		for entry in (0..page_count).map(|x| base.add(x)) {
+			MetaPage::construct_at(entry);
+		}
+
+		META_PAGE_TABLE.write(MetaPageTable(from_raw_parts_mut(base, page_count)));
 	}
+}
 
-	return from_raw_parts_mut(table_start as *mut MetaPage, entry_count);
+impl Deref for MetaPageTable {
+	type Target = [MetaPage];
+
+	fn deref(&self) -> &Self::Target {
+		self.0
+	}
+}
+
+impl DerefMut for MetaPageTable {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		self.0
+	}
 }
 
 impl MetaPage {

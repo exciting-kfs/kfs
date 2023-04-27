@@ -7,7 +7,7 @@ mod stackframe_iter;
 
 use rustc_demangle::demangle;
 
-use crate::{pr_info, boot::{SYMTAB, STRTAB}};
+use crate::{boot::BOOT_INFO, pr_info};
 
 pub use stack_dump::StackDump;
 
@@ -23,21 +23,14 @@ impl Backtrace {
 	/// Print call stack trace of StackDump.
 	pub fn print_trace(&self) {
 		for (idx, frame) in self.stack.iter().enumerate() {
-			let name = self.find_name(frame.fn_addr).unwrap_or_default();
+			let ksyms = unsafe { &BOOT_INFO.assume_init_ref().ksyms };
+
+			let name = ksyms.find_name_by_addr(frame.fn_addr).unwrap_or_default();
+
 			pr_info!("frame #{}: {:?}: {:?}", idx, frame.fn_addr, demangle(name));
 		}
 	}
-
-	/// Find function name using Symtab and Strtab
-	fn find_name(&self, fn_addr: *const usize) -> Option<&'static str> {
-		unsafe {
-			let index = SYMTAB.get_name_index(fn_addr)?;
-			let name = STRTAB.get_name(index);
-			name
-		}
-	}
 }
-
 
 /// Print call stack trace in current context.
 #[macro_export]

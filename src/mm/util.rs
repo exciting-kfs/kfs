@@ -27,16 +27,37 @@ pub const fn to_virt(addr: usize) -> usize {
 }
 
 #[inline]
-pub const fn current_or_next_aligned(p: usize, align: usize) -> usize {
+pub const fn to_phys_64(addr: u64) -> u64 {
+	addr - match addr >= VM_OFFSET as u64 {
+		true => VM_OFFSET as u64,
+		false => 0,
+	}
+}
+
+#[inline]
+pub const fn to_virt_64(addr: u64) -> u64 {
+	addr + match addr < VM_OFFSET as u64 {
+		true => VM_OFFSET as u64,
+		false => 0,
+	}
+}
+
+#[inline]
+pub const fn next_align(p: usize, align: usize) -> usize {
 	(p + align - 1) & !(align - 1)
 }
 
 #[inline]
-pub const fn next_aligned(p: usize, align: usize) -> usize {
-	(p + align) & !(align - 1)
+pub const fn next_align_64(p: u64, align: u64) -> u64 {
+	(p + align - 1) & !(align - 1)
 }
 
 #[inline]
 pub const fn is_aligned(addr: usize, align: usize) -> bool {
+	addr % align == 0
+}
+
+#[inline]
+pub const fn is_aligned_64(addr: u64, align: u64) -> bool {
 	addr % align == 0
 }

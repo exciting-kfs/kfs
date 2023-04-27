@@ -3,19 +3,17 @@
 
 use super::constant::*;
 use super::free_list::FreeList;
-use super::util::{addr_to_pfn, pfn_to_addr, rank_to_pages};
+use super::util::{addr_to_pfn, addr_to_pfn_64, pfn_to_addr, rank_to_pages};
 
-use crate::mm::meta_page::MetaPage;
-use crate::mm::util::{current_or_next_aligned, phys_to_virt, virt_to_phys};
-use crate::pr_info;
+use crate::mm::meta_page::{MetaPage, META_PAGE_TABLE};
+use crate::mm::util::{next_align_64, phys_to_virt, to_phys_64, virt_to_phys};
 
 use core::fmt::{self, Display};
 use core::mem::size_of;
 use core::ops::Range;
-use core::ptr::NonNull;
+use core::ptr::{addr_of_mut, NonNull};
 
 pub struct BuddyAllocator {
-	meta_page_table: &'static mut [MetaPage],
 	free_list: FreeList,
 }
 
@@ -23,32 +21,19 @@ pub struct BuddyAllocator {
 pub struct Page;
 
 impl BuddyAllocator {
-	pub unsafe fn construct_at(
-		ptr: *mut BuddyAllocator,
-		mut cover_mem: Range<usize>,
-		table: &'static mut [MetaPage],
-	) -> &'static mut BuddyAllocator {
-		let free_list = FreeList::construct_at((&mut (*ptr).free_list) as *mut FreeList);
+	pub unsafe fn construct_at(ptr: *mut BuddyAllocator, mut cover_mem: Range<u64>) {
+		let free_list = FreeList::construct_at(addr_of_mut!((*ptr).free_list));
 
-		cover_mem.start = current_or_next_aligned(cover_mem.start, BLOCK_SIZE);
-		pr_info!("note: begin at {:#0x}", cover_mem.start);
+		cover_mem.start = next_align_64(cover_mem.start, BLOCK_SIZE as u64);
 
-		let mut k = 0;
 		for mut entry in cover_mem
 			.step_by(BLOCK_SIZE)
-			.map(|addr| addr_to_pfn(virt_to_phys(addr)))
-			.map(|pfn| NonNull::from(&mut table[pfn]))
+			.map(|addr| addr_to_pfn_64(to_phys_64(addr)) as usize)
+			.map(|pfn| NonNull::from(&mut unsafe { META_PAGE_TABLE.assume_init_mut() }[pfn]))
 		{
 			entry.as_mut().rank = MAX_RANK;
 			free_list.add(entry);
-			k += 1;
 		}
-
-		(*ptr).meta_page_table = table;
-
-		pr_info!("note: {} entries.", k);
-
-		return &mut *ptr;
 	}
 
 	pub fn alloc_page(&mut self, req_rank: usize) -> Result<NonNull<Page>, ()> {
@@ -99,11 +84,12 @@ impl BuddyAllocator {
 	}
 
 	fn metapage_to_index(&self, page: NonNull<MetaPage>) -> usize {
-		(page.as_ptr() as usize - self.meta_page_table.as_ptr() as usize) / size_of::<MetaPage>()
+		(page.as_ptr() as usize - unsafe { META_PAGE_TABLE.assume_init_ref().as_ptr() } as usize)
+			/ size_of::<MetaPage>()
 	}
 
 	fn index_to_metapage(&mut self, index: usize) -> NonNull<MetaPage> {
-		NonNull::from(&mut self.meta_page_table[index])
+		NonNull::from(&mut unsafe { META_PAGE_TABLE.assume_init_mut() }[index])
 	}
 
 	fn metapage_to_ptr(&self, page: NonNull<MetaPage>) -> NonNull<Page> {
