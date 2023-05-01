@@ -9,5 +9,13 @@ pub unsafe fn reload_cr3(page_directory: &PD) {
 
 /// Invalidate all tlb (global page included).
 pub fn invalidate_all_tlb() {
-	unsafe { asm!("mov eax, cr4", "mov cr4, eax") };
+	unsafe {
+		asm!(
+			"mov eax, cr4",
+			"xor eax, 0x80", // PGE
+			"mov cr4, eax",
+			"or eax, 0x80",
+			"mov cr4, eax"
+		)
+	};
 }
