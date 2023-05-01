@@ -1,7 +1,6 @@
 use core::{
 	ffi::{c_char, CStr},
 	marker::PhantomData,
-	ptr,
 };
 
 /// String table in the '.strtab' section, used to get a symbol name.
@@ -11,15 +10,8 @@ pub struct Strtab {
 }
 
 impl Strtab {
-	pub const fn new() -> Self {
-		Strtab {
-			addr: ptr::null(),
-			size: 0,
-		}
-	}
-
-	pub fn init(&mut self, addr: *const c_char, size: usize) {
-		*self = Strtab { addr, size }
+	pub fn new(addr: *const c_char, size: usize) -> Self {
+		Strtab { addr, size }
 	}
 
 	pub fn addr(&self) -> *const c_char {

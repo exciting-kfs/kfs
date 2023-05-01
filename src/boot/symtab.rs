@@ -7,15 +7,8 @@ pub struct Symtab {
 }
 
 impl Symtab {
-	pub const fn new() -> Self {
-		Symtab {
-			addr: 0 as *const SymtabEntry,
-			count: 0,
-		}
-	}
-
-	pub fn init(&mut self, addr: *const SymtabEntry, count: usize) {
-		*self = Symtab { addr, count }
+	pub fn new(addr: *const SymtabEntry, count: usize) -> Self {
+		Symtab { addr, count }
 	}
 
 	/// Find the symtab entry and return index of name used in the strtab.

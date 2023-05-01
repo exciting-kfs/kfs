@@ -6,13 +6,13 @@ pub use attr::Attr;
 pub use color::Color;
 pub use screen_char::Char;
 
-use crate::io::pmio::Port;
+use crate::{io::pmio::Port, mm::util::phys_to_virt};
 use core::ptr;
 
 pub const WIDTH: usize = 80;
 pub const HEIGHT: usize = 25;
 pub const WINDOW_SIZE: usize = WIDTH * HEIGHT;
-const MMIO_ADDR: *mut Char = 0xb8000 as *mut Char;
+const MMIO_ADDR: *mut Char = phys_to_virt(0xb8000) as *mut Char;
 
 static INDEX_PORT: Port = Port::new(0x03d4);
 static DATA_PORT: Port = Port::new(0x03d5);

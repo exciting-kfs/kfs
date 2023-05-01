@@ -18,10 +18,16 @@ mod util;
 
 use core::panic::PanicInfo;
 
+use boot::BOOT_INFO;
 use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
 use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use input::{key_event::Code, keyboard::KEYBOARD};
 
+use mm::{
+	meta_page::MetaPageTable,
+	x86::init::{VMemory, VMEMORY},
+	PageAllocator,
+};
 use test::{exit_qemu_with, TEST_ARRAY};
 
 /// very simple panic handler.
@@ -33,9 +39,7 @@ fn panic_handler_impl(info: &PanicInfo) -> ! {
 	printk_panic!("{}\ncall stack (most recent call first)\n", info);
 
 	unsafe {
-		if boot::BOOT_INFO != 0 {
-			print_stacktrace!();
-		}
+		print_stacktrace!();
 		CONSOLE_MANAGER.get().set_foreground(CONSOLE_COUNTS - 1);
 		CONSOLE_MANAGER.get().flush_foreground();
 		CONSOLE_MANAGER.get().draw();
@@ -104,40 +108,15 @@ fn run_io() -> ! {
 pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	init_hardware();
 
-	let _kernel_end = boot::init_bootinfo(bi_header, magic);
+	unsafe {
+		boot::BootInfo::init(bi_header, magic).unwrap();
+		VMemory::init(&BOOT_INFO.assume_init_ref().mem_info);
+		MetaPageTable::init();
+		PageAllocator::init(&VMEMORY.assume_init_ref());
+	}
 
 	match cfg!(ktest) {
 		true => run_test(),
 		false => run_io(),
 	};
-}
-
-mod test1111 {
-	use super::*;
-	use kfs_macro::ktest;
-
-	#[ktest]
-	pub fn do_something0() {
-		pr_info!("DS: 0");
-	}
-
-	#[ktest]
-	pub fn do_something1() {
-		pr_info!("DS: 1");
-	}
-
-	#[ktest]
-	pub fn do_something2() {
-		pr_info!("DS: 2");
-	}
-
-	#[ktest]
-	pub fn do_something3() {
-		pr_info!("DS: 3");
-	}
-
-	#[ktest]
-	pub fn do_something4() {
-		pr_info!("DS: 4");
-	}
 }

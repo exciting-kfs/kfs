@@ -1,13 +1,10 @@
-use rustc_demangle::demangle;
-
 use crate::{
 	collection,
 	console::{constants::*, Ascii, AsciiParser},
 	io::character::{Read as ChRead, Write as ChWrite, RW as ChRW},
-	boot::{BOOT_INFO, SYMTAB, STRTAB}, printk, pr_info,
 };
 
-use core::fmt::{self, Write, Debug};
+use core::fmt::{self, Debug, Write};
 
 use core::{arch::asm, slice::from_raw_parts};
 
@@ -135,71 +132,7 @@ impl Shell {
 		unsafe { asm!("hlt") }; // wait what?
 	}
 
-	fn builtin_mem(&mut self) {
-		let boot_info = match unsafe { multiboot2::load(BOOT_INFO) } {
-			Err(e) => {
-				writeln!(self, "mem: missing multiboot2 boot info: {:?}", e).unwrap();
-				return;
-			}
-			Ok(v) => v,
-		};
-
-		let mmap = match boot_info.memory_map_tag() {
-			None => {
-				writeln!(self, "mem: missing memory map tag").unwrap();
-				return;
-			}
-			Some(v) => v,
-		};
-
-		let print_space = |printable: &mut Shell, mut size| {
-			let modifier = if size < 1024 {
-				"B"
-			} else if size < 1024 * 1024 {
-				size /= 1024;
-				"K"
-			} else {
-				size /= 1024 * 1024;
-				"M"
-			};
-
-			write!(printable, "{}{modifier}, ", size).unwrap();
-		};
-
-		for mem in mmap.all_memory_areas() {
-			write!(self, "base: ").unwrap();
-			print_space(self, mem.start_address());
-
-			write!(self, "size: ").unwrap();
-			print_space(self, mem.size());
-			// 31 34 39
-			writeln!(self, "status: {:?}", mem.typ()).unwrap();
-		}
-	}
-
-	fn builtin_unit_test<'a, I>(&mut self, mut args: I)
-	where
-		I: Iterator<Item = &'a [u8]> + Debug,
-	{
-		const PREFIX: &'static str = "kernel_test";
-		while let Some(s) = args.next() {
-			let s = core::str::from_utf8(s).unwrap_or_default();
-			unsafe {
-				STRTAB.iter().filter(|name| name.contains(s) && name.contains(PREFIX)).for_each(|name| {
-					let index = name.as_ptr() as usize - STRTAB.addr() as usize;
-
-					SYMTAB.get_addr(index).map(|addr| {
-						let func: fn() = core::mem::transmute(addr);
-						printk!("TEST: {} ", demangle(name));
-						func();
-						pr_info!("\x1b[32mok!\x1b[0m");
-					});
-				});
-			}
-		}
-	}
-
-	fn execute_builtin<'a, I>(&mut self, kind: Builtin, args: I)
+	fn execute_builtin<'a, I>(&mut self, kind: Builtin, _args: I)
 	where
 		I: Iterator<Item = &'a [u8]> + Debug,
 	{
@@ -207,8 +140,6 @@ impl Shell {
 			Builtin::Help => self.builtin_help(),
 			Builtin::Clear => self.builtin_clear(),
 			Builtin::Halt => self.builtin_halt(),
-			Builtin::Mem => self.builtin_mem(),
-			Builtin::UnitTest => self.builtin_unit_test(args)
 		}
 	}
 
@@ -296,8 +227,6 @@ enum Builtin {
 	Help,
 	Halt,
 	Clear,
-	Mem,
-	UnitTest
 }
 
 impl Builtin {
@@ -306,8 +235,6 @@ impl Builtin {
 			b"help" => Self::Help,
 			b"halt" => Self::Halt,
 			b"clear" => Self::Clear,
-			b"mem" => Self::Mem,
-			b"unit_test" => Self::UnitTest,
 			_ => return None,
 		};
 

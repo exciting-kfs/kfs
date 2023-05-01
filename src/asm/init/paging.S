@@ -1,8 +1,5 @@
 %include "address.S"
 
-; currently global page directory is located at 0x100000. (1M)
-%define GLOBAL_PD 0x100000
-
 ; first 4 PDE (16MB) will be marked as present
 %define INIT_DIRS 4
 
@@ -10,6 +7,8 @@
 %define PD_ATTRIBUTE 0b110000111
 
 %define VM_PD_OFFSET (VM_OFFSET / (1024 * 1024))
+
+extern GLOBAL_PD
 
 section .text
 global enable_paging:function (enable_paging.end - enable_paging)

@@ -8,7 +8,7 @@ use core::fmt::{Result, Write};
 
 pub struct Dmesg {
 	parser: AsciiParser,
-	kern_buf: WrapQueue<u8, 4096>,
+	kern_buf: WrapQueue<u8, 65536>,
 }
 
 pub static mut DMESG: Dmesg = Dmesg::new();
