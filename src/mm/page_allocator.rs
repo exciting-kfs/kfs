@@ -83,7 +83,6 @@ impl PageAllocator {
 	}
 }
 
-// #[cfg(ktest)]
 mod mmtest {
 	use crate::{
 		collection::WrapQueue,
