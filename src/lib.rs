@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![allow(dead_code)]
+#![feature(allocator_api)]
 
 mod backtrace;
 mod boot;

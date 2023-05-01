@@ -7,3 +7,4 @@ pub mod boot_alloc;
 pub mod constant;
 pub mod util;
 pub mod x86;
+pub mod cache_sw;
