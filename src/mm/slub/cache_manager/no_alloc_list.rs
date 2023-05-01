@@ -12,15 +12,18 @@ pub struct Node<T> {
 
 impl<T> Node<T> {
         pub const NODE_SIZE: usize = mem::size_of::<Node<T>>();
-
-        pub fn construct_at(ptr: &mut [u8], data: T) -> &mut Self {
+        
+        /// Construct a Node<T> for memory chunk
+        /// 
+        /// # Safety
+        /// 
+        /// * The size of memory chunk must be bigger than FreeNode::NODE_SIZE
+        pub unsafe fn construct_at(ptr: &mut [u8], data: T) -> &mut Self {
                 let ptr = ptr.as_mut_ptr() as *mut Self;
-                unsafe {
-                        let next = NonNull::new_unchecked(&mut (*ptr));
-                        let prev = next.clone();
-                        (*ptr) = Node { prev, next, data };
-                        &mut (*ptr)
-                }
+                let next = NonNull::new_unchecked(&mut (*ptr));
+                let prev = next.clone();
+                (*ptr) = Node { prev, next, data };
+                &mut (*ptr)
 	}
 
         pub fn data(&self) -> &T {
@@ -134,7 +137,7 @@ impl<T> NAList<T> {
                 })
         }
 
-        fn remove(&mut self, mut node: &mut Node<T>) {
+        fn remove(&mut self, node: &mut Node<T>) {
                 self.head.map(|mut head_ptr| {
                         let head = unsafe { head_ptr.as_mut() };
                         if node == head {

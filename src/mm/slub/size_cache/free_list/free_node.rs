@@ -1,8 +1,10 @@
 use core::ptr::NonNull;
 use core::mem::size_of;
-use core::slice;
 
-use crate::mm::cache_sw::PAGE_SIZE;
+use crate::mm::slub::{PAGE_SIZE, PAGE_ALIGN};
+use crate::mm::util::{is_aligned, prev_align, next_align};
+
+use super::FreeList;
 
 #[derive(Debug, PartialEq)]
 pub struct TooBigError;
@@ -11,7 +13,7 @@ pub struct TooBigError;
 pub struct FreeNode {
     pub prev: NonNull<FreeNode>,
     pub next: NonNull<FreeNode>,
-    bytes: usize,
+    pub bytes: usize,
 }
 
 impl PartialEq for FreeNode {
@@ -41,8 +43,9 @@ impl FreeNode {
         /// Try to merge `self` with previous and next node.
         /// If `self` doesn't have previous or next node, this function do nothing.
         pub fn try_merge(&mut self) {
-                let front = unsafe { self.prev.as_mut() };
-                let back = unsafe { self.next.as_mut() };
+                let (front, back) = unsafe {
+                        (self.prev.as_mut(), self.next.as_mut())
+                };
 
                 let self_start = self.as_ptr().cast::<u8>();
                 let back_start = back.as_ptr().cast::<u8>();
@@ -66,27 +69,6 @@ impl FreeNode {
                 }
         }
 
-        /// Allocate a memory block of requested bytes from Self.
-        /// After allocation, if there is a remained memory chunk, make it to FreeNode and return it.
-        /// 
-        /// # Safety
-        /// 
-        /// * If there is a remained memory chunk, but its size is smaller than FreeNode::NODE_SIZE,
-        ///   Must remeber the `self.bytes`(before allocation) for appropriate deallocation.
-        pub unsafe fn alloc_bytes(&mut self, bytes: usize) -> Result<Option<&mut Self>, TooBigError> {
-                let remains = self.bytes.checked_sub(bytes).ok_or(TooBigError)?;
-
-                match remains >= FreeNode::NODE_SIZE {
-                        true => {
-                                let ptr = self.as_mut_ptr().cast::<u8>().offset(bytes as isize);
-                                let ptr = slice::from_raw_parts_mut(ptr, remains);
-                                let new_node = FreeNode::construct_at(ptr);
-                                Ok(Some(new_node))
-                        }
-                        false => Ok(None)
-                }
-        }
-
         pub fn disjoint(&mut self) {
                 let prev = unsafe { self.prev.as_mut() };
                 let next = unsafe { self.next.as_mut() };
@@ -105,46 +87,68 @@ impl FreeNode {
                 e > ptr &&  ptr >= s
         }
 
-        /// It is called by `CacheManager` for collecting excess memory allcated by `BuddyAllocator`.
+        /// It is called by `CacheManager` for collecting excess cache memory allcated by `PAGE_ALLOC`.
         ///
         /// `'=': inuse, '-': free`
+        /// 
+        /// * case 0)
+        /// ```
+        /// align0     align1
+        /// start       end
+        ///   |----((----|
+        ///   |----))----|
+        ///
+        /// ```
         /// * case 1)
         /// ```
-        /// align1
-        /// align2
-        ///  self     node_ptr
-        ///   |----((----|---------|
-        ///   |----))----|---------|
-        ///              `node_size`
+        /// align0
+        /// start    align1   end
+        ///   |---((---|-------|
+        ///   |---))---|-------|
+        ///
         /// ```
         /// * case 2)
         /// ```
-        /// align1       self     align2    node_ptr
-        ///   |===========|---------|----((----|---------|
-        ///   |===========|---------|----))----|---------|
-        ///   `self_offset`self_size`          `node_size`
+        ///                          align2
+        /// align0  start   align1    end
+        ///   |=======|-------|---((---|
+        ///   |=======|-------|---))---|
+        ///   
+        /// ```
+        /// * case 3)
+        /// ```
+        /// align0  start   align1   align2   end
+        ///   |=======|-------|---((---|-------|
+        ///   |=======|-------|---))---|-------|
         /// ```
         ///
-        pub fn shrink(&mut self) -> (*mut u8, usize, Option<&mut Self>) {
+        pub fn shrink(&mut self, free_list: &mut FreeList) -> (*mut u8, usize) {
+                let mut total = self.bytes;
+                let start = self.as_mut_ptr().cast::<u8>() as usize;
+                let end = match start.checked_add(total) {
+                        Some(e) => e,
+                        None => 0,
+                };
+                let next_align = next_align(start, PAGE_ALIGN);
 
-                let self_ptr = self.as_ptr() as usize;
-                let self_offset = self_ptr % PAGE_SIZE;
-                let self_size = ((self_offset > 0) as usize) * (PAGE_SIZE - self_offset);
-                let align2 = self_ptr + self_size;
-                let total = self.bytes;
-                let count = (total - self_size) / PAGE_SIZE;
+                if !is_aligned(end, PAGE_ALIGN) {
+                        let len = end - prev_align(end, PAGE_ALIGN);
+                        let n = unsafe {
+                                FreeNode::construct_at(
+                                        core::slice::from_raw_parts_mut(end as *mut u8, len)
+                                )
+                        };
+                        total -= n.bytes;
+                        free_list.insert(n);
+                }
 
-                self.bytes = self_size;
+                if !is_aligned(start, PAGE_ALIGN) {
+                        self.bytes = next_align - start;
+                        total -= self.bytes;
+                        free_list.insert(self);
+                }
 
-                let node_ptr = align2 + PAGE_SIZE * count;
-                let node_size = total - (node_ptr - self_ptr);
-                let new_node = (node_size >= FreeNode::NODE_SIZE).then(|| unsafe {
-                        let node_ptr = node_ptr as *mut u8;
-                        let node_ptr = slice::from_raw_parts_mut(node_ptr, node_size);
-                        FreeNode::construct_at(node_ptr)
-                });
-
-                (align2 as *mut u8, count, new_node)
+                (next_align as *mut u8 , total / PAGE_SIZE)
         }
 
         #[inline(always)]
@@ -246,27 +250,6 @@ pub(super) mod node_tests {
                 assert_eq!(node2.prev, node2_ptr);
                 assert_eq!(node2.next, node2_ptr);
         }
-
-        #[ktest]
-        fn test_alloc_bytes() {
-                let page = unsafe { &mut PAGE1 };
-                let node = unsafe { FreeNode::construct_at(page) };
-
-                let res1 = unsafe { node.alloc_bytes(10000) };
-                assert_eq!(res1, Err(TooBigError));
-                assert_eq!(node.bytes, 4096);
-
-                let res2 = unsafe { node.alloc_bytes(96) };
-                let next = res2.unwrap().unwrap();
-
-                let res3 = unsafe { next.alloc_bytes(4000) };
-                assert_eq!(res3, Ok(None));
-
-                let ptr2 = next.addr().cast::<u8>();
-                let ptr1 = unsafe { node.addr().cast::<u8>().offset(96 as isize) };
-                assert_eq!(ptr1, ptr2);
-        }
-
         
         #[ktest]
         fn test_disjoint() {

@@ -42,6 +42,10 @@ pub const fn to_virt_64(addr: u64) -> u64 {
 	}
 }
 
+pub const fn prev_align(p: usize, align: usize) -> usize {
+	(p - 1) & !(align - 1)
+}
+
 #[inline]
 pub const fn next_align(p: usize, align: usize) -> usize {
 	(p + align - 1) & !(align - 1)

@@ -19,7 +19,7 @@ impl FreeList {
                 self.iter().count()
         }
 
-        pub fn head(&self) -> Option<NonNull<FreeNode>> {
+        pub fn first(&self) -> Option<NonNull<FreeNode>> {
                 self.head
         }
 
@@ -89,7 +89,7 @@ impl FreeList {
                 })
         }
 
-        fn remove(&mut self, mut node: &mut FreeNode) { // TODO why 'node' need mut prefix?
+        fn remove(&mut self, node: &mut FreeNode) {
                 self.head.map(|mut head_ptr| {
                         let head = unsafe { head_ptr.as_mut()};
                         if node == head {

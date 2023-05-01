@@ -4,10 +4,10 @@ use core::cell::UnsafeCell;
 
 use crate::kmem_cache_register;
 
-use super::cache_sw::ForSizeCache;
-use super::cache_sw::SizeCache;
-use super::cache_sw::alloc_pages_from_buddy;
-use super::cache_sw::dealloc_pages_to_buddy;
+use super::slub::ForSizeCache;
+use super::slub::SizeCache;
+use super::slub::alloc_pages_from_page_alloc;
+use super::slub::dealloc_pages_to_page_alloc;
 use super::util::bit_scan_reverse;
 
 static mut SIZE64: SizeCache<'static, 64> = SizeCache::new();		// RANK 6
@@ -19,7 +19,6 @@ static mut SIZE2048: SizeCache<'static, 2048> = SizeCache::new();	// RANK 11
 
 const RANK_MIN: usize = 6;
 const RANK_END: usize = 12;
-
 
 /// trait Allocator vs trait GlobalAlloc
 ///
@@ -59,9 +58,9 @@ unsafe impl GlobalAlloc for GlobalAllocator {
 		let rank = rank_of(layout);
 		match rank.checked_sub(RANK_END) {
 			None => get_allocator(rank).allocate(),
-			Some(r) => match alloc_pages_from_buddy(1 << r) {
-				Some(ptr) => ptr.as_mut_ptr(),
-				None => 0 as *mut u8
+			Some(r) => match alloc_pages_from_page_alloc(1 << r) {
+				Ok(ptr) => ptr.as_mut_ptr(),
+				Err(_) => 0 as *mut u8
 			}
 		}
 	}
@@ -72,7 +71,7 @@ unsafe impl GlobalAlloc for GlobalAllocator {
 		let rank = rank_of(layout);
 		match rank.checked_sub(RANK_END) {
 			None => get_allocator(rank).deallocate(ptr),
-			Some(r) => dealloc_pages_to_buddy(ptr, 1 << r)
+			Some(r) => dealloc_pages_to_page_alloc(ptr, 1 << r),
 		}
 	}
 }
@@ -129,15 +128,9 @@ mod test {
 
 	use crate::{pr_info};
 
-	use super::*;
-
 	#[ktest]
 	fn test_alloc() {
-		unsafe { SIZE64.print_statistics() };
-
 		let mut v: Vec<usize> = vec![1, 2, 3];
-
-		unsafe { SIZE64.print_statistics() };
 
 		v.iter().for_each(|e| {
 			pr_info!("{}", e);
@@ -146,22 +139,10 @@ mod test {
 		for i in 0..100 {
 			v.push(i);
 		}
-
-		unsafe { SIZE64.print_statistics() };
-		unsafe { SIZE1024.print_statistics() };
 		drop(v);
-		unsafe { SIZE1024.print_statistics() };
 	}
 
 	#[ktest]
 	fn test_kmalloc() {
-		let a = kmalloc(123);
-
-		pr_info!("{}", a.len());
-
-		let b = 123;
-
-		let c = kmalloc(b);
-		pr_info!("{}", c.len());
 	}
 }
