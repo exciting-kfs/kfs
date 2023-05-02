@@ -1,6 +1,6 @@
-use core::ptr::NonNull;
 use core::fmt::Debug;
 use core::mem;
+use core::ptr::NonNull;
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -14,9 +14,9 @@ impl<T> Node<T> {
 	pub const NODE_SIZE: usize = mem::size_of::<Node<T>>();
 
 	/// Construct a Node<T> for memory chunk
-	/// 
+	///
 	/// # Safety
-	/// 
+	///
 	/// * The size of memory chunk must be bigger than Node::NODE_SIZE
 	pub unsafe fn construct_at(mem: &mut [u8], data: T) -> &mut Self {
 		let ptr = mem.as_mut_ptr() as *mut Self;
@@ -72,112 +72,111 @@ impl<T> PartialEq for Node<T> {
 	}
 }
 
-pub struct NAList<T>{
+pub struct NAList<T> {
 	head: Option<NonNull<Node<T>>>,
 }
 
 impl<T> NAList<T> {
-pub const fn new() -> Self {
-	NAList { head: None }
-}
-
-pub fn count(&self) -> usize {
-	self.iter().count()
-}
-
-pub fn find_if<F>(&mut self, mut f: F) -> Option<NonNull<Node<T>>>
-where F: FnMut(&Node<T>) -> bool
-{
-	self.iter_mut().find(|n| f(n)).map(|n| n.as_non_null())
-}
-
-pub fn insert_front(&mut self, node: &mut Node<T>) {
-	if let None = self.head {
-		let node_ptr = node.as_non_null();
-		self.head = Some(node_ptr);
-		return;
+	pub const fn new() -> Self {
+		NAList { head: None }
 	}
 
-	self.insert(node);
-	let node_ptr = node.as_non_null();
-	self.head = Some(node_ptr);
-}
-
-pub fn insert_back(&mut self, node: &mut Node<T>) {
-	if let None = self.head {
-		let node_ptr = node.as_non_null();
-		self.head = Some(node_ptr);
-		return;
+	pub fn count(&self) -> usize {
+		self.iter().count()
 	}
 
-	self.insert(node);
-}
+	pub fn find_if<F>(&mut self, mut f: F) -> Option<NonNull<Node<T>>>
+	where
+		F: FnMut(&Node<T>) -> bool,
+	{
+		self.iter_mut().find(|n| f(n)).map(|n| n.as_non_null())
+	}
 
-
-fn insert(&mut self, node: &mut Node<T>) {
-	let head = unsafe { self.head.unwrap().as_mut() };
-	let prev = unsafe { head.prev.as_mut() };
-	let node_ptr = node.as_non_null();
-
-	prev.next = node_ptr;
-	head.prev = node_ptr;
-
-	node.next = head.as_non_null();
-	node.prev = prev.as_non_null();
-}
-
-
-pub fn remove_if<'page, F>(&mut self, f: F) -> Option<&'page mut Node<T>>
-where F: FnMut(&Node<T>) -> bool
-{
-	self.find_if(f).map(|mut node_ptr|{
-		let node = unsafe { node_ptr.as_mut() };
-		self.remove(node);
-		node
-	})
-}
-
-fn remove(&mut self, node: &mut Node<T>) {
-	self.head.map(|mut head_ptr| {
-		let head = unsafe { head_ptr.as_mut() };
-		if node == head {
-			self.head = Some(head.next);
+	pub fn insert_front(&mut self, node: &mut Node<T>) {
+		if let None = self.head {
+			let node_ptr = node.as_non_null();
+			self.head = Some(node_ptr);
+			return;
 		}
 
-		if head_ptr == head.next {
-			self.head = None;
+		self.insert(node);
+		let node_ptr = node.as_non_null();
+		self.head = Some(node_ptr);
+	}
+
+	pub fn insert_back(&mut self, node: &mut Node<T>) {
+		if let None = self.head {
+			let node_ptr = node.as_non_null();
+			self.head = Some(node_ptr);
+			return;
 		}
 
-		node.disjoint()
-	});
-}
+		self.insert(node);
+	}
 
+	fn insert(&mut self, node: &mut Node<T>) {
+		let head = unsafe { self.head.unwrap().as_mut() };
+		let prev = unsafe { head.prev.as_mut() };
+		let node_ptr = node.as_non_null();
 
-pub fn iter_mut(&mut self) -> IterMut<'_, T> {
-	IterMut::new(self)
-}
+		prev.next = node_ptr;
+		head.prev = node_ptr;
 
-pub fn iter(&self) -> Iter<'_, T> {
-	Iter::new(self)
-}
-}
+		node.next = head.as_non_null();
+		node.prev = prev.as_non_null();
+	}
 
+	pub fn remove_if<'page, F>(&mut self, f: F) -> Option<&'page mut Node<T>>
+	where
+		F: FnMut(&Node<T>) -> bool,
+	{
+		self.find_if(f).map(|mut node_ptr| {
+			let node = unsafe { node_ptr.as_mut() };
+			self.remove(node);
+			node
+		})
+	}
+
+	fn remove(&mut self, node: &mut Node<T>) {
+		self.head.map(|mut head_ptr| {
+			let head = unsafe { head_ptr.as_mut() };
+			if node == head {
+				self.head = Some(head.next);
+			}
+
+			if head_ptr == head.next {
+				self.head = None;
+			}
+
+			node.disjoint()
+		});
+	}
+
+	pub fn iter_mut(&mut self) -> IterMut<'_, T> {
+		IterMut::new(self)
+	}
+
+	pub fn iter(&self) -> Iter<'_, T> {
+		Iter::new(self)
+	}
+}
 
 impl<T> Debug for NAList<T>
-where T: Debug
+where
+	T: Debug,
 {
-fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-	f.debug_list().entries(self).finish()
-}
+	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+		f.debug_list().entries(self).finish()
+	}
 }
 
 impl<'a, T> Extend<&'a mut Node<T>> for NAList<T> {
-fn extend<I: IntoIterator<Item = &'a mut Node<T>>>(&mut self, iter: I) {
-	iter.into_iter().for_each(|n| {
-		n.disjoint();
-		self.insert(n);
-	})
-}
+	fn extend<I: IntoIterator<Item = &'a mut Node<T>>>(&mut self, iter: I) {
+		iter.into_iter().for_each(|n| {
+			n.disjoint();
+			self.insert(n);
+		})
+	}
 }
 
 impl<T> Default for NAList<T> {
@@ -186,9 +185,7 @@ impl<T> Default for NAList<T> {
 	}
 }
 
-
-
-	/// Iterator - IterMut
+/// Iterator - IterMut
 
 impl<'iter, T> IntoIterator for &'iter mut NAList<T> {
 	type Item = &'iter mut Node<T>;
@@ -208,16 +205,10 @@ impl<'iter, T> IterMut<'iter, T> {
 	fn new(cont: &mut NAList<T>) -> Self {
 		let (head, curr) = match cont.head {
 			None => (None, NonNull::dangling()),
-			Some(mut node) => (
-				Some(&mut *unsafe { node.as_mut() }),
-				node
-			)
+			Some(mut node) => (Some(&mut *unsafe { node.as_mut() }), node),
 		};
 
-		IterMut {
-			head,
-			curr,
-		}
+		IterMut { head, curr }
 	}
 }
 
@@ -227,7 +218,7 @@ impl<'iter, T> Iterator for IterMut<'iter, T> {
 		let head = self.head.as_ref()?;
 		let curr = unsafe { self.curr.as_mut() };
 		let next = unsafe { curr.next.as_mut() };
-		
+
 		if next == *head || curr == next {
 			self.head = None;
 		}
@@ -250,25 +241,18 @@ impl<'iter, T> IntoIterator for &'iter NAList<T> {
 #[derive(Debug)]
 pub struct Iter<'iter, T> {
 	head: Option<&'iter Node<T>>,
-	curr: NonNull<Node<T>>
+	curr: NonNull<Node<T>>,
 }
 
 impl<'iter, T> Iter<'iter, T> {
 	fn new(cont: &NAList<T>) -> Self {
 		let (head, curr) = match cont.head {
 			None => (None, NonNull::dangling()),
-			Some(node) => (
-				Some(&* unsafe { node.as_ref() }),
-				node
-			)
+			Some(node) => (Some(&*unsafe { node.as_ref() }), node),
 		};
 
-		Iter {
-			head,
-			curr,
-		}
+		Iter { head, curr }
 	}
-
 }
 
 impl<'iter, T> Iterator for Iter<'iter, T> {
@@ -278,7 +262,7 @@ impl<'iter, T> Iterator for Iter<'iter, T> {
 		let curr = unsafe { self.curr.as_mut() };
 		let next = unsafe { curr.next.as_mut() };
 
-		if  next == *head  {
+		if next == *head {
 			self.head = None;
 		}
 
