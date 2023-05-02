@@ -1,28 +1,29 @@
 use super::PAGE_SIZE;
-use super::dealloc_pages_to_page_alloc;
+use super::dealloc_block_to_page_alloc;
 use super::size_cache::free_list::FreeList;
 
 pub trait CacheBase {
 	fn free_list(&mut self) -> &mut FreeList;
 	fn page_count(&mut self) -> &mut usize;
+	fn rank(&self) -> usize;
 
 	fn cache_shrink(&mut self) {
+		let rank = self.rank();
 		let free_list = self.free_list();
+
 		let (mut satisfied, not) = free_list
 			.iter_mut()
 			.partition(|node| node.bytes() >= PAGE_SIZE);
-	
 		(*free_list) = not;
 		
-		let mut shrinked_count = 0;
-
+		let mut shrinked_page = 0;
 		satisfied.iter_mut().for_each(|node| {
-			let (ptr, count) = node.shrink(free_list);	
-			shrinked_count += count;
-			unsafe { dealloc_pages_to_page_alloc(ptr, count) };
+			let (blk_ptr, blk_cnt) = node.shrink(free_list, rank);
+			shrinked_page += blk_cnt * (1 << rank);
+			unsafe { dealloc_block_to_page_alloc(blk_ptr, blk_cnt, rank) };
 		});
 
-		(*self.page_count()) -= shrinked_count;
+		(*self.page_count()) -= shrinked_page;
 	}
 }
 
@@ -32,6 +33,11 @@ impl PartialEq for dyn CacheBase {
 	}
 }
 
+
+/// Initialization function for cache allocator.
+/// 
+/// # Safety
+/// The memory pointed by `ptr` must be reserved for cache allocator.
 pub trait CacheInit: Default {
 	unsafe fn cache_init(ptr: *mut Self) {
 		(*ptr) = Self::default();

@@ -34,7 +34,7 @@ impl FreeList {
                 self.iter_mut().find(|n| f(n)).map(|n| n.as_non_null())
         }
 
-        pub fn check_double_free<T>(&mut self, ptr: *mut T) -> bool
+        pub fn check_double_free<T>(&mut self, ptr: NonNull<T>) -> bool
         {
                 self.iter_mut().find(|node| node.contains(ptr)).is_some()
         }

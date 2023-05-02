@@ -5,9 +5,8 @@ use core::ptr::NonNull;
 use core::slice;
 use core::alloc::AllocError;
 
-use crate::mm::slub::{alloc_pages_from_page_alloc};
 use super::cache::{align_with_hw_cache, CacheBase, CacheInit};
-use super::PAGE_SIZE;
+use super::{PAGE_SIZE, alloc_block_from_page_alloc};
 
 use self::free_list::{FreeList, FreeNode};
 
@@ -48,18 +47,21 @@ impl<'page, const N: usize> SizeCache<'page, N> {
 			}).ok_or(AllocError)
 	}
 
+	/// Safety
+	/// 
+	/// `ptr` must point a memory block allocated by `self`.
 	pub unsafe fn dealloc(&mut self, ptr: NonNull<u8>) {
-		if self.free_list.check_double_free(ptr.as_ptr()) {
+		if self.free_list.check_double_free(ptr) {
 			panic!("size_cache: double free");
 		}
 		
-		let ptr = slice::from_raw_parts_mut::<u8>(ptr.as_ptr().cast(), Self::SIZE);
-		let node = FreeNode::construct_at(ptr);
+		let mem = slice::from_raw_parts_mut::<u8>(ptr.as_ptr().cast(), Self::SIZE);
+		let node = FreeNode::construct_at(mem);
 		self.free_list.insert(node);
 	}
 
 	fn alloc_pages(&mut self, rank: usize) -> Result<&'page mut [u8]> {
-		let page = alloc_pages_from_page_alloc::<'page>(rank)?;
+		let page = alloc_block_from_page_alloc::<'page>(rank)?;
 		self.page_count += 1 << rank;
 		Ok(page)
 	}
@@ -72,6 +74,10 @@ impl<'page, const N : usize> CacheBase for SizeCache<'_, N> {
 
 	fn page_count(&mut self) -> &mut usize {
 		&mut self.page_count
+	}
+	
+	fn rank(&self) -> usize {
+	    Self::RANK
 	}
 }
 
@@ -94,12 +100,12 @@ const fn rank_of(size: usize) -> usize {
 	rank
 }
 
-pub trait ForSizeCache {
+pub trait SizeCacheTrait {
 	fn allocate(&mut self) -> *mut u8;
 	unsafe fn deallocate(&mut self, ptr: *mut u8);
 }
 
-impl<'page, const N: usize> ForSizeCache for SizeCache<'page, N> {
+impl<'page, const N: usize> SizeCacheTrait for SizeCache<'page, N> {
 	fn allocate(&mut self) -> *mut u8 {
 	    match self.alloc() {
 		Ok(ptr) => ptr.as_ptr(),

@@ -17,9 +17,9 @@ impl<T> Node<T> {
         /// 
         /// # Safety
         /// 
-        /// * The size of memory chunk must be bigger than FreeNode::NODE_SIZE
-        pub unsafe fn construct_at(ptr: &mut [u8], data: T) -> &mut Self {
-                let ptr = ptr.as_mut_ptr() as *mut Self;
+        /// * The size of memory chunk must be bigger than Node::NODE_SIZE
+        pub unsafe fn construct_at(mem: &mut [u8], data: T) -> &mut Self {
+                let ptr = mem.as_mut_ptr() as *mut Self;
                 let next = NonNull::new_unchecked(&mut (*ptr));
                 let prev = next.clone();
                 (*ptr) = Node { prev, next, data };

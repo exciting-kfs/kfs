@@ -1,19 +1,18 @@
+use core::marker::PhantomPinned;
 use core::ptr::NonNull;
 use core::mem::size_of;
+use core::slice;
 
-use crate::mm::slub::{PAGE_SIZE, PAGE_ALIGN};
-use crate::mm::util::{is_aligned, prev_align, next_align};
+use crate::mm::util::{is_aligned, prev_align, next_align, align_of_rank, size_of_rank};
 
 use super::FreeList;
-
-#[derive(Debug, PartialEq)]
-pub struct TooBigError;
 
 #[derive(Debug)]
 pub struct FreeNode {
     pub prev: NonNull<FreeNode>,
     pub next: NonNull<FreeNode>,
     pub bytes: usize,
+    _pin: PhantomPinned
 }
 
 impl PartialEq for FreeNode {
@@ -36,7 +35,7 @@ impl FreeNode {
                 
                 let next = NonNull::new_unchecked(&mut (*mem));
                 let prev = next.clone();
-                (*mem) = FreeNode { prev, next, bytes };
+                (*mem) = FreeNode { prev, next, bytes, _pin: PhantomPinned };
                 &mut (*mem)
 	}
 
@@ -80,11 +79,14 @@ impl FreeNode {
                 self.prev = self.as_non_null();
         }
 
-        pub fn contains<T>(&self, ptr: *mut T) -> bool {
-                let ptr = ptr.cast::<u8>().cast_const();
-                let s = self.addr().cast::<u8>();
-                let e = unsafe { s.offset(self.bytes() as isize) };
-                e > ptr &&  ptr >= s
+        pub fn contains<T>(&self, ptr: NonNull<T>) -> bool {
+                let ptr = ptr.as_ptr() as usize;
+                let s = self.addr().cast::<u8>() as usize;
+                
+                match s.checked_add(self.bytes) {
+                        Some(e) => s <= ptr && ptr < e,
+                        None => s <= ptr && ptr <= usize::MAX
+                }
         }
 
         /// It is called by `CacheManager` for collecting excess cache memory allcated by `PAGE_ALLOC`.
@@ -122,33 +124,36 @@ impl FreeNode {
         ///   |=======|-------|---))---|-------|
         /// ```
         ///
-        pub fn shrink(&mut self, free_list: &mut FreeList) -> (*mut u8, usize) {
+        pub fn shrink(&mut self, free_list: &mut FreeList, rank: usize) -> (NonNull<u8>, usize) {
+                let align = align_of_rank(rank);
+                let size = size_of_rank(rank);
+
                 let mut total = self.bytes;
                 let start = self.as_mut_ptr().cast::<u8>() as usize;
                 let end = match start.checked_add(total) {
                         Some(e) => e,
                         None => 0,
                 };
-                let next_align = next_align(start, PAGE_ALIGN);
+                let next_align = next_align(start, align);
 
-                if !is_aligned(end, PAGE_ALIGN) {
-                        let len = end - prev_align(end, PAGE_ALIGN);
+                if !is_aligned(end, align) {
+                        let len = end - prev_align(end, align);
                         let n = unsafe {
                                 FreeNode::construct_at(
-                                        core::slice::from_raw_parts_mut(end as *mut u8, len)
+                                        slice::from_raw_parts_mut(end as *mut u8, len)
                                 )
                         };
                         total -= n.bytes;
                         free_list.insert(n);
                 }
 
-                if !is_aligned(start, PAGE_ALIGN) {
+                if !is_aligned(start, align) {
                         self.bytes = next_align - start;
                         total -= self.bytes;
                         free_list.insert(self);
                 }
 
-                (next_align as *mut u8 , total / PAGE_SIZE)
+                (unsafe { NonNull::new_unchecked(next_align as *mut u8) }, total / size)
         }
 
         #[inline(always)]
@@ -188,8 +193,8 @@ pub(super) mod node_tests {
 
         pub fn new_node(page: &mut [u8], offset:usize, bytes: usize) -> &mut FreeNode {
                 let ptr = unsafe { (page as *mut [u8] as *mut u8).offset(offset as isize) };
-                let ptr = unsafe { core::slice::from_raw_parts_mut(ptr, bytes) };
-                unsafe { FreeNode::construct_at(ptr) }
+                let mem = unsafe { core::slice::from_raw_parts_mut(ptr, bytes) };
+                unsafe { FreeNode::construct_at(mem) }
         }
 
         #[ktest]

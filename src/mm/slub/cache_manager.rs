@@ -3,6 +3,7 @@ mod no_alloc_list;
 use core::mem::size_of;
 use core::ptr::NonNull;
 use core::alloc::AllocError;
+use core::slice;
 
 use self::no_alloc_list::{Node, NAList};
 
@@ -23,39 +24,39 @@ pub struct CacheManager<'a> {
 
 impl<'a> CacheManager<'a> {
 	pub const fn new() -> Self {
-		CacheManager { cache_space: SizeCache::new(), node_space: SizeCache::new(), list: NAList::new() }
+		CacheManager {
+			cache_space: SizeCache::new(),
+			node_space: SizeCache::new(),
+			list: NAList::new()
+		}
 	}
 
 	pub fn new_allocator<A>(&mut self) -> Result<NonNull<A>>
 	where A: CacheBase + CacheInit + 'static // TODO why static?
 	{
-		let for_cache =  self.cache_space.alloc()?.as_ptr() as *mut A;
-		unsafe { A::cache_init(for_cache) };
+		let mem_cache =  self.cache_space.alloc()?.as_ptr() as *mut A;
+		let mem_node = self.node_space.alloc()?.as_ptr();
 
-		let for_node = self.node_space.alloc()?.as_ptr();
-		let node = unsafe {
-			let node_ptr = core::slice::from_raw_parts_mut(for_node, NODE_SIZE);
-			let data = NonNull::new_unchecked(for_cache as *mut dyn CacheBase);
-			Node::construct_at(node_ptr, data)
-		};
-
-		self.list.insert_front(node);
-		NonNull::new(for_cache).ok_or(AllocError)
+		unsafe {
+			A::cache_init(mem_cache);
+			let ptr_cache = mem_cache as *mut dyn CacheBase;
+			let node = init_list_node(mem_node, ptr_cache);
+			self.list.insert_front(node);
+		}
+		NonNull::new(mem_cache).ok_or(AllocError)
 	}
 
 	pub fn register(&mut self, cache: &'static mut dyn CacheBase) -> Result<()> { // TODO why static?
-		let node = unsafe {
-			let data = NonNull::new_unchecked(cache as *mut dyn CacheBase);
-			let for_node = self.node_space.alloc()?.as_ptr();
-
-			let node_ptr = core::slice::from_raw_parts_mut(for_node, NODE_SIZE);
-			Node::construct_at(node_ptr, data)
-		};
+		let mem_node = self.node_space.alloc()?.as_ptr();
+		let node = unsafe { init_list_node(mem_node, cache as *mut dyn CacheBase) };
 
 		self.list.insert_front(node);
 		Ok(())
 	}
 
+	/// Safety
+	/// 
+	/// `ptr` must point cache alloctor.
 	pub unsafe fn drop_allocator<A>(&mut self, ptr: NonNull<A>)
 	where A: CacheBase + 'static
 	{
@@ -93,18 +94,34 @@ impl<'a> CacheManager<'a> {
 	}
 }
 
+/// # Safety
+/// 
+/// * `cache` pointer must not be null.
+/// * The memory pointed by `mem_node` must be reserved for Node initialization.
+unsafe fn init_list_node<'a>(mem_node: *mut u8, cache: *mut dyn CacheBase) -> &'a mut Node<NonNull<dyn CacheBase>> {
+	let data = NonNull::new_unchecked(cache);
+	let mem = slice::from_raw_parts_mut(mem_node, NODE_SIZE);
+	Node::construct_at(mem, data)
+}
+
 
 #[macro_export]
 macro_rules! kmem_cache_register {
 	($cache:ident) => {
+		let mut err_count = 0;
 		for _ in 0..$crate::mm::slub::REGISTER_TRY {
 			match $crate::mm::slub::CM.register(&mut $cache) {
 				Ok(_) => break,
 				Err(_) => {
 					// pr_debug;
+					err_count += 1;
 					$crate::mm::slub::CM.cache_shrink();
 				},
 			}
+		}
+		if err_count == $crate::mm::slub::REGISTER_TRY {
+			$crate::pr_info!("cache_manager: register: out of memory.");
+			panic!(); // TODO 이게 맞나..?
 		}
 	}
 }
