@@ -1,6 +1,6 @@
 //! Utils for running test
 //!
-//! To mark normal function as test function, use \#[ktest] attribute.
+//! To mark normal function as test function, use \#\[ktest\] attribute.
 //! That will automatically create `static TestCase` variable for that function,
 //! and link against .test_array section.
 //! In .test_array section, there is linker provided start and end of section symbol

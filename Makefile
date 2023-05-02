@@ -56,7 +56,7 @@ RESCUE_IMG := $(TARGET_ROOT)/$(RESCUE_IMG_NAME)
 
 LINKER_SCRIPT := linker-script/kernel.ld
 
-DOC := $(TARGET_ROOT)/doc/kernel/index.html
+DOC := $(shell dirname $(TARGET_ROOT))/doc/kernel/index.html
 
 # === Phony recipes ===
 
