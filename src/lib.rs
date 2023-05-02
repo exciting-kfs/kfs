@@ -110,9 +110,14 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 
 	unsafe {
 		boot::BootInfo::init(bi_header, magic).unwrap();
+		// allocation (alloc_n<T>(count)) starts here.
+		let (meta_page_ptr, count) =
+			MetaPageTable::alloc(&mut BOOT_INFO.assume_init_mut().mem_info);
+		// allocation end
 		VMemory::init(&BOOT_INFO.assume_init_ref().mem_info);
-		MetaPageTable::init();
-		PageAllocator::init(&VMEMORY.assume_init_ref());
+
+		MetaPageTable::init(meta_page_ptr, count);
+		PageAllocator::init(VMEMORY.assume_init_ref());
 	}
 
 	match cfg!(ktest) {
