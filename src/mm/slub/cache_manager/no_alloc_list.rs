@@ -181,108 +181,108 @@ fn extend<I: IntoIterator<Item = &'a mut Node<T>>>(&mut self, iter: I) {
 }
 
 impl<T> Default for NAList<T> {
-fn default() -> Self {
-	NAList::new()
+	fn default() -> Self {
+		NAList::new()
+	}
 }
-}
 
 
 
-/// Iterator - IterMut
+	/// Iterator - IterMut
 
 impl<'iter, T> IntoIterator for &'iter mut NAList<T> {
-        type Item = &'iter mut Node<T>;
-        type IntoIter = IterMut<'iter, T>;
-        fn into_iter(self) -> Self::IntoIter {
-            self.iter_mut()
-        }
+	type Item = &'iter mut Node<T>;
+	type IntoIter = IterMut<'iter, T>;
+	fn into_iter(self) -> Self::IntoIter {
+		self.iter_mut()
+	}
 }
 
 #[derive(Debug)]
 pub struct IterMut<'iter, T> {
-        head: Option<&'iter mut Node<T>>,
-        curr: NonNull<Node<T>>,
+	head: Option<&'iter mut Node<T>>,
+	curr: NonNull<Node<T>>,
 }
 
 impl<'iter, T> IterMut<'iter, T> {
-        fn new(cont: &mut NAList<T>) -> Self {
-                let (head, curr) = match cont.head {
-                        None => (None, NonNull::dangling()),
-                        Some(mut node) => (
-                                Some(&mut *unsafe { node.as_mut() }),
-                                node
-                        )
-                };
+	fn new(cont: &mut NAList<T>) -> Self {
+		let (head, curr) = match cont.head {
+			None => (None, NonNull::dangling()),
+			Some(mut node) => (
+				Some(&mut *unsafe { node.as_mut() }),
+				node
+			)
+		};
 
-                IterMut {
-                        head,
-                        curr,
-                }
-        }
+		IterMut {
+			head,
+			curr,
+		}
+	}
 }
 
 impl<'iter, T> Iterator for IterMut<'iter, T> {
-        type Item = &'iter mut Node<T>;
-        fn next(&mut self) -> Option<Self::Item> {
-                let head = self.head.as_ref()?;
-                let curr = unsafe { self.curr.as_mut() };
-                let next = unsafe { curr.next.as_mut() };
-                
-                if next == *head || curr == next { // hmm
-                        self.head = None;
-                }
+	type Item = &'iter mut Node<T>;
+	fn next(&mut self) -> Option<Self::Item> {
+		let head = self.head.as_ref()?;
+		let curr = unsafe { self.curr.as_mut() };
+		let next = unsafe { curr.next.as_mut() };
+		
+		if next == *head || curr == next {
+			self.head = None;
+		}
 
-                self.curr = curr.next;
-                Some(curr)
-        }
+		self.curr = curr.next;
+		Some(curr)
+	}
 }
 
 /// Iterator - Iter
 
 impl<'iter, T> IntoIterator for &'iter NAList<T> {
-        type Item = &'iter T;
-        type IntoIter = Iter<'iter, T>;
-        fn into_iter(self) -> Self::IntoIter {
-            self.iter()
-        }
+	type Item = &'iter T;
+	type IntoIter = Iter<'iter, T>;
+	fn into_iter(self) -> Self::IntoIter {
+		self.iter()
+	}
 }
 
 #[derive(Debug)]
 pub struct Iter<'iter, T> {
-        head: Option<&'iter Node<T>>,
-        curr: NonNull<Node<T>>
+	head: Option<&'iter Node<T>>,
+	curr: NonNull<Node<T>>
 }
 
 impl<'iter, T> Iter<'iter, T> {
-        fn new(cont: &NAList<T>) -> Self {
-                let (head, curr) = match cont.head {
-                        None => (None, NonNull::dangling()),
-                        Some(node) => (
-                                Some(&* unsafe { node.as_ref() }),
-                                node
-                        )
-                };
+	fn new(cont: &NAList<T>) -> Self {
+		let (head, curr) = match cont.head {
+			None => (None, NonNull::dangling()),
+			Some(node) => (
+				Some(&* unsafe { node.as_ref() }),
+				node
+			)
+		};
 
-                Iter {
-                        head,
-                        curr,
-                }
-        }
+		Iter {
+			head,
+			curr,
+		}
+	}
 
 }
 
 impl<'iter, T> Iterator for Iter<'iter, T> {
-        type Item = &'iter T;
-        fn next(&mut self) -> Option<Self::Item> {
-                let head = self.head.as_ref()?;
-                let curr = unsafe { self.curr.as_mut() };
-                let next = unsafe { curr.next.as_mut() };
+	type Item = &'iter T;
+	fn next(&mut self) -> Option<Self::Item> {
+		let head = self.head.as_ref()?;
+		let curr = unsafe { self.curr.as_mut() };
+		let next = unsafe { curr.next.as_mut() };
 
-                if  next == *head  {
-                        self.head = None;
-                }
+		if  next == *head  {
+			self.head = None;
+		}
 
-                self.curr = curr.next;
-                Some(&curr.data)
-        }
+		self.curr = curr.next;
+		Some(&curr.data)
+	}
 }
