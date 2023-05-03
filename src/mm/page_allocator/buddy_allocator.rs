@@ -3,10 +3,10 @@
 
 use super::constant::*;
 use super::free_list::FreeList;
-use super::util::{addr_to_pfn, addr_to_pfn_64, pfn_to_addr, rank_to_pages};
+use super::util::{addr_to_pfn, pfn_to_addr, rank_to_pages};
 
 use crate::mm::meta_page::{MetaPage, META_PAGE_TABLE};
-use crate::mm::util::{next_align_64, phys_to_virt, to_phys_64, virt_to_phys};
+use crate::mm::util::{next_align, phys_to_virt, virt_to_phys};
 
 use core::fmt::{self, Display};
 use core::mem::size_of;
@@ -21,16 +21,17 @@ pub struct BuddyAllocator {
 pub struct Page;
 
 impl BuddyAllocator {
-	pub unsafe fn construct_at(ptr: *mut BuddyAllocator, mut cover_mem: Range<u64>) {
+	pub unsafe fn construct_at(ptr: *mut BuddyAllocator, mut cover_pfn: Range<usize>) {
 		let free_list = FreeList::construct_at(addr_of_mut!((*ptr).free_list));
 
-		cover_mem.start = next_align_64(cover_mem.start, BLOCK_SIZE as u64);
+		cover_pfn.start = next_align(cover_pfn.start, rank_to_pages(MAX_RANK));
 
-		for mut entry in cover_mem
-			.step_by(BLOCK_SIZE)
-			.map(|addr| addr_to_pfn_64(to_phys_64(addr)) as usize)
-			.map(|pfn| NonNull::from(&mut unsafe { META_PAGE_TABLE.assume_init_mut() }[pfn]))
-		{
+		for mut entry in cover_pfn
+			.step_by(rank_to_pages(MAX_RANK))
+			.map(|virt_pfn| addr_to_pfn(virt_to_phys(pfn_to_addr(virt_pfn))))
+			.map(|phys_pfn| {
+				NonNull::from(&mut unsafe { META_PAGE_TABLE.assume_init_mut() }[phys_pfn])
+			}) {
 			entry.as_mut().rank = MAX_RANK;
 			free_list.add(entry);
 		}

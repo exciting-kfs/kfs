@@ -4,9 +4,9 @@ use core::ops::{Deref, DerefMut};
 use core::ptr::NonNull;
 use core::slice::from_raw_parts_mut;
 
-use super::boot_alloc;
+use crate::boot::PMemory;
+
 use super::page_allocator::util::{addr_to_pfn_64, rank_to_pages};
-use super::x86::init::VMEMORY;
 
 #[repr(C, align(8))]
 pub struct MetaPage {
@@ -23,15 +23,18 @@ pub struct MetaPageTable(&'static mut [MetaPage]);
 pub static mut META_PAGE_TABLE: MaybeUninit<MetaPageTable> = MaybeUninit::uninit();
 
 impl MetaPageTable {
-	pub unsafe fn init() {
-		let page_count = addr_to_pfn_64(VMEMORY.assume_init_ref().normal.end) as usize;
+	pub unsafe fn alloc(pmem: &mut PMemory) -> (*mut MetaPage, usize) {
+		let page_count = addr_to_pfn_64(pmem.linear.end) as usize;
 
-		let base = boot_alloc::alloc_n::<MetaPage>(page_count);
-		for entry in (0..page_count).map(|x| base.add(x)) {
+		(pmem.alloc_n::<MetaPage>(page_count), page_count)
+	}
+
+	pub unsafe fn init(base_ptr: *mut MetaPage, count: usize) {
+		for entry in (0..count).map(|x| base_ptr.add(x)) {
 			MetaPage::construct_at(entry);
 		}
 
-		META_PAGE_TABLE.write(MetaPageTable(from_raw_parts_mut(base, page_count)));
+		META_PAGE_TABLE.write(MetaPageTable(from_raw_parts_mut(base_ptr, count)));
 	}
 }
 

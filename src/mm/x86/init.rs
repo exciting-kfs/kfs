@@ -3,7 +3,7 @@ use super::x86_page::{PageFlag, PD, PDE};
 
 use crate::boot::PMemory;
 use crate::mm::constant::*;
-use crate::mm::util::to_virt_64;
+use crate::mm::page_allocator::util::addr_to_pfn;
 
 use core::mem::MaybeUninit;
 use core::ops::Range;
@@ -13,9 +13,8 @@ extern "C" {
 }
 
 pub struct VMemory {
-	pub normal: Range<u64>,
-	pub high: Range<u64>,
-	pub reserved: Range<u64>,
+	pub normal_pfn: Range<usize>,
+	pub high_pfn: Range<usize>,
 }
 
 pub static mut VMEMORY: MaybeUninit<VMemory> = MaybeUninit::uninit();
@@ -40,16 +39,12 @@ impl VMemory {
 
 		invalidate_all_tlb();
 
-		let normal_start = to_virt_64(VM_OFFSET as u64);
-		let normal_end = to_virt_64(p_idx as u64 * PT_COVER_SIZE as u64);
-
-		let high_start = to_virt_64(p_idx as u64 * PT_COVER_SIZE as u64);
-		let high_end = to_virt_64(pmem.linear.end);
+		let border_pfn = addr_to_pfn(VM_OFFSET);
 
 		VMEMORY.write(VMemory {
-			normal: normal_start..normal_end,
-			high: high_start..high_end,
-			reserved: normal_start..to_virt_64(pmem.kernel_end),
+			normal_pfn: (border_pfn + addr_to_pfn(pmem.kernel_end as usize) + 1)
+				..(border_pfn + p_idx * PD_ENTRIES),
+			high_pfn: 1..(p_idx_max - p_idx) * PD_ENTRIES,
 		});
 	}
 }
