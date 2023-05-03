@@ -73,10 +73,8 @@ impl BootInfo {
 
 		let ksyms = KernelSymbol::new(symtab, strtab);
 
-		let mut header_end = bi.end_address() as usize;
-		if header_end >= VM_OFFSET {
-			header_end -= VM_OFFSET;
-		}
+		let end_addr = bi.end_address();
+		let header_end = end_addr.checked_sub(VM_OFFSET).unwrap_or(end_addr);
 
 		let kernel_end = max(kernel_end as u64, header_end as u64);
 
