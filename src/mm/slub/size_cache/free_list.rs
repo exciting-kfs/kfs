@@ -1,7 +1,7 @@
 mod free_node;
 
-use core::ptr::NonNull;
 use core::fmt::Debug;
+use core::ptr::NonNull;
 
 pub use self::free_node::FreeNode;
 
@@ -10,7 +10,6 @@ pub struct FreeList {
 }
 
 impl FreeList {
-
 	pub const fn new() -> Self {
 		FreeList { head: None }
 	}
@@ -29,13 +28,13 @@ impl FreeList {
 	}
 
 	pub fn find_if<F>(&mut self, mut f: F) -> Option<NonNull<FreeNode>>
-	where F: FnMut(&FreeNode) -> bool
+	where
+		F: FnMut(&FreeNode) -> bool,
 	{
 		self.iter_mut().find(|n| f(n)).map(|n| n.as_non_null())
 	}
 
-	pub fn check_double_free<T>(&mut self, ptr: NonNull<T>) -> bool
-	{
+	pub fn check_double_free<T>(&mut self, ptr: NonNull<T>) -> bool {
 		self.iter_mut().find(|node| node.contains(ptr)).is_some()
 	}
 
@@ -45,11 +44,13 @@ impl FreeList {
 			return;
 		}
 
-		let base = unsafe { match self.find_if(|n| n.addr() > node.addr()) {
-			Some(mut bp) =>  bp.as_mut(),
-			None => self.head.unwrap().as_mut()
-		}};
-		
+		let base = unsafe {
+			match self.find_if(|n| n.addr() > node.addr()) {
+				Some(mut bp) => bp.as_mut(),
+				None => self.head.unwrap().as_mut(),
+			}
+		};
+
 		self.insert_front(base, node);
 		node.try_merge();
 	}
@@ -80,9 +81,10 @@ impl FreeList {
 	}
 
 	pub fn remove_if<'page, F>(&mut self, f: F) -> Option<&'page mut FreeNode>
-	where F: FnMut(&FreeNode) -> bool
+	where
+		F: FnMut(&FreeNode) -> bool,
 	{
-		self.find_if(f).map(|mut node_ptr|{
+		self.find_if(f).map(|mut node_ptr| {
 			let node = unsafe { node_ptr.as_mut() };
 			self.remove(node);
 			node
@@ -91,7 +93,7 @@ impl FreeList {
 
 	fn remove(&mut self, node: &mut FreeNode) {
 		self.head.map(|mut head_ptr| {
-			let head = unsafe { head_ptr.as_mut()};
+			let head = unsafe { head_ptr.as_mut() };
 			if node == head {
 				self.head = Some(head.next);
 			}
@@ -126,7 +128,7 @@ impl Default for FreeList {
 	}
 }
 
-	/// Iterator - IterMut
+/// Iterator - IterMut
 
 impl<'iter> IntoIterator for &'iter mut FreeList {
 	type Item = &'iter mut FreeNode;
@@ -146,16 +148,10 @@ impl<'iter> IterMut<'iter> {
 	fn new(cont: &mut FreeList) -> Self {
 		let (head, curr) = match cont.head {
 			None => (None, NonNull::dangling()),
-			Some(mut node) => (
-				Some(&mut *unsafe { node.as_mut() }),
-				node
-			)
+			Some(mut node) => (Some(&mut *unsafe { node.as_mut() }), node),
 		};
 
-		IterMut {
-			head,
-			curr,
-		}
+		IterMut { head, curr }
 	}
 }
 
@@ -165,8 +161,9 @@ impl<'iter> Iterator for IterMut<'iter> {
 		let head = self.head.as_ref()?;
 		let curr = unsafe { self.curr.as_mut() };
 		let next = unsafe { curr.next.as_mut() };
-		
-		if next == *head || curr == next { // for partition
+
+		if next == *head || curr == next {
+			// for partition
 			self.head = None;
 		}
 
@@ -188,25 +185,18 @@ impl<'iter> IntoIterator for &'iter FreeList {
 #[derive(Debug)]
 pub struct Iter<'iter> {
 	head: Option<&'iter FreeNode>,
-	curr: NonNull<FreeNode>
+	curr: NonNull<FreeNode>,
 }
 
 impl<'iter> Iter<'iter> {
 	fn new(cont: &FreeList) -> Self {
 		let (head, curr) = match cont.head {
 			None => (None, NonNull::dangling()),
-			Some(node) => (
-				Some(&* unsafe { node.as_ref() }),
-				node
-			)
+			Some(node) => (Some(&*unsafe { node.as_ref() }), node),
 		};
 
-		Iter {
-			head,
-			curr,
-		}
+		Iter { head, curr }
 	}
-
 }
 
 impl<'iter> Iterator for Iter<'iter> {
@@ -216,7 +206,7 @@ impl<'iter> Iterator for Iter<'iter> {
 		let curr = unsafe { self.curr.as_mut() };
 		let next = unsafe { curr.next.as_mut() };
 
-		if  next == *head  {
+		if next == *head {
 			self.head = None;
 		}
 
@@ -256,10 +246,8 @@ pub(super) mod test {
 		assert_eq!(last.addr(), node.as_mut_ptr());
 	}
 
-
 	#[ktest]
 	fn test_insert_merged() {
-
 		fn init_list() -> FreeList {
 			let page = unsafe { &mut PAGE1 };
 			let mut list = FreeList::new();
@@ -275,7 +263,6 @@ pub(super) mod test {
 
 	#[ktest]
 	fn test_insert() {
-
 		fn init_list() -> FreeList {
 			let page = unsafe { &mut PAGE1 };
 			let mut list = FreeList::new();
@@ -322,14 +309,17 @@ pub(super) mod test {
 
 	#[ktest]
 	fn test_remove() {
-		fn init_list<'a>() -> (FreeList,(&'a mut FreeNode, &'a mut FreeNode, &'a mut FreeNode)) {
+		fn init_list<'a>() -> (
+			FreeList,
+			(&'a mut FreeNode, &'a mut FreeNode, &'a mut FreeNode),
+		) {
 			let page = unsafe { &mut PAGE1 };
 			let mut list = FreeList::new();
 
 			let node0 = unsafe { new_node(page, 0, 30).as_non_null().as_mut() };
 			let node1 = unsafe { new_node(page, 50, 20).as_non_null().as_mut() };
 			let node2 = unsafe { new_node(page, 100, 100).as_non_null().as_mut() };
-			
+
 			list.insert(node0);
 			list.insert(node1);
 			list.insert(node2);
@@ -337,19 +327,19 @@ pub(super) mod test {
 		}
 
 		// remove last
-		let ( mut list, nodes) = init_list();
+		let (mut list, nodes) = init_list();
 		list.remove(nodes.2);
 		assert_eq!(list.count(), 2);
 		assert_eq!(list.head.unwrap(), nodes.0.as_non_null());
 
 		// remove second
-		let ( mut list, nodes) = init_list();
+		let (mut list, nodes) = init_list();
 		list.remove(nodes.1);
 		assert_eq!(list.count(), 2);
 		assert_eq!(list.head.unwrap(), nodes.0.as_non_null());
 
 		// remove first
-		let ( mut list, nodes) = init_list();
+		let (mut list, nodes) = init_list();
 		list.remove(nodes.0);
 		assert_eq!(list.count(), 2);
 		assert_eq!(list.head.unwrap(), nodes.1.as_non_null());
@@ -366,15 +356,17 @@ pub(super) mod test {
 
 	#[ktest]
 	fn test_remove_if() {
-
-		fn init_list<'a>() -> (FreeList,(&'a mut FreeNode, &'a mut FreeNode, &'a mut FreeNode)) {
+		fn init_list<'a>() -> (
+			FreeList,
+			(&'a mut FreeNode, &'a mut FreeNode, &'a mut FreeNode),
+		) {
 			let page = unsafe { &mut PAGE1 };
 			let mut list = FreeList::new();
 
 			let node0 = unsafe { new_node(page, 0, 30).as_non_null().as_mut() };
 			let node1 = unsafe { new_node(page, 50, 20).as_non_null().as_mut() };
 			let node2 = unsafe { new_node(page, 100, 100).as_non_null().as_mut() };
-			
+
 			list.insert(node0);
 			list.insert(node1);
 			list.insert(node2);
@@ -391,7 +383,6 @@ pub(super) mod test {
 
 	#[ktest]
 	fn test_partition() {
-
 		fn init_list() -> FreeList {
 			let page = unsafe { &mut PAGE1 };
 			let mut list = FreeList::new();
@@ -401,10 +392,9 @@ pub(super) mod test {
 			list
 		}
 
-		fn do_test<F: FnMut(&&mut FreeNode)->bool>(condition: F, ans:(usize, usize)) {
+		fn do_test<F: FnMut(&&mut FreeNode) -> bool>(condition: F, ans: (usize, usize)) {
 			let mut list = init_list();
-			let (x, y) = list.iter_mut()
-				.partition::<FreeList, _>(condition);
+			let (x, y) = list.iter_mut().partition::<FreeList, _>(condition);
 
 			assert_eq!(x.count(), ans.0);
 			assert_eq!(y.count(), ans.1);

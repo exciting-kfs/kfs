@@ -1,4 +1,5 @@
-use super::PAGE_SIZE;
+use crate::mm::util::size_of_rank;
+
 use super::dealloc_block_to_page_alloc;
 use super::size_cache::free_list::FreeList;
 
@@ -13,9 +14,9 @@ pub trait CacheBase {
 
 		let (mut satisfied, not) = free_list
 			.iter_mut()
-			.partition(|node| node.bytes() >= PAGE_SIZE);
+			.partition(|node| node.bytes() >= size_of_rank(rank));
 		(*free_list) = not;
-		
+
 		let mut shrinked_page = 0;
 		satisfied.iter_mut().for_each(|node| {
 			let (blk_ptr, blk_cnt) = node.shrink(free_list, rank);
@@ -29,13 +30,12 @@ pub trait CacheBase {
 
 impl PartialEq for dyn CacheBase {
 	fn eq(&self, other: &Self) -> bool {
-	    self as *const dyn CacheBase as *const u8 == other as *const dyn CacheBase as *const u8
+		self as *const dyn CacheBase as *const u8 == other as *const dyn CacheBase as *const u8
 	}
 }
 
-
 /// Initialization function for cache allocator.
-/// 
+///
 /// # Safety
 /// The memory pointed by `ptr` must be reserved for cache allocator.
 pub trait CacheInit: Default {
@@ -45,11 +45,11 @@ pub trait CacheInit: Default {
 }
 
 pub const fn align_with_hw_cache(bytes: usize) -> usize {
-	const CACHE_LINE_SIZE : usize = 64; // L1
+	const CACHE_LINE_SIZE: usize = 64; // L1
 
 	match bytes {
 		0..=16 => 16,
 		17..=32 => 32,
-		_ => CACHE_LINE_SIZE * ((bytes - 1) / CACHE_LINE_SIZE + 1)
+		_ => CACHE_LINE_SIZE * ((bytes - 1) / CACHE_LINE_SIZE + 1),
 	}
 }

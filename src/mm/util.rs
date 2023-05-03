@@ -1,4 +1,4 @@
-use super::constant::{VM_OFFSET, PAGE_SHIFT};
+use super::constant::{PAGE_SHIFT, VM_OFFSET};
 
 #[inline]
 pub const fn phys_to_virt(addr: usize) -> usize {
@@ -78,7 +78,7 @@ pub const fn size_of_rank(rank: usize) -> usize {
 }
 
 /// It is wrapper function for `bsf` x86 instruction.
-/// 
+///
 /// # Safety
 /// `data` must not be 0. It is undefined behavior for x86 cpu.
 pub unsafe fn bit_scan_forward(data: usize) -> usize {
@@ -94,7 +94,7 @@ pub unsafe fn bit_scan_forward(data: usize) -> usize {
 }
 
 /// It is wrapper function for `bsr` x86 instruction.
-/// 
+///
 /// # Safety
 /// `data` must not be 0. It is undefined behavior for x86 cpu.
 pub unsafe fn bit_scan_reverse(data: usize) -> usize {
@@ -109,11 +109,10 @@ pub unsafe fn bit_scan_reverse(data: usize) -> usize {
 	ret
 }
 
-
 mod test {
-	use kfs_macro::ktest;
 	use super::*;
-	
+	use kfs_macro::ktest;
+
 	#[ktest]
 	fn test_bsfr() {
 		unsafe {
@@ -123,7 +122,7 @@ mod test {
 			assert_eq!(ret, 8);
 			let ret = bit_scan_forward(0x0101);
 			assert_eq!(ret, 0);
-	
+
 			let ret = bit_scan_reverse(0x01);
 			assert_eq!(ret, 0);
 			let ret = bit_scan_reverse(0x100);
