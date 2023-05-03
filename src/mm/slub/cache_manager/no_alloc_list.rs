@@ -20,7 +20,7 @@ impl<T> Node<T> {
 	/// * The size of memory chunk must be bigger than Node::NODE_SIZE
 	pub unsafe fn construct_at<'a>(mem: NonNull<u8>, data: T) -> &'a mut Self {
 		let ptr = mem.as_ptr() as *mut Self;
-		let next = NonNull::new_unchecked(&mut (*ptr));
+		let next = NonNull::new_unchecked(ptr);
 		let prev = next.clone();
 		(*ptr) = Node { prev, next, data };
 		&mut (*ptr)

@@ -32,7 +32,7 @@ impl FreeNode {
 		let bytes = bytes;
 		let mem = mem.as_ptr() as *mut Self;
 
-		let next = NonNull::new_unchecked(&mut (*mem));
+		let next = NonNull::new_unchecked(mem);
 		let prev = next.clone();
 		(*mem) = FreeNode {
 			prev,
