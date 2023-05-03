@@ -220,14 +220,15 @@ pub(super) mod node_tests {
 
 	#[ktest]
 	fn test_try_merge() {
+		const SIZE: usize = 32;
 		fn init_nodes<'a>() -> (&'a mut FreeNode, &'a mut FreeNode) {
 			let page = unsafe { &mut PAGE1.0 };
 
-			let node1 = new_node(page, 30, 30);
+			let node1 = new_node(page, SIZE, SIZE);
 			let mut node1_ptr = node1.as_non_null();
 			let node1 = unsafe { node1_ptr.as_mut() };
 
-			let node0 = new_node(page, 0, 30);
+			let node0 = new_node(page, 0, SIZE);
 			let node0_ptr = node0.as_non_null();
 
 			node1.prev = node0_ptr;
@@ -241,7 +242,7 @@ pub(super) mod node_tests {
 		let (node0, _) = init_nodes();
 		let node0_ptr = node0.as_non_null();
 		node0.try_merge();
-		assert_eq!(node0.bytes, 60);
+		assert_eq!(node0.bytes, SIZE * 2);
 		assert_eq!(node0.prev, node0_ptr);
 		assert_eq!(node0.next, node0_ptr);
 
@@ -249,18 +250,18 @@ pub(super) mod node_tests {
 		let (node0, node1) = init_nodes();
 		let node0_ptr = node0.as_non_null();
 		node1.try_merge();
-		assert_eq!(node0.bytes, 60);
+		assert_eq!(node0.bytes, SIZE * 2);
 		assert_eq!(node0.prev, node0_ptr);
 		assert_eq!(node0.next, node0_ptr);
 
 		// Never merge.
-		let node2 = new_node(unsafe { &mut PAGE1.0 }, 300, 30);
+		let node2 = new_node(unsafe { &mut PAGE1.0 }, 256, SIZE);
 		let node2_ptr = node2.as_non_null();
 		node2.try_merge();
-		assert_eq!(node0.bytes, 60);
+		assert_eq!(node0.bytes, SIZE * 2);
 		assert_eq!(node0.prev, node0_ptr);
 		assert_eq!(node0.next, node0_ptr);
-		assert_eq!(node2.bytes, 30);
+		assert_eq!(node2.bytes, SIZE);
 		assert_eq!(node2.prev, node2_ptr);
 		assert_eq!(node2.next, node2_ptr);
 	}
