@@ -242,7 +242,7 @@ pub(super) mod test {
 		let page = unsafe { &mut PAGE1.0 };
 		list.insert(new_node(page, 0, 32));
 
-		let node = new_node(page, 50, 22);
+		let node = new_node(page, 64, 22);
 		list.insert(node);
 
 		let last = list.iter_mut().last().unwrap();
@@ -254,14 +254,14 @@ pub(super) mod test {
 		fn init_list() -> FreeList {
 			let page = unsafe { &mut PAGE1.0 };
 			let mut list = FreeList::new();
-			list.insert(new_node(page, 0, 30));
-			list.insert(new_node(page, 30, 20));
+			list.insert(new_node(page, 0, 32));
+			list.insert(new_node(page, 32, 20));
 			list
 		}
 
 		let list = init_list();
 		let head = unsafe { list.head.unwrap().as_mut() };
-		assert_eq!(head.bytes(), 50) // 30 + 20 = 50
+		assert_eq!(head.bytes(), 52) // 32 + 20 = 52
 	}
 
 	#[ktest]
@@ -271,9 +271,9 @@ pub(super) mod test {
 			let mut list = FreeList::new();
 
 			// insert tail
-			list.insert(new_node(page, 100, 30));
-			list.insert(new_node(page, 500, 20));
-			list.insert(new_node(page, 1000, 100));
+			list.insert(new_node(page, 128, 30));
+			list.insert(new_node(page, 512, 20));
+			list.insert(new_node(page, 1024, 100));
 			list
 		}
 
@@ -292,7 +292,7 @@ pub(super) mod test {
 		let mut list = init_list();
 
 		// list:
-		// addr 100 - 500 - 1000
+		// addr 128 - 512 - 1024
 		// size 30  - 20  - 100
 
 		// insert head
@@ -301,48 +301,48 @@ pub(super) mod test {
 		assert_eq!(index_of(&list, node), 0);
 
 		// list:
-		// addr 0  - 100 - 500 - 1000
+		// addr 0  - 128 - 512 - 1024
 		// size 31 - 30  - 20  - 100
 
 		// insert mid
-		let node = new_node(page, 50, 25);
+		let node = new_node(page, 64, 25);
 		list.insert(node);
 		assert_eq!(index_of(&list, node), 1);
 	}
 
+	fn init_list_remove<'a>() -> (
+		FreeList,
+		(&'a mut FreeNode, &'a mut FreeNode, &'a mut FreeNode),
+	) {
+		let page = unsafe { &mut PAGE1.0 };
+		let mut list = FreeList::new();
+
+		let node0 = unsafe { new_node(page, 0, 30).as_non_null().as_mut() };
+		let node1 = unsafe { new_node(page, 64, 20).as_non_null().as_mut() };
+		let node2 = unsafe { new_node(page, 128, 100).as_non_null().as_mut() };
+
+		list.insert(node0);
+		list.insert(node1);
+		list.insert(node2);
+		(list, (node0, node1, node2))
+	}
+
 	#[ktest]
 	fn test_remove() {
-		fn init_list<'a>() -> (
-			FreeList,
-			(&'a mut FreeNode, &'a mut FreeNode, &'a mut FreeNode),
-		) {
-			let page = unsafe { &mut PAGE1.0 };
-			let mut list = FreeList::new();
-
-			let node0 = unsafe { new_node(page, 0, 30).as_non_null().as_mut() };
-			let node1 = unsafe { new_node(page, 50, 20).as_non_null().as_mut() };
-			let node2 = unsafe { new_node(page, 100, 100).as_non_null().as_mut() };
-
-			list.insert(node0);
-			list.insert(node1);
-			list.insert(node2);
-			(list, (node0, node1, node2))
-		}
-
 		// remove last
-		let (mut list, nodes) = init_list();
+		let (mut list, nodes) = init_list_remove();
 		list.remove(nodes.2);
 		assert_eq!(list.count(), 2);
 		assert_eq!(list.head.unwrap(), nodes.0.as_non_null());
 
 		// remove second
-		let (mut list, nodes) = init_list();
+		let (mut list, nodes) = init_list_remove();
 		list.remove(nodes.1);
 		assert_eq!(list.count(), 2);
 		assert_eq!(list.head.unwrap(), nodes.0.as_non_null());
 
 		// remove first
-		let (mut list, nodes) = init_list();
+		let (mut list, nodes) = init_list_remove();
 		list.remove(nodes.0);
 		assert_eq!(list.count(), 2);
 		assert_eq!(list.head.unwrap(), nodes.1.as_non_null());
@@ -359,24 +359,7 @@ pub(super) mod test {
 
 	#[ktest]
 	fn test_remove_if() {
-		fn init_list<'a>() -> (
-			FreeList,
-			(&'a mut FreeNode, &'a mut FreeNode, &'a mut FreeNode),
-		) {
-			let page = unsafe { &mut PAGE1.0 };
-			let mut list = FreeList::new();
-
-			let node0 = unsafe { new_node(page, 0, 30).as_non_null().as_mut() };
-			let node1 = unsafe { new_node(page, 50, 20).as_non_null().as_mut() };
-			let node2 = unsafe { new_node(page, 100, 100).as_non_null().as_mut() };
-
-			list.insert(node0);
-			list.insert(node1);
-			list.insert(node2);
-			(list, (node0, node1, node2))
-		}
-
-		let (mut list, nodes) = init_list();
+		let (mut list, nodes) = init_list_remove();
 
 		list.remove_if(|n| n.bytes() > 25);
 		assert_eq!(list.count(), 2);
@@ -390,8 +373,8 @@ pub(super) mod test {
 			let page = unsafe { &mut PAGE1.0 };
 			let mut list = FreeList::new();
 			list.insert(new_node(page, 0, 30));
-			list.insert(new_node(page, 50, 20));
-			list.insert(new_node(page, 100, 100));
+			list.insert(new_node(page, 64, 20));
+			list.insert(new_node(page, 128, 100));
 			list
 		}
 

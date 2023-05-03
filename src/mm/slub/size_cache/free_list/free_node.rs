@@ -285,11 +285,11 @@ pub(super) mod node_tests {
 			let mut node0_ptr = node0.as_non_null();
 			let node0 = unsafe { node0_ptr.as_mut() };
 
-			let node1 = new_node(page, 100, 32);
+			let node1 = new_node(page, 128, 32);
 			let mut node1_ptr = node1.as_non_null();
 			let node1 = unsafe { node1_ptr.as_mut() };
 
-			let node2 = new_node(page, 200, 33);
+			let node2 = new_node(page, 256, 33);
 			let mut node2_ptr = node2.as_non_null();
 			let node2 = unsafe { node2_ptr.as_mut() };
 
