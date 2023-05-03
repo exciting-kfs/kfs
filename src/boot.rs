@@ -121,11 +121,8 @@ fn parse_elf_tag(tag: &ElfSectionsTag) -> Result<(Symtab, Strtab, usize), Error>
 	let mut kernel_end = 0;
 
 	for section in tag.sections() {
-		let mut section_addr = section.end_address() as usize;
-
-		if section_addr >= VM_OFFSET {
-			section_addr -= VM_OFFSET;
-		}
+		let end_addr = section.end_address() as usize;
+		let section_addr = end_addr.checked_sub(VM_OFFSET).unwrap_or(end_addr);
 
 		kernel_end = max(kernel_end, section_addr);
 		if section.name() == ".symtab" {
