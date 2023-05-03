@@ -221,22 +221,25 @@ pub(super) mod test {
 	use kfs_macro::ktest;
 
 	const PAGE_SIZE: usize = 4096;
-	static mut PAGE1: [u8; PAGE_SIZE] = [0; PAGE_SIZE];
+
+	#[repr(align(4096))]
+	struct TestPage([u8; PAGE_SIZE]);
+	static mut PAGE1: TestPage = TestPage([0; PAGE_SIZE]);
 
 	#[ktest]
 	fn test_new() {
 		let mut list = FreeList::new();
-		let page = unsafe { &mut PAGE1 };
+		let page = unsafe { &mut PAGE1.0 };
 		list.insert(new_node(page, 0, PAGE_SIZE));
 
 		let head = list.head.unwrap().as_ptr().cast_const() as *const u8;
-		assert_eq!(head, unsafe { PAGE1.as_ptr() })
+		assert_eq!(head, unsafe { PAGE1.0.as_ptr() })
 	}
 
 	#[ktest]
 	fn test_last() {
 		let mut list = FreeList::new();
-		let page = unsafe { &mut PAGE1 };
+		let page = unsafe { &mut PAGE1.0 };
 		list.insert(new_node(page, 0, 32));
 
 		let node = new_node(page, 50, 22);
@@ -249,7 +252,7 @@ pub(super) mod test {
 	#[ktest]
 	fn test_insert_merged() {
 		fn init_list() -> FreeList {
-			let page = unsafe { &mut PAGE1 };
+			let page = unsafe { &mut PAGE1.0 };
 			let mut list = FreeList::new();
 			list.insert(new_node(page, 0, 30));
 			list.insert(new_node(page, 30, 20));
@@ -264,7 +267,7 @@ pub(super) mod test {
 	#[ktest]
 	fn test_insert() {
 		fn init_list() -> FreeList {
-			let page = unsafe { &mut PAGE1 };
+			let page = unsafe { &mut PAGE1.0 };
 			let mut list = FreeList::new();
 
 			// insert tail
@@ -285,7 +288,7 @@ pub(super) mod test {
 			count
 		}
 
-		let page = unsafe { &mut PAGE1 };
+		let page = unsafe { &mut PAGE1.0 };
 		let mut list = init_list();
 
 		// list:
@@ -313,7 +316,7 @@ pub(super) mod test {
 			FreeList,
 			(&'a mut FreeNode, &'a mut FreeNode, &'a mut FreeNode),
 		) {
-			let page = unsafe { &mut PAGE1 };
+			let page = unsafe { &mut PAGE1.0 };
 			let mut list = FreeList::new();
 
 			let node0 = unsafe { new_node(page, 0, 30).as_non_null().as_mut() };
@@ -360,7 +363,7 @@ pub(super) mod test {
 			FreeList,
 			(&'a mut FreeNode, &'a mut FreeNode, &'a mut FreeNode),
 		) {
-			let page = unsafe { &mut PAGE1 };
+			let page = unsafe { &mut PAGE1.0 };
 			let mut list = FreeList::new();
 
 			let node0 = unsafe { new_node(page, 0, 30).as_non_null().as_mut() };
@@ -384,7 +387,7 @@ pub(super) mod test {
 	#[ktest]
 	fn test_partition() {
 		fn init_list() -> FreeList {
-			let page = unsafe { &mut PAGE1 };
+			let page = unsafe { &mut PAGE1.0 };
 			let mut list = FreeList::new();
 			list.insert(new_node(page, 0, 30));
 			list.insert(new_node(page, 50, 20));

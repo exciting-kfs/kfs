@@ -193,7 +193,10 @@ pub(super) mod node_tests {
 	use super::*;
 
 	const PAGE_SIZE: usize = 4096;
-	static mut PAGE1: [u8; PAGE_SIZE] = [0; PAGE_SIZE];
+
+	#[repr(align(4096))]
+	struct TestPage([u8; PAGE_SIZE]);
+	static mut PAGE1: TestPage = TestPage([0; PAGE_SIZE]);
 
 	pub fn new_node(page: &mut [u8], offset: usize, bytes: usize) -> &mut FreeNode {
 		unsafe {
@@ -205,9 +208,9 @@ pub(super) mod node_tests {
 
 	#[ktest]
 	fn test_construct_at() {
-		let page = unsafe { &mut PAGE1 };
+		let page = unsafe { &mut PAGE1.0 };
 		let page_ptr = page.as_mut_ptr() as *mut FreeNode;
-		let ptr = unsafe { NonNull::new_unchecked(page as *mut u8) };
+		let ptr = unsafe { NonNull::new_unchecked(page_ptr as *mut u8) };
 		let node = unsafe { FreeNode::construct_at(ptr, page.len()) };
 
 		assert_eq!(node.next.as_ptr(), page_ptr);
@@ -218,7 +221,7 @@ pub(super) mod node_tests {
 	#[ktest]
 	fn test_try_merge() {
 		fn init_nodes<'a>() -> (&'a mut FreeNode, &'a mut FreeNode) {
-			let page = unsafe { &mut PAGE1 };
+			let page = unsafe { &mut PAGE1.0 };
 
 			let node1 = new_node(page, 30, 30);
 			let mut node1_ptr = node1.as_non_null();
@@ -251,7 +254,7 @@ pub(super) mod node_tests {
 		assert_eq!(node0.next, node0_ptr);
 
 		// Never merge.
-		let node2 = new_node(unsafe { &mut PAGE1 }, 300, 30);
+		let node2 = new_node(unsafe { &mut PAGE1.0 }, 300, 30);
 		let node2_ptr = node2.as_non_null();
 		node2.try_merge();
 		assert_eq!(node0.bytes, 60);
@@ -275,7 +278,7 @@ pub(super) mod node_tests {
 		}
 
 		fn make_3nodes_jointed<'a>() -> (&'a mut FreeNode, &'a mut FreeNode, &'a mut FreeNode) {
-			let page = unsafe { &mut PAGE1 };
+			let page = unsafe { &mut PAGE1.0 };
 
 			let node0 = new_node(page, 0, 31);
 			let mut node0_ptr = node0.as_non_null();
