@@ -8,18 +8,18 @@ use alloc::alloc::dealloc;
 
 use crate::kmem_cache_register;
 
-use super::slub::SizeCacheTrait;
-use super::slub::SizeCache;
 use super::slub::alloc_block_from_page_alloc;
 use super::slub::dealloc_block_to_page_alloc;
+use super::slub::SizeCache;
+use super::slub::SizeCacheTrait;
 use super::util::bit_scan_reverse;
 
-static mut SIZE64: SizeCache<'static, 64> = SizeCache::new();		// LEVEL 6
+static mut SIZE64: SizeCache<'static, 64> = SizeCache::new(); // LEVEL 6
 static mut SIZE128: SizeCache<'static, 128> = SizeCache::new();
 static mut SIZE256: SizeCache<'static, 256> = SizeCache::new();
 static mut SIZE512: SizeCache<'static, 512> = SizeCache::new();
 static mut SIZE1024: SizeCache<'static, 1024> = SizeCache::new();
-static mut SIZE2048: SizeCache<'static, 2048> = SizeCache::new();	// LEVEL 11
+static mut SIZE2048: SizeCache<'static, 2048> = SizeCache::new(); // LEVEL 11
 
 const LEVEL_MIN: usize = 6;
 const LEVEL_END: usize = 12;
@@ -43,7 +43,7 @@ impl GlobalAllocator {
 	}
 
 	pub unsafe fn lazy_init(&self) {
-		if ! *self.0.get() {
+		if !*self.0.get() {
 			kmem_cache_register!(SIZE2048);
 			kmem_cache_register!(SIZE1024);
 			kmem_cache_register!(SIZE512);
@@ -63,9 +63,9 @@ unsafe impl GlobalAlloc for GlobalAllocator {
 		match level.checked_sub(LEVEL_END) {
 			None => get_allocator(level).allocate(),
 			Some(rank) => match alloc_block_from_page_alloc(rank) {
-				Ok(ptr) => ptr.as_mut_ptr(),
-				Err(_) => 0 as *mut u8
-			}
+				Ok((ptr, _)) => ptr.as_ptr(),
+				Err(_) => 0 as *mut u8,
+			},
 		}
 	}
 
@@ -73,7 +73,7 @@ unsafe impl GlobalAlloc for GlobalAllocator {
 		self.lazy_init();
 
 		if ptr.is_null() {
-			return; // TODO seg-fault?
+			return;
 		}
 
 		let ptr = NonNull::new_unchecked(ptr);
@@ -92,7 +92,7 @@ unsafe fn get_allocator<'a>(level: usize) -> &'a mut dyn SizeCacheTrait {
 		&mut SIZE256,
 		&mut SIZE512,
 		&mut SIZE1024,
-		&mut SIZE2048
+		&mut SIZE2048,
 	];
 	caches[level - LEVEL_MIN]
 }
@@ -105,14 +105,15 @@ fn level_of(layout: Layout) -> usize {
 		return LEVEL_MIN;
 	}
 
-	let rank = unsafe { match size > align {
-		true => bit_scan_reverse(size - 1) + 1,
-		false => bit_scan_reverse(align - 1) + 1,
-	}};
+	let rank = unsafe {
+		match size > align {
+			true => bit_scan_reverse(size - 1) + 1,
+			false => bit_scan_reverse(align - 1) + 1,
+		}
+	};
 
 	LEVEL_MIN + rank.checked_sub(LEVEL_MIN).unwrap_or_default()
 }
-
 
 pub unsafe fn kmalloc(bytes: usize) -> *mut u8 {
 	unsafe {
@@ -131,10 +132,8 @@ mod test {
 	use kfs_macro::ktest;
 
 	#[ktest]
-	fn test_alloc() {
-	}
+	fn test_alloc() {}
 
 	#[ktest]
-	fn test_kmalloc() {
-	}
+	fn test_kmalloc() {}
 }

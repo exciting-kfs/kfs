@@ -1,9 +1,8 @@
 use core::marker::PhantomPinned;
-use core::ptr::NonNull;
 use core::mem::size_of;
-use core::slice;
+use core::ptr::NonNull;
 
-use crate::mm::util::{is_aligned, prev_align, next_align, align_of_rank, size_of_rank};
+use crate::mm::util::{align_of_rank, is_aligned, next_align, prev_align, size_of_rank};
 
 use super::FreeList;
 
@@ -12,7 +11,7 @@ pub struct FreeNode {
 	pub prev: NonNull<FreeNode>,
 	pub next: NonNull<FreeNode>,
 	pub bytes: usize,
-	_pin: PhantomPinned
+	_pin: PhantomPinned,
 }
 
 impl PartialEq for FreeNode {
@@ -25,26 +24,29 @@ impl FreeNode {
 	pub const NODE_SIZE: usize = size_of::<FreeNode>();
 
 	/// Construct a FreeNode for memory chunk
-	/// 
+	///
 	/// # Safety
-	/// 
+	///
 	/// * The size of memory chunk must be bigger than FreeNode::NODE_SIZE
-	pub unsafe fn construct_at(mem: &mut [u8]) -> &mut Self {
-		let bytes = mem.len();
-		let mem = mem.as_mut_ptr() as *mut Self;
-		
+	pub unsafe fn construct_at<'a>(mem: NonNull<u8>, bytes: usize) -> &'a mut Self {
+		let bytes = bytes;
+		let mem = mem.as_ptr() as *mut Self;
+
 		let next = NonNull::new_unchecked(&mut (*mem));
 		let prev = next.clone();
-		(*mem) = FreeNode { prev, next, bytes, _pin: PhantomPinned };
+		(*mem) = FreeNode {
+			prev,
+			next,
+			bytes,
+			_pin: PhantomPinned,
+		};
 		&mut (*mem)
 	}
 
 	/// Try to merge `self` with previous and next node.
 	/// If `self` doesn't have previous or next node, this function do nothing.
 	pub fn try_merge(&mut self) {
-		let (front, back) = unsafe {
-			(self.prev.as_mut(), self.next.as_mut())
-		};
+		let (front, back) = unsafe { (self.prev.as_mut(), self.next.as_mut()) };
 
 		let self_start = self.as_ptr().cast::<u8>();
 		let back_start = back.as_ptr().cast::<u8>();
@@ -53,14 +55,14 @@ impl FreeNode {
 		let self_end = unsafe { self_start.offset(self.bytes as isize) };
 		let front_end = unsafe { front_start.offset(front.bytes as isize) };
 
-		if self_end == back_start  {
+		if self_end == back_start {
 			let next = unsafe { back.next.as_mut() };
 			next.prev = self.as_non_null();
 			self.next = back.next;
 			self.bytes += back.bytes;
 		}
 
-		if front_end == self_start  {
+		if front_end == self_start {
 			let back = unsafe { self.next.as_mut() };
 			back.prev = self.prev;
 			front.next = self.next;
@@ -82,17 +84,17 @@ impl FreeNode {
 	pub fn contains<T>(&self, ptr: NonNull<T>) -> bool {
 		let ptr = ptr.as_ptr() as usize;
 		let s = self.addr().cast::<u8>() as usize;
-		
+
 		match s.checked_add(self.bytes) {
 			Some(e) => s <= ptr && ptr < e,
-			None => s <= ptr && ptr <= usize::MAX
+			None => s <= ptr && ptr <= usize::MAX,
 		}
 	}
 
 	/// It is called by `CacheManager` for collecting excess cache memory allcated by `PAGE_ALLOC`.
 	///
 	/// `'=': inuse, '-': free`
-	/// 
+	///
 	/// * case 0)
 	/// ```
 	/// align0     align1
@@ -137,11 +139,10 @@ impl FreeNode {
 		let next_align = next_align(start, align);
 
 		if !is_aligned(end, align) {
-			let len = end - prev_align(end, align);
 			let n = unsafe {
-				FreeNode::construct_at(
-					slice::from_raw_parts_mut(end as *mut u8, len)
-				)
+				let len = end - prev_align(end, align);
+				let ptr = NonNull::new_unchecked(end as *mut u8);
+				FreeNode::construct_at(ptr, len)
 			};
 			total -= n.bytes;
 			free_list.insert(n);
@@ -153,7 +154,10 @@ impl FreeNode {
 			free_list.insert(self);
 		}
 
-		(unsafe { NonNull::new_unchecked(next_align as *mut u8) }, total / size)
+		(
+			unsafe { NonNull::new_unchecked(next_align as *mut u8) },
+			total / size,
+		)
 	}
 
 	#[inline(always)]
@@ -191,17 +195,20 @@ pub(super) mod node_tests {
 	const PAGE_SIZE: usize = 4096;
 	static mut PAGE1: [u8; PAGE_SIZE] = [0; PAGE_SIZE];
 
-	pub fn new_node(page: &mut [u8], offset:usize, bytes: usize) -> &mut FreeNode {
-		let ptr = unsafe { (page as *mut [u8] as *mut u8).offset(offset as isize) };
-		let mem = unsafe { core::slice::from_raw_parts_mut(ptr, bytes) };
-		unsafe { FreeNode::construct_at(mem) }
+	pub fn new_node(page: &mut [u8], offset: usize, bytes: usize) -> &mut FreeNode {
+		unsafe {
+			let ptr = (page as *mut [u8] as *mut u8).offset(offset as isize);
+			let ptr = NonNull::new_unchecked(ptr);
+			FreeNode::construct_at(ptr, bytes)
+		}
 	}
 
 	#[ktest]
 	fn test_construct_at() {
 		let page = unsafe { &mut PAGE1 };
 		let page_ptr = page.as_mut_ptr() as *mut FreeNode;
-		let node = unsafe { FreeNode::construct_at(page) };
+		let ptr = unsafe { NonNull::new_unchecked(page as *mut u8) };
+		let node = unsafe { FreeNode::construct_at(ptr, page.len()) };
 
 		assert_eq!(node.next.as_ptr(), page_ptr);
 		assert_eq!(node.prev.as_ptr(), page_ptr);
@@ -210,7 +217,6 @@ pub(super) mod node_tests {
 
 	#[ktest]
 	fn test_try_merge() {
-
 		fn init_nodes<'a>() -> (&'a mut FreeNode, &'a mut FreeNode) {
 			let page = unsafe { &mut PAGE1 };
 
@@ -227,7 +233,7 @@ pub(super) mod node_tests {
 			node0.next = node1_ptr;
 			(node0, node1)
 		}
-		
+
 		// merge with next node.
 		let (node0, _) = init_nodes();
 		let node0_ptr = node0.as_non_null();
@@ -258,7 +264,6 @@ pub(super) mod node_tests {
 
 	#[ktest]
 	fn test_disjoint() {
-
 		fn do_test(node: &mut FreeNode, left: &FreeNode, right: &FreeNode) {
 			let node_ptr = node.as_non_null();
 			node.disjoint();
@@ -296,7 +301,6 @@ pub(super) mod node_tests {
 			(node0, node1, node2)
 		}
 
-
 		// disjoint first
 		let nodes = make_3nodes_jointed();
 		do_test(nodes.0, nodes.2, nodes.1);
@@ -310,4 +314,3 @@ pub(super) mod node_tests {
 		do_test(nodes.2, nodes.1, nodes.0);
 	}
 }
-

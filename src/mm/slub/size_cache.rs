@@ -1,15 +1,13 @@
 pub mod free_list;
 
+use core::alloc::AllocError;
 use core::marker::PhantomData;
 use core::ptr::NonNull;
-use core::slice;
-use core::alloc::AllocError;
 
 use super::cache::{align_with_hw_cache, CacheBase, CacheInit};
-use super::{PAGE_SIZE, alloc_block_from_page_alloc};
+use super::{alloc_block_from_page_alloc, PAGE_SIZE};
 
 use self::free_list::{FreeList, FreeNode};
-
 
 type Result<T> = core::result::Result<T, AllocError>;
 
@@ -17,24 +15,30 @@ type Result<T> = core::result::Result<T, AllocError>;
 pub struct SizeCache<'page, const N: usize> {
 	free_list: FreeList,
 	page_count: usize,
-	phantom: PhantomData<&'page usize>
+	phantom: PhantomData<&'page usize>,
 }
 
 impl<'page, const N: usize> SizeCache<'page, N> {
-	const SIZE : usize = align_with_hw_cache(N);
-	const RANK : usize = rank_of(Self::SIZE);
+	const SIZE: usize = align_with_hw_cache(N);
+	const RANK: usize = rank_of(Self::SIZE);
 
 	pub const fn new() -> Self {
-		SizeCache { free_list: FreeList::new(), page_count: 0, phantom: PhantomData }
+		SizeCache {
+			free_list: FreeList::new(),
+			page_count: 0,
+			phantom: PhantomData,
+		}
 	}
 
 	pub fn alloc(&mut self) -> Result<NonNull<u8>> {
-		self.free_list.remove_if(|n| n.bytes() >= Self::SIZE)
+		self.free_list
+			.remove_if(|n| n.bytes() >= Self::SIZE)
 			.or_else(|| {
 				let page = self.alloc_pages(Self::RANK).ok()?;
-				let node = unsafe { FreeNode::construct_at(page) };
+				let node = unsafe { FreeNode::construct_at(page.0, page.1) };
 				Some(node)
-			}).map(|node| {
+			})
+			.map(|node| {
 				let remains = node.bytes - Self::SIZE;
 				let ptr = node.as_mut_ptr().cast::<u8>();
 				let ret = unsafe { ptr.offset(remains as isize) };
@@ -44,30 +48,30 @@ impl<'page, const N: usize> SizeCache<'page, N> {
 					self.free_list.insert(node);
 				}
 				unsafe { NonNull::new_unchecked(ret) }
-			}).ok_or(AllocError)
+			})
+			.ok_or(AllocError)
 	}
 
 	/// Safety
-	/// 
+	///
 	/// `ptr` must point a memory block allocated by `self`.
 	pub unsafe fn dealloc(&mut self, ptr: NonNull<u8>) {
 		if self.free_list.check_double_free(ptr) {
 			panic!("size_cache: double free");
 		}
-		
-		let mem = slice::from_raw_parts_mut::<u8>(ptr.as_ptr().cast(), Self::SIZE);
-		let node = FreeNode::construct_at(mem);
+
+		let node = FreeNode::construct_at(ptr, Self::SIZE);
 		self.free_list.insert(node);
 	}
 
-	fn alloc_pages(&mut self, rank: usize) -> Result<&'page mut [u8]> {
-		let page = alloc_block_from_page_alloc::<'page>(rank)?;
+	fn alloc_pages(&mut self, rank: usize) -> Result<(NonNull<u8>, usize)> {
+		let page = alloc_block_from_page_alloc(rank)?;
 		self.page_count += 1 << rank;
 		Ok(page)
 	}
 }
 
-impl<'page, const N : usize> CacheBase for SizeCache<'_, N> {
+impl<'page, const N: usize> CacheBase for SizeCache<'_, N> {
 	fn free_list(&mut self) -> &mut FreeList {
 		&mut self.free_list
 	}
@@ -75,19 +79,19 @@ impl<'page, const N : usize> CacheBase for SizeCache<'_, N> {
 	fn page_count(&mut self) -> &mut usize {
 		&mut self.page_count
 	}
-	
+
 	fn rank(&self) -> usize {
-	    Self::RANK
+		Self::RANK
 	}
 }
 
-impl<'page, const N : usize> Default for SizeCache<'_, N> {
+impl<'page, const N: usize> Default for SizeCache<'_, N> {
 	fn default() -> Self {
 		Self::new()
 	}
 }
 
-impl<'page, const N : usize> CacheInit for SizeCache<'_, N> {}
+impl<'page, const N: usize> CacheInit for SizeCache<'_, N> {}
 
 const fn rank_of(size: usize) -> usize {
 	let mut rank = 0;
@@ -107,28 +111,25 @@ pub trait SizeCacheTrait {
 
 impl<'page, const N: usize> SizeCacheTrait for SizeCache<'page, N> {
 	fn allocate(&mut self) -> *mut u8 {
-	    match self.alloc() {
-		Ok(ptr) => ptr.as_ptr(),
-		Err(_) => 0 as *mut u8
-	    }
+		match self.alloc() {
+			Ok(ptr) => ptr.as_ptr(),
+			Err(_) => 0 as *mut u8,
+		}
 	}
 
 	unsafe fn deallocate(&mut self, ptr: *mut u8) {
-	    self.dealloc(NonNull::new_unchecked(ptr));
+		self.dealloc(NonNull::new_unchecked(ptr));
 	}
 }
 
 mod tests {
 	use core::ptr::NonNull;
 
-use kfs_macro::ktest;
+	use kfs_macro::ktest;
 
 	use crate::mm::slub::cache::CacheBase;
 
-use super:: {
-		SizeCache,
-		PAGE_SIZE,
-	};
+	use super::{SizeCache, PAGE_SIZE};
 
 	#[ktest]
 	fn test_size() {
@@ -149,7 +150,8 @@ use super:: {
 		const SIZE: usize = 60;
 		let mut cache = SizeCache::<SIZE>::new();
 
-		for i in 1..64 { // 64 * 63 = 4032
+		for i in 1..64 {
+			// 64 * 63 = 4032
 			let _ = cache.alloc();
 			let head = unsafe { cache.free_list.first().unwrap().as_mut() };
 			assert_eq!(cache.page_count, 1);
@@ -196,13 +198,12 @@ use super:: {
 	// 	unsafe { cache.dealloc(ptr1) };
 	// }
 
-
 	#[ktest]
 	fn test_shrink() {
 		// #1 page aligned, no extra space
 		let mut cache = SizeCache::<1024>::new();
 		let ptr = cache.alloc().unwrap();
-		unsafe {cache.dealloc(ptr)}
+		unsafe { cache.dealloc(ptr) }
 		cache.cache_shrink();
 		assert_eq!(cache.free_list.count(), 0);
 
@@ -213,9 +214,9 @@ use super:: {
 		let ptr3 = cache.alloc().unwrap();
 		cache.alloc().unwrap();
 
-		unsafe {cache.dealloc(ptr1)}
-		unsafe {cache.dealloc(ptr2)}
-		unsafe {cache.dealloc(ptr3)}
+		unsafe { cache.dealloc(ptr1) }
+		unsafe { cache.dealloc(ptr2) }
+		unsafe { cache.dealloc(ptr3) }
 		cache.cache_shrink();
 		assert_eq!(cache.free_list.count(), 1);
 
@@ -224,9 +225,9 @@ use super:: {
 		cache.alloc().unwrap();
 		let ptr1 = cache.alloc().unwrap();
 		let ptr2 = cache.alloc().unwrap();
-		
-		unsafe {cache.dealloc(ptr1)}
-		unsafe {cache.dealloc(ptr2)}
+
+		unsafe { cache.dealloc(ptr1) }
+		unsafe { cache.dealloc(ptr2) }
 		cache.cache_shrink();
 		assert_eq!(cache.free_list.count(), 1);
 
@@ -239,10 +240,10 @@ use super:: {
 		let ptr4 = cache.alloc().unwrap();
 		cache.alloc().unwrap();
 
-		unsafe {cache.dealloc(ptr1)}
-		unsafe {cache.dealloc(ptr2)}
-		unsafe {cache.dealloc(ptr3)}
-		unsafe {cache.dealloc(ptr4)}
+		unsafe { cache.dealloc(ptr1) }
+		unsafe { cache.dealloc(ptr2) }
+		unsafe { cache.dealloc(ptr3) }
+		unsafe { cache.dealloc(ptr4) }
 		cache.cache_shrink();
 		assert_eq!(cache.free_list.count(), 2);
 	}
