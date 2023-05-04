@@ -1,6 +1,9 @@
 #![no_std]
 #![no_main]
 #![allow(dead_code)]
+#![feature(allocator_api)]
+
+extern crate alloc;
 
 mod backtrace;
 mod boot;
