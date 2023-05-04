@@ -1,5 +1,6 @@
 mod cache;
 mod cache_manager;
+mod no_alloc_list;
 mod size_cache;
 
 pub use cache_manager::CM;
@@ -28,13 +29,11 @@ pub fn alloc_block_from_page_alloc(rank: usize) -> Result<(NonNull<u8>, usize), 
 /// # Safety
 ///
 /// `blk_ptr` must point memory block allocated by `PAGE_ALLOC`
-pub unsafe fn dealloc_block_to_page_alloc(blk_ptr: NonNull<u8>, blk_cnt: usize, blk_rank: usize) {
+pub unsafe fn dealloc_block_to_page_alloc(blk_ptr: NonNull<u8>, blk_rank: usize) {
 	let size = 1 << blk_rank;
 
-	for index in 0..blk_cnt {
-		let ptr = blk_ptr.as_ptr().offset(size * index as isize);
-		PAGE_ALLOC
-			.assume_init_mut()
-			.free_page(NonNull::new_unchecked(ptr.cast()));
-	}
+	let ptr = blk_ptr.as_ptr().offset(size as isize);
+	PAGE_ALLOC
+		.assume_init_mut()
+		.free_page(NonNull::new_unchecked(ptr.cast()));
 }

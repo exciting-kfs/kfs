@@ -1,30 +1,26 @@
-use crate::mm::util::size_of_rank;
+use core::ptr::NonNull;
 
 use super::dealloc_block_to_page_alloc;
-use super::size_cache::free_list::FreeList;
+use super::no_alloc_list::NAList;
+use super::size_cache::meta_cache::MetaCache;
 
 pub trait CacheBase {
-	fn free_list(&mut self) -> &mut FreeList;
-	fn page_count(&mut self) -> &mut usize;
-	fn rank(&self) -> usize;
+	fn partial(&mut self) -> &mut NAList<MetaCache>;
+	fn empty(&self) -> bool;
+	// fn page_count(&mut self) -> &mut usize;
+	// fn rank(&self) -> usize;
 
 	fn cache_shrink(&mut self) {
-		let rank = self.rank();
-		let free_list = self.free_list();
+		let m_cache_list = self.partial();
 
-		let (mut satisfied, not) = free_list
-			.iter_mut()
-			.partition(|node| node.bytes() >= size_of_rank(rank));
-		(*free_list) = not;
+		let (mut satisfied, not) = m_cache_list.iter_mut().partition(|m| m.inuse == 0);
+		(*m_cache_list) = not;
 
-		let mut shrinked_page = 0;
-		satisfied.iter_mut().for_each(|node| {
-			let (blk_ptr, blk_cnt) = node.shrink(free_list, rank);
-			shrinked_page += blk_cnt * (1 << rank);
-			unsafe { dealloc_block_to_page_alloc(blk_ptr, blk_cnt, rank) };
+		satisfied.iter_mut().for_each(|meta_cache| unsafe {
+			let ptr = meta_cache as *mut MetaCache;
+			let ptr = NonNull::new_unchecked(ptr.cast());
+			dealloc_block_to_page_alloc(ptr, meta_cache.rank())
 		});
-
-		(*self.page_count()) -= shrinked_page;
 	}
 }
 

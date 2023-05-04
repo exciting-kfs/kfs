@@ -80,7 +80,7 @@ unsafe impl GlobalAlloc for GlobalAllocator {
 		let level = level_of(layout);
 		match level.checked_sub(LEVEL_END) {
 			None => get_allocator(level).deallocate(ptr.as_ptr()),
-			Some(rank) => dealloc_block_to_page_alloc(ptr, 1, rank),
+			Some(rank) => dealloc_block_to_page_alloc(ptr, rank),
 		}
 	}
 }
