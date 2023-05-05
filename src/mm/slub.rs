@@ -11,6 +11,8 @@ pub const REGISTER_TRY: usize = 3; // TODO config?
 use core::alloc::AllocError;
 use core::ptr::NonNull;
 
+use crate::pr_info;
+
 use super::constant::PAGE_SIZE;
 use super::GFP;
 use super::PAGE_ALLOC;

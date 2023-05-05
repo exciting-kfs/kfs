@@ -6,7 +6,6 @@ use core::mem::size_of;
 use core::ptr::NonNull;
 
 use crate::mm::slub::no_alloc_list::Node;
-use crate::mm::util::size_of_rank;
 
 use super::cache::{align_with_hw_cache, CacheBase, CacheInit};
 use super::no_alloc_list::NAList;
@@ -35,10 +34,21 @@ impl<'page, const N: usize> SizeCache<'page, N> {
 		}
 	}
 
+	pub fn reserve(&mut self, count: usize) -> Result<()> {
+		let rank = rank_of(Self::SIZE * count);
+		let page = self.alloc_pages(rank)?;
+		unsafe {
+			let node = Node::alloc_at(page.0);
+			self.partial.push_front(node);
+			MetaCache::construct_at(page.0, Self::SIZE);
+		};
+		Ok(())
+	}
+
 	pub fn alloc(&mut self) -> Result<NonNull<u8>> {
 		let meta_cache = self.partial.head().and_then(|mut meta_cache_ptr| {
 			let meta_cache = unsafe { meta_cache_ptr.as_mut() };
-			match is_full(meta_cache, Self::SIZE) {
+			match meta_cache.is_full() {
 				true => None,
 				false => Some(meta_cache_ptr),
 			}
@@ -56,8 +66,8 @@ impl<'page, const N: usize> SizeCache<'page, N> {
 				};
 				Some(ptr)
 			})
-			.map(|mut ptr_meta_cache| {
-				let meta_cache = unsafe { ptr_meta_cache.as_mut() };
+			.map(|mut meta_cache_ptr| {
+				let meta_cache = unsafe { meta_cache_ptr.as_mut() };
 				meta_cache.alloc().unwrap()
 			})
 			.ok_or(AllocError)
@@ -81,16 +91,6 @@ impl<'page, const N: usize> SizeCache<'page, N> {
 	}
 }
 
-fn is_full(meta_cache: &MetaCache, cache_size: usize) -> bool {
-	const NODE_SIZE: usize = size_of::<Node<MetaCache>>();
-
-	let rank = meta_cache.rank();
-	let inuse = meta_cache.inuse;
-	let max = (size_of_rank(rank) - NODE_SIZE) / cache_size;
-
-	inuse == max
-}
-
 impl<'page, const N: usize> CacheBase for SizeCache<'_, N> {
 	fn partial(&mut self) -> &mut NAList<MetaCache> {
 		&mut self.partial
@@ -110,6 +110,10 @@ impl<'page, const N: usize> Default for SizeCache<'_, N> {
 impl<'page, const N: usize> CacheInit for SizeCache<'_, N> {}
 
 const fn rank_of(size: usize) -> usize {
+	const NODE_SIZE: usize = size_of::<Node<MetaCache>>();
+	const META_CACHE_SIZE: usize = align_with_hw_cache(NODE_SIZE);
+
+	let size = size + META_CACHE_SIZE;
 	let mut rank = 0;
 	let mut count = (size - 1) / PAGE_SIZE;
 
@@ -222,6 +226,33 @@ mod tests {
 			assert_eq!(last.free_list.count(), i + 1);
 			assert_eq!(last.inuse, MAX_COUNT - (i + 1));
 		}
+	}
+
+	#[ktest]
+	fn test_alloc_bound() {
+		// size = 4080
+	}
+
+	#[ktest]
+	fn test_reserve() {
+		const SIZE: usize = 2000;
+		let mut cache = SizeCache::<SIZE>::new();
+
+		// reserve for one cache.
+		// META_CACHE_SIZE + SizeCache<SIZE>::SIZE = 32 + 2048 = 2032 => rank 0
+		cache.reserve(1).unwrap();
+		assert_eq!(cache.partial.count(), 1);
+		let head = unsafe { cache.partial.head().unwrap().as_mut() };
+		assert_eq!(head.rank(), 0);
+		assert_eq!(head.free_list.count(), 1);
+
+		//reserve for three cache.
+		// META_CACHE_SIZE + SizeCache<SIZE>::SIZE * 3 = 32 + 2048 * 3 = 6176 => rank 1
+		cache.reserve(3).unwrap();
+		assert_eq!(cache.partial.count(), 2);
+		let head = unsafe { cache.partial.head().unwrap().as_mut() };
+		assert_eq!(head.rank(), 1);
+		assert_eq!(head.free_list.count(), 3);
 	}
 
 	#[ktest]
