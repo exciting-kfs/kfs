@@ -6,6 +6,7 @@ use core::mem::size_of;
 use core::ptr::NonNull;
 
 use crate::mm::slub::no_alloc_list::Node;
+use crate::pr_info;
 
 use super::cache::{align_with_hw_cache, CacheBase, CacheInit};
 use super::no_alloc_list::NAList;
@@ -142,21 +143,20 @@ impl<'page, const N: usize> SizeCacheTrait for SizeCache<'page, N> {
 	}
 }
 
-mod tests {
-	use core::{char::MAX, ptr::NonNull};
-
+pub mod tests {
+	use core::ptr::NonNull;
 	use kfs_macro::ktest;
 
 	use crate::mm::{slub::cache::CacheBase, util::size_of_rank};
 
 	use super::{meta_cache::MetaCache, SizeCache};
 
-	fn get_head(cache: &mut dyn CacheBase) -> &mut MetaCache {
+	pub fn get_head(cache: &mut dyn CacheBase) -> &mut MetaCache {
 		let ret = unsafe { cache.partial().head().unwrap().as_mut() };
 		ret
 	}
 
-	fn head_check(cache: &mut dyn CacheBase, inuse: usize, rank: usize) {
+	pub fn head_check(cache: &mut dyn CacheBase, inuse: usize, rank: usize) {
 		let head = get_head(cache);
 		let max = (size_of_rank(head.rank()) - MetaCache::NODE_ALIGN) / head.cache_size;
 
@@ -209,6 +209,7 @@ mod tests {
 
 		// dealloc one when the inuse is 1.
 		let ptr = cache.alloc();
+		head_check(&mut cache, 1, 0);
 		unsafe { cache.dealloc(ptr.unwrap()) };
 
 		assert_eq!(cache.partial.count(), 1);

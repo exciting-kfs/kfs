@@ -2,6 +2,8 @@ use core::alloc::AllocError;
 use core::mem::size_of;
 use core::ptr::NonNull;
 
+use crate::pr_info;
+
 use super::{
 	cache::{CacheBase, CacheInit},
 	no_alloc_list::{NAList, Node},
@@ -68,20 +70,30 @@ impl<'a> CacheManager<'a> {
 			panic!("It can cause memory leak!");
 		}
 
-		let cache_ptr = self.list.remove_if(|n| n.as_ref() == cache);
-		cache_ptr.map(|mut cache_ptr| {
-			let ptr = cache_ptr.as_mut();
-			self.node_space.dealloc(ptr.cast());
-			self.cache_space.dealloc(ptr.cast());
+		let node_ptr = self.list.remove_if(|n| n.as_ref() == cache);
+		node_ptr.map(|mut node_ptr| {
+			let cache_ptr = *unsafe { node_ptr.as_mut() };
+			self.node_space.dealloc(node_ptr.cast());
+			let a = node_ptr;
+			let b = node_ptr.as_ptr();
+			let c = unsafe { node_ptr.as_mut() };
+			let d = *unsafe { node_ptr.as_mut() };
+			let e = c.cast::<u8>();
+			let f = d.cast::<u8>();
+
+			pr_info!("a: {:?}, b: {:?}, c: {:?}, d: {:?}", a, b, c, d);
+
+			pr_info!("e: {:?}, f: {:?}", e, f);
+
+			self.cache_space.dealloc(cache_ptr.cast());
 		});
 	}
 
 	pub fn unregister(&mut self, cache: &'static mut dyn CacheBase) {
 		unsafe {
-			let cache_ptr = self.list.remove_if(|n| n.as_ref() == cache);
-			cache_ptr.map(|mut cache_ptr| {
-				let ptr = cache_ptr.as_mut();
-				self.node_space.dealloc(ptr.cast());
+			let node_ptr = self.list.remove_if(|n| n.as_ref() == cache);
+			node_ptr.map(|node_ptr| {
+				self.node_space.dealloc(node_ptr.cast());
 			});
 		}
 	}
@@ -133,61 +145,40 @@ macro_rules! kmem_cache_register {
 mod tests {
 	use kfs_macro::ktest;
 
-	use crate::mm::slub::{
-		cache::{align_with_hw_cache, CacheBase},
-		size_cache::SizeCache,
-	};
-
-	use super::super::{
-		cache_manager::{CACHE_ALLOCATOR_SIZE, NODE_SIZE},
-		PAGE_SIZE,
-	};
 	use super::CacheManager;
+	use crate::mm::slub::size_cache::{tests::head_check, SizeCache};
 
-	// fn check_remains<'a, const N: usize>(space: &mut SizeCache<'a, N>, alloc_size: usize) {
-	// 	let mut head_ptr = space.partial().head().unwrap();
-	// 	let head = unsafe { head_ptr.as_mut() };
+	#[ktest]
+	fn test_cache_alloc_dealloc() {
+		let mut cm = CacheManager::new();
+		let ptr = cm.new_allocator::<SizeCache<2048>>().unwrap();
+		let _ = unsafe { &mut *(ptr.as_ptr()) };
 
-	// 	let offset = if alloc_size == 0 {
-	// 		0
-	// 	} else {
-	// 		align_with_hw_cache(alloc_size)
-	// 	};
+		head_check(&mut cm.cache_space, 1, 0);
+		head_check(&mut cm.node_space, 1, 0);
+		assert_eq!(1, cm.list.count());
 
-	// 	assert_eq!(head.bytes(), PAGE_SIZE - offset);
-	// }
+		unsafe { cm.drop_allocator(ptr) };
 
-	// #[ktest]
-	// fn test_cache_alloc_dealloc() {
-	// 	let mut cm = CacheManager::new();
-	// 	let ptr = cm.new_allocator::<SizeCache<2048>>().unwrap();
-	// 	let _ = unsafe { &mut *(ptr.as_ptr()) };
+		head_check(&mut cm.node_space, 0, 0);
+		head_check(&mut cm.cache_space, 0, 0);
+		assert_eq!(0, cm.list.count());
+	}
 
-	// 	check_remains(&mut cm.cache_space, CACHE_ALLOCATOR_SIZE);
-	// 	check_remains(&mut cm.node_space, NODE_SIZE);
-	// 	assert_eq!(1, cm.list.count());
+	static mut SIZE_CACHE: SizeCache<1024> = SizeCache::new();
 
-	// 	unsafe { cm.drop_allocator(ptr) };
+	#[ktest]
+	fn test_register_unregister() {
+		let mut cm = CacheManager::new();
 
-	// 	check_remains(&mut cm.cache_space, 0);
-	// 	check_remains(&mut cm.node_space, 0);
-	// 	assert_eq!(0, cm.list.count());
-	// }
+		cm.register(unsafe { &mut SIZE_CACHE }).unwrap();
 
-	// static mut SIZE_CACHE: SizeCache<1024> = SizeCache::new();
+		head_check(&mut cm.node_space, 1, 0);
+		assert_eq!(1, cm.list.count());
 
-	// #[ktest]
-	// fn test_register_unregister() {
-	// 	let mut cm = CacheManager::new();
+		cm.unregister(unsafe { &mut SIZE_CACHE });
 
-	// 	cm.register(unsafe { &mut SIZE_CACHE }).unwrap();
-
-	// 	check_remains(&mut cm.node_space, NODE_SIZE);
-	// 	assert_eq!(1, cm.list.count());
-
-	// 	cm.unregister(unsafe { &mut SIZE_CACHE });
-
-	// 	check_remains(&mut cm.node_space, 0);
-	// 	assert_eq!(0, cm.list.count());
-	// }
+		head_check(&mut cm.node_space, 0, 0);
+		assert_eq!(0, cm.list.count());
+	}
 }
