@@ -143,13 +143,27 @@ impl<'page, const N: usize> SizeCacheTrait for SizeCache<'page, N> {
 }
 
 mod tests {
-	use core::ptr::NonNull;
+	use core::{char::MAX, ptr::NonNull};
 
 	use kfs_macro::ktest;
 
-	use crate::mm::slub::cache::CacheBase;
+	use crate::mm::{slub::cache::CacheBase, util::size_of_rank};
 
-	use super::SizeCache;
+	use super::{meta_cache::MetaCache, SizeCache};
+
+	fn get_head(cache: &mut dyn CacheBase) -> &mut MetaCache {
+		let ret = unsafe { cache.partial().head().unwrap().as_mut() };
+		ret
+	}
+
+	fn head_check(cache: &mut dyn CacheBase, inuse: usize, rank: usize) {
+		let head = get_head(cache);
+		let max = (size_of_rank(head.rank()) - MetaCache::NODE_ALIGN) / head.cache_size;
+
+		assert_eq!(head.free_list.count(), max - inuse);
+		assert_eq!(head.inuse, inuse);
+		assert_eq!(head.rank(), rank);
+	}
 
 	#[ktest]
 	fn test_size() {
@@ -174,19 +188,17 @@ mod tests {
 		for i in 0..MAX_COUNT {
 			// 64 * 63 => 4032 + meta_cache(16) => full
 			let _ = cache.alloc();
-			let head = unsafe { cache.partial.head().unwrap().as_mut() };
 			assert_eq!(cache.page_count, 1);
 			assert_eq!(cache.partial.count(), 1);
-			assert_eq!(head.free_list.count(), MAX_COUNT - (i + 1));
-			assert_eq!(head.inuse, i + 1);
+
+			head_check(&mut cache, i + 1, 0);
 		}
 
 		let _ = cache.alloc();
-		let head = unsafe { cache.partial.head().unwrap().as_mut() };
 		assert_eq!(cache.page_count, 2);
 		assert_eq!(cache.partial.count(), 2);
-		assert_eq!(head.free_list.count(), 62);
-		assert_eq!(head.inuse, 1);
+
+		head_check(&mut cache, 1, 0);
 	}
 
 	#[ktest]
@@ -199,9 +211,8 @@ mod tests {
 		let ptr = cache.alloc();
 		unsafe { cache.dealloc(ptr.unwrap()) };
 
-		let head = unsafe { cache.partial.head().unwrap().as_mut() };
-		assert_eq!(head.free_list.count(), MAX_COUNT);
-		assert_eq!(head.inuse, 0);
+		assert_eq!(cache.partial.count(), 1);
+		head_check(&mut cache, 0, 0);
 
 		// dealloc one when the inuse of 2nd memory block is 1.
 		let mut ptrs: [NonNull<u8>; 64] = [NonNull::dangling(); 64];
@@ -212,10 +223,8 @@ mod tests {
 		let ptr = cache.alloc();
 		unsafe { cache.dealloc(ptr.unwrap()) };
 
-		let head = unsafe { cache.partial.head().unwrap().as_mut() };
-		assert_eq!(head.free_list.count(), MAX_COUNT);
-		assert_eq!(head.inuse, 0);
 		assert_eq!(cache.partial.count(), 2);
+		head_check(&mut cache, 0, 0);
 
 		// dealloc whole in one memory block.
 		for i in 0..MAX_COUNT {
@@ -230,7 +239,14 @@ mod tests {
 
 	#[ktest]
 	fn test_alloc_bound() {
-		// size = 4080
+		fn do_test<const N: usize>(rank: usize) {
+			let mut cache = SizeCache::<N>::new();
+			let _ = cache.alloc();
+			head_check(&mut cache, 1, rank);
+		}
+		do_test::<4032>(0);
+		do_test::<4064>(1);
+		do_test::<4080>(1);
 	}
 
 	#[ktest]
@@ -242,32 +258,34 @@ mod tests {
 		// META_CACHE_SIZE + SizeCache<SIZE>::SIZE = 32 + 2048 = 2032 => rank 0
 		cache.reserve(1).unwrap();
 		assert_eq!(cache.partial.count(), 1);
-		let head = unsafe { cache.partial.head().unwrap().as_mut() };
-		assert_eq!(head.rank(), 0);
-		assert_eq!(head.free_list.count(), 1);
+		head_check(&mut cache, 0, 0);
 
 		//reserve for three cache.
 		// META_CACHE_SIZE + SizeCache<SIZE>::SIZE * 3 = 32 + 2048 * 3 = 6176 => rank 1
 		cache.reserve(3).unwrap();
 		assert_eq!(cache.partial.count(), 2);
-		let head = unsafe { cache.partial.head().unwrap().as_mut() };
-		assert_eq!(head.rank(), 1);
-		assert_eq!(head.free_list.count(), 3);
+		head_check(&mut cache, 0, 1);
 	}
 
 	#[ktest]
 	fn test_shrink() {
+		const SIZE: usize = 1024;
+
+		fn meta_cache_count_check(cache: &mut SizeCache<SIZE>, previous: usize) {
+			assert_eq!(cache.partial.count(), previous);
+			cache.cache_shrink();
+			assert_eq!(cache.partial.count(), 0);
+		}
+
 		// shrink one memory block.
-		let mut cache = SizeCache::<1024>::new();
+		let mut cache = SizeCache::<SIZE>::new();
 		let ptr = cache.alloc().unwrap();
 		unsafe { cache.dealloc(ptr) }
-		assert_eq!(cache.partial.count(), 1);
-		cache.cache_shrink();
-		assert_eq!(cache.partial.count(), 0);
+		meta_cache_count_check(&mut cache, 1);
 
 		// shrink two memory block.
 		const MAX_COUNT: usize = 3;
-		let mut ptrs: [NonNull<u8>; 3] = [NonNull::dangling(); 3];
+		let mut ptrs: [NonNull<u8>; MAX_COUNT] = [NonNull::dangling(); MAX_COUNT];
 		for i in 0..MAX_COUNT {
 			ptrs[i] = cache.alloc().unwrap();
 		}
@@ -279,9 +297,6 @@ mod tests {
 				cache.dealloc(ptrs[i]);
 			}
 		}
-
-		assert_eq!(cache.partial.count(), 2);
-		cache.cache_shrink();
-		assert_eq!(cache.partial.count(), 0);
+		meta_cache_count_check(&mut cache, 2);
 	}
 }

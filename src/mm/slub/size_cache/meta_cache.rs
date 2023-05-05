@@ -21,8 +21,8 @@ pub struct MetaCache {
 }
 
 impl MetaCache {
-	const NODE_SIZE: usize = size_of::<Node<MetaCache>>();
-	const NODE_ALIGN: usize = align_with_hw_cache(Self::NODE_SIZE);
+	pub const NODE_SIZE: usize = size_of::<Node<MetaCache>>();
+	pub const NODE_ALIGN: usize = align_with_hw_cache(Self::NODE_SIZE);
 
 	pub unsafe fn construct_at<'a>(mem: NonNull<u8>, cache_size: usize) -> &'a mut Self {
 		let rank = get_rank(mem.as_ptr() as usize);
