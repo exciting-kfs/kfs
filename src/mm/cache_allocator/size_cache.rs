@@ -1,18 +1,15 @@
-pub mod meta_cache;
-
 use core::alloc::AllocError;
 use core::marker::PhantomData;
 use core::mem::size_of;
 use core::ptr::NonNull;
 
-use crate::mm::slub::no_alloc_list::Node;
-use crate::pr_info;
+use crate::mm::constant::PAGE_SIZE;
 
-use super::cache::{align_with_hw_cache, CacheBase, CacheInit};
-use super::no_alloc_list::NAList;
-use super::{alloc_block_from_page_alloc, PAGE_SIZE};
+use super::traits::{CacheInit, CacheTrait};
+use super::util::no_alloc_list::{NAList, Node};
+use super::util::{align_with_hw_cache, alloc_block_from_page_alloc};
 
-use self::meta_cache::MetaCache;
+use super::meta_cache::MetaCache;
 
 type Result<T> = core::result::Result<T, AllocError>;
 
@@ -92,7 +89,7 @@ impl<'page, const N: usize> SizeCache<'page, N> {
 	}
 }
 
-impl<'page, const N: usize> CacheBase for SizeCache<'_, N> {
+impl<'page, const N: usize> CacheTrait for SizeCache<'_, N> {
 	fn partial(&mut self) -> &mut NAList<MetaCache> {
 		&mut self.partial
 	}
@@ -144,19 +141,21 @@ impl<'page, const N: usize> SizeCacheTrait for SizeCache<'page, N> {
 }
 
 pub mod tests {
+	use super::*;
 	use core::ptr::NonNull;
 	use kfs_macro::ktest;
 
-	use crate::mm::{slub::cache::CacheBase, util::size_of_rank};
+	use crate::mm::{
+		cache_allocator::{meta_cache::MetaCache, traits::CacheTrait},
+		util::size_of_rank,
+	};
 
-	use super::{meta_cache::MetaCache, SizeCache};
-
-	pub fn get_head(cache: &mut dyn CacheBase) -> &mut MetaCache {
+	pub fn get_head(cache: &mut dyn CacheTrait) -> &mut MetaCache {
 		let ret = unsafe { cache.partial().head().unwrap().as_mut() };
 		ret
 	}
 
-	pub fn head_check(cache: &mut dyn CacheBase, inuse: usize, rank: usize) {
+	pub fn head_check(cache: &mut dyn CacheTrait, inuse: usize, rank: usize) {
 		let head = get_head(cache);
 		let max = (size_of_rank(head.rank()) - MetaCache::NODE_ALIGN) / head.cache_size;
 

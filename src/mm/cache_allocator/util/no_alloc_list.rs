@@ -134,10 +134,10 @@ impl<T> NAList<T> {
 		self.insert(node);
 	}
 
-	pub fn pop_front(&mut self) -> Option<NonNull<T>> {
+	pub fn pop_front(&mut self) -> Option<NonNull<Node<T>>> {
 		let head = unsafe { self.head?.as_mut() };
 		self.remove(head);
-		Some(unsafe { NonNull::new_unchecked(&mut head.data) })
+		Some(unsafe { NonNull::new_unchecked(head) })
 	}
 
 	fn insert(&mut self, node: &mut Node<T>) {
@@ -152,7 +152,7 @@ impl<T> NAList<T> {
 		node.prev = prev.as_non_null();
 	}
 
-	pub fn remove_if<'a, F>(&mut self, f: F) -> Option<NonNull<T>>
+	pub fn remove_if<'a, F>(&mut self, f: F) -> Option<NonNull<Node<T>>>
 	where
 		F: FnMut(&&mut T) -> bool,
 	{
@@ -162,7 +162,7 @@ impl<T> NAList<T> {
 		})?;
 
 		self.remove(node);
-		Some(unsafe { NonNull::new_unchecked(&mut node.data) })
+		Some(unsafe { NonNull::new_unchecked(node) })
 	}
 
 	fn remove(&mut self, node: &mut Node<T>) {

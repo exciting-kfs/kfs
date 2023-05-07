@@ -1,12 +1,12 @@
 use core::{mem::size_of, ptr::NonNull};
 
 use crate::mm::{
-	meta_page::META_PAGE_TABLE,
-	page_allocator::util::addr_to_pfn,
-	slub::{
-		cache::align_with_hw_cache,
+	cache_allocator::util::{
+		align_with_hw_cache,
 		no_alloc_list::{NAList, Node},
 	},
+	meta_page::META_PAGE_TABLE,
+	page_allocator::util::addr_to_pfn,
 	util::{size_of_rank, virt_to_phys},
 };
 
