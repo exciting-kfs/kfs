@@ -55,7 +55,7 @@ impl<'a> CacheManager<'a> {
 		Ok(())
 	}
 
-	/// Safety
+	/// # Safety
 	///
 	/// `ptr` must point cache alloctor.
 	pub unsafe fn drop_allocator<A>(&mut self, ptr: NonNull<A>)

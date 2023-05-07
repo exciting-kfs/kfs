@@ -71,7 +71,7 @@ impl<'page, const N: usize> SizeCache<'page, N> {
 			.ok_or(AllocError)
 	}
 
-	/// Safety
+	/// # Safety
 	///
 	/// `ptr` must point a memory block allocated by `self`.
 	pub unsafe fn dealloc(&mut self, ptr: NonNull<u8>) {

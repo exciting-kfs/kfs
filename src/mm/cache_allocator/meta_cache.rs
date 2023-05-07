@@ -24,6 +24,10 @@ impl MetaCache {
 	pub const NODE_SIZE: usize = size_of::<Node<MetaCache>>();
 	pub const NODE_ALIGN: usize = align_with_hw_cache(Self::NODE_SIZE);
 
+	/// # Safety
+	///
+	/// * `mem` must point memory block allocated by PAGE_ALLOC
+	/// * `cache_size` must be considered the align of L1 cache.
 	pub unsafe fn construct_at<'a>(mem: NonNull<u8>, cache_size: usize) -> &'a mut Self {
 		let rank = get_rank(mem.as_ptr() as usize);
 		let first = mem.as_ptr().offset(Self::NODE_ALIGN as isize);
@@ -61,10 +65,14 @@ impl MetaCache {
 		Some(unsafe { NonNull::new_unchecked(ptr) })
 	}
 
+	/// # Safety
+	/// `ptr` must point a memory block allocated by `self`
 	pub unsafe fn dealloc(&mut self, ptr: NonNull<u8>) {
 		self.inuse -= 1;
 
 		let node = Node::alloc_at(ptr);
+		#[cfg(ktest)]
+		self.double_free_check(ptr);
 		self.free_list.push_front(node);
 	}
 
@@ -82,9 +90,39 @@ impl MetaCache {
 	pub fn rank(&self) -> usize {
 		get_rank(self as *const Self as usize)
 	}
+
+	#[cfg(ktest)]
+	fn double_free_check(&mut self, ptr: NonNull<u8>) {
+		self.free_list
+			.find(|n| {
+				let node_ptr = (*n) as *const Dummy as *const u8;
+				node_ptr == ptr.as_ptr()
+			})
+			.map(|_| panic!("meta_cache: double free!"));
+	}
 }
 
 pub fn get_rank(addr: usize) -> usize {
 	let pfn = addr_to_pfn(virt_to_phys(addr));
 	(&unsafe { META_PAGE_TABLE.assume_init_ref() })[pfn].rank
+}
+
+mod tests {
+	// use super::*;
+	// use core::ptr::NonNull;
+
+	// use kfs_macro::ktest;
+
+	#[repr(align(4096))]
+	struct TestPage([u8; 4096]);
+
+	// static mut page: TestPage = TestPage([0; 4096]);
+
+	// #[ktest]
+	// fn test_double_free_check() {
+	// 	let page_ptr = unsafe { NonNull::new_unchecked(page.0.as_mut_ptr()) };
+	// 	let m = unsafe { MetaCache::construct_at(page_ptr, 64) };
+	// 	let ptr = unsafe { NonNull::new_unchecked(page_ptr.as_ptr().offset(32)) };
+	// 	m.double_free_check(ptr);
+	// }
 }

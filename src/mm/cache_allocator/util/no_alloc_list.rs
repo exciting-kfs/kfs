@@ -18,7 +18,7 @@ impl<T> Node<T> {
 	///
 	/// # Safety
 	///
-	/// * The size of memory chunk must be bigger than Node::NODE_SIZE
+	/// * The size of memory chunk must be bigger than NODE_SIZE
 	pub unsafe fn construct_at<'a>(mem: NonNull<u8>, data: T) -> &'a mut Self {
 		let ptr = mem.as_ptr() as *mut Self;
 		let next = NonNull::new_unchecked(ptr);
@@ -31,7 +31,7 @@ impl<T> Node<T> {
 	///
 	/// # Safety
 	///
-	/// * The size of memory chunk must be bigger than Node::NODE_SIZE
+	/// * The size of memory chunk must be bigger than NODE_SIZE
 	pub unsafe fn alloc_at<'a>(mem: NonNull<u8>) -> &'a mut Self {
 		let ptr = mem.as_ptr() as *mut Self;
 		let next = NonNull::new_unchecked(ptr);
