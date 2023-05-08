@@ -3,15 +3,12 @@ use core::alloc::Layout;
 use core::cell::UnsafeCell;
 use core::ptr::NonNull;
 
-use alloc::alloc::alloc;
-use alloc::alloc::dealloc;
-
 use crate::kmem_cache_register;
 
-use super::slub::alloc_block_from_page_alloc;
-use super::slub::dealloc_block_to_page_alloc;
-use super::slub::SizeCache;
-use super::slub::SizeCacheTrait;
+use super::cache_allocator::alloc_block_from_page_alloc;
+use super::cache_allocator::dealloc_block_to_page_alloc;
+use super::cache_allocator::SizeCache;
+use super::cache_allocator::SizeCacheTrait;
 use super::util::bit_scan_reverse;
 
 static mut SIZE64: SizeCache<'static, 64> = SizeCache::new(); // LEVEL 6
@@ -64,7 +61,7 @@ unsafe impl GlobalAlloc for GlobalAllocator {
 			None => get_allocator(level).allocate(),
 			Some(rank) => match alloc_block_from_page_alloc(rank) {
 				Ok((ptr, _)) => ptr.as_ptr(),
-				Err(_) => 0 as *mut u8,
+				Err(_) => core::ptr::null_mut(),
 			},
 		}
 	}
@@ -78,9 +75,9 @@ unsafe impl GlobalAlloc for GlobalAllocator {
 
 		let ptr = NonNull::new_unchecked(ptr);
 		let level = level_of(layout);
-		match level.checked_sub(LEVEL_END) {
-			None => get_allocator(level).deallocate(ptr.as_ptr()),
-			Some(rank) => dealloc_block_to_page_alloc(ptr, 1, rank),
+		match level < LEVEL_END {
+			true => get_allocator(level).deallocate(ptr.as_ptr()),
+			false => dealloc_block_to_page_alloc(ptr),
 		}
 	}
 }
@@ -113,27 +110,4 @@ fn level_of(layout: Layout) -> usize {
 	};
 
 	LEVEL_MIN + rank.checked_sub(LEVEL_MIN).unwrap_or_default()
-}
-
-pub unsafe fn kmalloc(bytes: usize) -> *mut u8 {
-	unsafe {
-		let layout = Layout::from_size_align_unchecked(bytes, core::mem::align_of::<u8>());
-		alloc(layout)
-	}
-}
-
-pub unsafe fn kfree(ptr: *mut u8, len: usize) {
-	let layout = Layout::from_size_align_unchecked(len, core::mem::align_of::<u8>());
-	dealloc(ptr, layout)
-}
-
-mod test {
-
-	use kfs_macro::ktest;
-
-	#[ktest]
-	fn test_alloc() {}
-
-	#[ktest]
-	fn test_kmalloc() {}
 }

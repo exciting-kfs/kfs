@@ -4,10 +4,11 @@ use core::ptr::NonNull;
 
 #[allow(unused)]
 #[derive(Debug)]
+#[repr(C)]
 pub struct Node<T> {
+	data: T,
 	prev: NonNull<Node<T>>,
 	next: NonNull<Node<T>>,
-	data: T,
 }
 
 impl<T> Node<T> {
@@ -17,12 +18,25 @@ impl<T> Node<T> {
 	///
 	/// # Safety
 	///
-	/// * The size of memory chunk must be bigger than Node::NODE_SIZE
+	/// * The size of memory chunk must be bigger than NODE_SIZE
 	pub unsafe fn construct_at<'a>(mem: NonNull<u8>, data: T) -> &'a mut Self {
 		let ptr = mem.as_ptr() as *mut Self;
 		let next = NonNull::new_unchecked(ptr);
 		let prev = next.clone();
 		(*ptr) = Node { prev, next, data };
+		&mut (*ptr)
+	}
+
+	/// Construct a Node<T> for memory chunk
+	///
+	/// # Safety
+	///
+	/// * The size of memory chunk must be bigger than NODE_SIZE
+	pub unsafe fn alloc_at<'a>(mem: NonNull<u8>) -> &'a mut Self {
+		let ptr = mem.as_ptr() as *mut Self;
+		let next = NonNull::new_unchecked(ptr);
+		(*ptr).next = next;
+		(*ptr).prev = next.clone();
 		&mut (*ptr)
 	}
 
@@ -85,14 +99,20 @@ impl<T> NAList<T> {
 		self.iter().count()
 	}
 
-	pub fn find_if<F>(&mut self, mut f: F) -> Option<NonNull<Node<T>>>
-	where
-		F: FnMut(&Node<T>) -> bool,
-	{
-		self.iter_mut().find(|n| f(n)).map(|n| n.as_non_null())
+	pub fn head(&self) -> Option<NonNull<T>> {
+		let n = unsafe { self.head?.as_mut() };
+		let p = unsafe { NonNull::new_unchecked(&mut n.data) };
+		Some(p)
 	}
 
-	pub fn insert_front(&mut self, node: &mut Node<T>) {
+	pub fn find<F>(&mut self, mut f: F) -> Option<&mut T>
+	where
+		F: FnMut(&&mut T) -> bool,
+	{
+		self.iter_mut().find(|n| f(n))
+	}
+
+	pub fn push_front(&mut self, node: &mut Node<T>) {
 		if let None = self.head {
 			let node_ptr = node.as_non_null();
 			self.head = Some(node_ptr);
@@ -104,7 +124,7 @@ impl<T> NAList<T> {
 		self.head = Some(node_ptr);
 	}
 
-	pub fn insert_back(&mut self, node: &mut Node<T>) {
+	pub fn push_back(&mut self, node: &mut Node<T>) {
 		if let None = self.head {
 			let node_ptr = node.as_non_null();
 			self.head = Some(node_ptr);
@@ -112,6 +132,12 @@ impl<T> NAList<T> {
 		}
 
 		self.insert(node);
+	}
+
+	pub fn pop_front(&mut self) -> Option<NonNull<Node<T>>> {
+		let head = unsafe { self.head?.as_mut() };
+		self.remove(head);
+		Some(unsafe { NonNull::new_unchecked(head) })
 	}
 
 	fn insert(&mut self, node: &mut Node<T>) {
@@ -126,15 +152,17 @@ impl<T> NAList<T> {
 		node.prev = prev.as_non_null();
 	}
 
-	pub fn remove_if<'page, F>(&mut self, f: F) -> Option<&'page mut Node<T>>
+	pub fn remove_if<'a, F>(&mut self, f: F) -> Option<NonNull<Node<T>>>
 	where
-		F: FnMut(&Node<T>) -> bool,
+		F: FnMut(&&mut T) -> bool,
 	{
-		self.find_if(f).map(|mut node_ptr| {
-			let node = unsafe { node_ptr.as_mut() };
-			self.remove(node);
-			node
-		})
+		let node = self.find(f).map(|data| unsafe {
+			let ptr = NonNull::new_unchecked(data);
+			NonNull::new_unchecked(ptr.as_ptr().cast()).as_mut()
+		})?;
+
+		self.remove(node);
+		Some(unsafe { NonNull::new_unchecked(node) })
 	}
 
 	fn remove(&mut self, node: &mut Node<T>) {
@@ -170,11 +198,15 @@ where
 	}
 }
 
-impl<'a, T> Extend<&'a mut Node<T>> for NAList<T> {
-	fn extend<I: IntoIterator<Item = &'a mut Node<T>>>(&mut self, iter: I) {
-		iter.into_iter().for_each(|n| {
-			n.disjoint();
-			self.insert(n);
+impl<'a, T> Extend<&'a mut T> for NAList<T> {
+	fn extend<I: IntoIterator<Item = &'a mut T>>(&mut self, iter: I) {
+		iter.into_iter().for_each(|data| {
+			let node = unsafe {
+				let ptr = NonNull::new_unchecked(data);
+				ptr.cast::<Node<T>>().as_mut()
+			};
+			node.disjoint();
+			self.push_front(node);
 		})
 	}
 }
@@ -188,7 +220,7 @@ impl<T> Default for NAList<T> {
 /// Iterator - IterMut
 
 impl<'iter, T> IntoIterator for &'iter mut NAList<T> {
-	type Item = &'iter mut Node<T>;
+	type Item = &'iter mut T;
 	type IntoIter = IterMut<'iter, T>;
 	fn into_iter(self) -> Self::IntoIter {
 		self.iter_mut()
@@ -213,7 +245,7 @@ impl<'iter, T> IterMut<'iter, T> {
 }
 
 impl<'iter, T> Iterator for IterMut<'iter, T> {
-	type Item = &'iter mut Node<T>;
+	type Item = &'iter mut T;
 	fn next(&mut self) -> Option<Self::Item> {
 		let head = self.head.as_ref()?;
 		let curr = unsafe { self.curr.as_mut() };
@@ -224,7 +256,7 @@ impl<'iter, T> Iterator for IterMut<'iter, T> {
 		}
 
 		self.curr = curr.next;
-		Some(curr)
+		Some(&mut curr.data)
 	}
 }
 
