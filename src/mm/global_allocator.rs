@@ -61,7 +61,7 @@ unsafe impl GlobalAlloc for GlobalAllocator {
 			None => get_allocator(level).allocate(),
 			Some(rank) => match alloc_block_from_page_alloc(rank) {
 				Ok((ptr, _)) => ptr.as_ptr(),
-				Err(_) => 0 as *mut u8,
+				Err(_) => core::ptr::null_mut(),
 			},
 		}
 	}

@@ -131,7 +131,7 @@ impl<'page, const N: usize> SizeCacheTrait for SizeCache<'page, N> {
 	fn allocate(&mut self) -> *mut u8 {
 		match self.alloc() {
 			Ok(ptr) => ptr.as_ptr(),
-			Err(_) => 0 as *mut u8,
+			Err(_) => core::ptr::null_mut(),
 		}
 	}
 
