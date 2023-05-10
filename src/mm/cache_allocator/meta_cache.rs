@@ -113,7 +113,7 @@ impl MetaCache {
 
 pub fn get_rank(addr: usize) -> usize {
 	let pfn = addr_to_pfn(virt_to_phys(addr));
-	META_PAGE_TABLE.lock()[pfn].rank
+	(&META_PAGE_TABLE.lock()[pfn]).rank()
 }
 
 #[inline(always)]

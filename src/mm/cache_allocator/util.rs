@@ -2,7 +2,6 @@ pub mod no_alloc_list;
 
 use crate::mm::util::size_of_rank;
 use crate::mm::{GFP, PAGE_ALLOC};
-
 use core::alloc::AllocError;
 use core::ptr::NonNull;
 use core::slice;

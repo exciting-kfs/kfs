@@ -1,7 +1,8 @@
 pub mod meta_page;
 
 mod page_allocator;
-pub use page_allocator::{Page, PageAllocator, GFP, PAGE_ALLOC};
+pub use page_allocator::{util::*, Page, PageAllocator, GFP, PAGE_ALLOC};
+pub mod virtual_allocator;
 
 pub mod cache_allocator;
 pub mod constant;

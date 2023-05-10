@@ -82,7 +82,7 @@ impl CacheAllocator {
 
 #[macro_export]
 macro_rules! new_cache_allocator {
-	($size: literal) => {
+	($size:literal) => {
 		CM.new_allocator::<SizeCache<$size>>()
 			.expect("out of memory.") // FIXME
 	};

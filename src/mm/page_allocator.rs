@@ -35,7 +35,7 @@ mod free_list;
 
 use crate::sync::singleton::Singleton;
 
-use self::constant::VM_OFFSET;
+use self::constant::{VMALLOC_OFFSET, VM_OFFSET};
 
 use super::x86::init::VMemory;
 use buddy_allocator::BuddyAllocator;
@@ -43,6 +43,7 @@ use core::ptr::{addr_of_mut, NonNull};
 
 pub struct PageAllocator {
 	high: BuddyAllocator,
+	vmalloc: BuddyAllocator,
 	normal: BuddyAllocator,
 }
 
@@ -59,11 +60,15 @@ impl PageAllocator {
 
 		BuddyAllocator::construct_at(addr_of_mut!((*ptr).normal), vm.normal_pfn.clone());
 		BuddyAllocator::construct_at(addr_of_mut!((*ptr).high), vm.high_pfn.clone());
+		BuddyAllocator::construct_at(addr_of_mut!((*ptr).vmalloc), vm.vmalloc_pfn.clone());
 	}
 
 	pub fn alloc_page(&mut self, rank: usize, flag: GFP) -> Result<NonNull<Page>, ()> {
 		match flag {
-			GFP::High => self.high.alloc_page(rank),
+			GFP::High => self
+				.high
+				.alloc_page(rank)
+				.or_else(|_| self.vmalloc.alloc_page(rank)),
 			GFP::Normal => Err(()),
 		}
 		.or_else(|_| self.normal.alloc_page(rank))
@@ -72,13 +77,17 @@ impl PageAllocator {
 	pub fn free_page(&mut self, page: NonNull<Page>) {
 		let addr = page.as_ptr() as usize;
 
-		match addr < VM_OFFSET {
-			true => self.high.free_page(page),
-			false => self.normal.free_page(page),
+		if addr < VM_OFFSET {
+			self.high.free_page(page)
+		} else if addr < VMALLOC_OFFSET {
+			self.normal.free_page(page)
+		} else {
+			self.vmalloc.free_page(page)
 		};
 	}
 }
 
+// #[cfg(disable)]
 mod mmtest {
 	use crate::{
 		collection::WrapQueue,
@@ -91,6 +100,7 @@ mod mmtest {
 
 	use super::{constant::MAX_RANK, *};
 	use crate::util::lcg::LCG;
+	use constant::MB;
 	use kfs_macro::ktest;
 
 	static mut PAGE_STATE: [bool; (usize::MAX >> PAGE_SHIFT) + 1] =
@@ -270,7 +280,7 @@ mod mmtest {
 		pr_info!(
 			" note: {} page ({}MB) allocated from ZONE_HIGH",
 			count,
-			count * PAGE_SIZE / 1024 / 1024
+			count * PAGE_SIZE / MB
 		);
 
 		for (i, is_alloced) in unsafe { PAGE_STATE }.iter().enumerate() {

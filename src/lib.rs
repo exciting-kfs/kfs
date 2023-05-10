@@ -32,6 +32,7 @@ use input::{key_event::Code, keyboard::KEYBOARD};
 use mm::{
 	memory_allocator::{mem_atomic::MemAtomic, mem_normal::MemNormal},
 	meta_page::MetaPageTable,
+	virtual_allocator::vmalloc::VMALLOC,
 	x86::init::{VMemory, VMEMORY},
 	PageAllocator,
 };
@@ -127,6 +128,7 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 
 		MemAtomic::init();
 		MemNormal::init();
+		VMALLOC.init(VMEMORY.lock().vmalloc_pfn.clone());
 	}
 
 	match cfg!(ktest) {

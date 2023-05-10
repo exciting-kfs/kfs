@@ -2,17 +2,17 @@ use super::constant::*;
 
 /// convert address to page frame number
 #[inline]
-pub fn addr_to_pfn(addr: usize) -> usize {
+pub const fn addr_to_pfn(addr: usize) -> usize {
 	addr >> PAGE_SHIFT
 }
 
 #[inline]
-pub fn addr_to_pfn_64(addr: u64) -> u64 {
+pub const fn addr_to_pfn_64(addr: u64) -> u64 {
 	addr >> PAGE_SHIFT
 }
 
 #[inline]
-pub fn pfn_to_addr(pfn: usize) -> usize {
+pub const fn pfn_to_addr(pfn: usize) -> usize {
 	pfn << PAGE_SHIFT
 }
 
