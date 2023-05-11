@@ -1,10 +1,11 @@
 pub mod no_alloc_list;
 
-use crate::mm::constant::PAGE_SIZE;
+use crate::mm::util::size_of_rank;
 use crate::mm::{GFP, PAGE_ALLOC};
 
 use core::alloc::AllocError;
 use core::ptr::NonNull;
+use core::slice;
 
 pub const fn align_with_hw_cache(bytes: usize) -> usize {
 	const CACHE_LINE_SIZE: usize = 64; // L1
@@ -16,13 +17,16 @@ pub const fn align_with_hw_cache(bytes: usize) -> usize {
 	}
 }
 
-pub fn alloc_block_from_page_alloc(rank: usize) -> Result<(NonNull<u8>, usize), AllocError> {
+pub fn alloc_block_from_page_alloc(rank: usize, flag: GFP) -> Result<NonNull<[u8]>, AllocError> {
 	unsafe {
 		let ptr = PAGE_ALLOC
 			.assume_init_mut()
-			.alloc_page(rank, GFP::Normal)
+			.alloc_page(rank, flag)
 			.map_err(|_| AllocError)?;
-		Ok((ptr.cast(), PAGE_SIZE * (1 << rank)))
+		let ptr = ptr.cast::<u8>().as_ptr();
+		let slice = slice::from_raw_parts_mut(ptr, size_of_rank(rank));
+		let ptr = NonNull::new_unchecked(slice);
+		Ok(ptr)
 	}
 }
 

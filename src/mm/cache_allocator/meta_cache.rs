@@ -1,4 +1,4 @@
-use core::{mem::size_of, ptr::NonNull};
+use core::{alloc::AllocError, mem::size_of, ptr::NonNull};
 
 use crate::mm::{
 	cache_allocator::util::{
@@ -22,7 +22,7 @@ pub struct MetaCache {
 
 impl MetaCache {
 	pub const NODE_SIZE: usize = size_of::<Node<MetaCache>>();
-	pub const NODE_ALIGN: usize = align_with_hw_cache(Self::NODE_SIZE);
+	pub const META_SIZE: usize = align_with_hw_cache(Self::NODE_SIZE);
 
 	/// # Safety
 	///
@@ -30,8 +30,8 @@ impl MetaCache {
 	/// * `cache_size` must be considered the align of L1 cache.
 	pub unsafe fn construct_at<'a>(mem: NonNull<u8>, cache_size: usize) -> &'a mut Self {
 		let rank = get_rank(mem.as_ptr() as usize);
-		let first = mem.as_ptr().offset(Self::NODE_ALIGN as isize);
-		let count = (size_of_rank(rank) - Self::NODE_ALIGN) / cache_size;
+		let count = count_total(rank, Self::META_SIZE, cache_size);
+		let first = mem.as_ptr().offset(Self::META_SIZE as isize);
 		let mut free_list = NAList::new();
 
 		for i in 0..count {
@@ -41,28 +41,37 @@ impl MetaCache {
 			free_list.push_front(node);
 		}
 
-		let ptr = mem.as_ptr().cast();
-		(*ptr) = MetaCache {
-			inuse: 0,
-			cache_size,
-			free_list,
-		};
+		let ptr = mem.as_ptr().cast::<MetaCache>();
+
+		(*ptr).inuse = 0;
+		(*ptr).cache_size = cache_size;
+		(*ptr).free_list = free_list;
+
 		&mut (*ptr)
 	}
 
+	#[inline(always)]
 	pub fn is_full(&self) -> bool {
-		let rank = self.rank();
-		let cache_size = self.cache_size;
-		let max = (size_of_rank(rank) - Self::NODE_ALIGN) / cache_size;
-
-		self.inuse == max
+		self.inuse == self.total()
 	}
 
-	pub fn alloc(&mut self) -> Option<NonNull<u8>> {
+	#[inline(always)]
+	pub fn total(&self) -> usize {
+		count_total(self.rank(), Self::META_SIZE, self.cache_size)
+	}
+
+	pub fn alloc(&mut self) -> Result<NonNull<[u8]>, AllocError> {
 		self.inuse += 1;
 
-		let ptr = self.free_list.pop_front()?.as_ptr().cast::<u8>();
-		Some(unsafe { NonNull::new_unchecked(ptr) })
+		let ptr = self
+			.free_list
+			.pop_front()
+			.ok_or(AllocError)?
+			.as_ptr()
+			.cast::<u8>();
+
+		let ptr = unsafe { core::slice::from_raw_parts_mut(ptr, self.cache_size) };
+		Ok(unsafe { NonNull::new_unchecked(ptr) })
 	}
 
 	/// # Safety
@@ -105,6 +114,11 @@ impl MetaCache {
 pub fn get_rank(addr: usize) -> usize {
 	let pfn = addr_to_pfn(virt_to_phys(addr));
 	(&unsafe { META_PAGE_TABLE.assume_init_ref() })[pfn].rank
+}
+
+#[inline(always)]
+fn count_total(rank: usize, meta_size: usize, cache_size: usize) -> usize {
+	(size_of_rank(rank) - meta_size) / cache_size
 }
 
 mod tests {

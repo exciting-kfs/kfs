@@ -25,6 +25,8 @@
 //! But, It also reduces maximum allocation size per request by `1 block`.
 
 pub use buddy_allocator::Page;
+pub use constant::MAX_RANK;
+
 pub mod util;
 
 mod buddy_allocator;
@@ -45,6 +47,7 @@ pub struct PageAllocator {
 	normal: BuddyAllocator,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GFP {
 	Normal,
 	High,
@@ -83,6 +86,7 @@ impl PageAllocator {
 	}
 }
 
+#[cfg(asdf)]
 mod mmtest {
 	use crate::{
 		collection::WrapQueue,
