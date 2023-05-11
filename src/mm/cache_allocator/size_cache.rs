@@ -251,13 +251,13 @@ pub mod tests {
 		let mut cache = SizeCache::<SIZE>::new();
 
 		// reserve for one cache.
-		// META_CACHE_SIZE + SizeCache<SIZE, {GFP::Normal}>::SIZE = 32 + 2048 = 2032 => rank 0
+		// META_CACHE_SIZE + SizeCache<SIZE>::SIZE = 32 + 2048 = 2032 => rank 0
 		cache.reserve(1).unwrap();
 		assert_eq!(cache.partial.count(), 1);
 		head_check(&mut cache, 0, 0);
 
 		//reserve for three cache.
-		// META_CACHE_SIZE + SizeCache<SIZE, {GFP::Normal}>::SIZE * 3 = 32 + 2048 * 3 = 6176 => rank 1
+		// META_CACHE_SIZE + SizeCache<SIZE>::SIZE * 3 = 32 + 2048 * 3 = 6176 => rank 1
 		cache.reserve(3).unwrap();
 		assert_eq!(cache.partial.count(), 2);
 		head_check(&mut cache, 0, 1);

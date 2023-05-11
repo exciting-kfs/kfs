@@ -37,7 +37,8 @@ pub trait CacheInit: Default {
 	/// Initialization function for cache allocator.
 	///
 	/// # Safety
-	/// The memory pointed by `ptr` must be reserved for cache allocator.
+	/// * The memory pointed by `ptr` must be reserved for cache allocator.
+	/// * Because `Self::default` makes a temporal instance, When you implement `drop` trait, be careful.
 	unsafe fn construct_at<'a>(ptr: NonNull<u8>) -> &'a mut Self {
 		let ptr = ptr.as_ptr() as *mut Self;
 		(*ptr) = Self::default();

@@ -2,7 +2,6 @@
 #![no_main]
 #![allow(dead_code)]
 #![feature(allocator_api)]
-#![feature(adt_const_params)] // GFP to const generic params
 #![feature(maybe_uninit_uninit_array)]
 #![feature(const_maybe_uninit_uninit_array)]
 

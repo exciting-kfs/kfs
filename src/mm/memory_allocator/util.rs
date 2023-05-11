@@ -22,3 +22,8 @@ pub fn level_of(layout: Layout) -> usize {
 
 	LEVEL_MIN + rank.checked_sub(LEVEL_MIN).unwrap_or_default()
 }
+
+pub enum GFP {
+	Atomic,
+	Normal,
+}

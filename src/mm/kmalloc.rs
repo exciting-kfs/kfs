@@ -3,12 +3,7 @@ use core::{
 	ptr::NonNull,
 };
 
-use super::memory_allocator::{mem_atomic::MemAtomic, mem_normal::MemNormal};
-
-pub enum GFP {
-	Atomic,
-	Normal,
-}
+use super::memory_allocator::{mem_atomic::MemAtomic, mem_normal::MemNormal, util::GFP};
 
 pub fn kmalloc(layout: Layout, flag: GFP) -> Result<NonNull<[u8]>, AllocError> {
 	match flag {
