@@ -10,18 +10,18 @@ use super::{
 
 type Result<T> = core::result::Result<T, AllocError>;
 
-pub static mut CM: CacheManager<'static> = CacheManager::new();
+pub static mut CM: CacheManager = CacheManager::new();
 
 const CACHE_ALLOCATOR_SIZE: usize = size_of::<SizeCache<42>>();
 const NODE_SIZE: usize = size_of::<Node<NonNull<dyn CacheTrait>>>();
 
-pub struct CacheManager<'a> {
-	cache_space: SizeCache<'a, CACHE_ALLOCATOR_SIZE>,
-	node_space: SizeCache<'a, NODE_SIZE>,
+pub struct CacheManager {
+	cache_space: SizeCache<CACHE_ALLOCATOR_SIZE>,
+	node_space: SizeCache<NODE_SIZE>,
 	list: NAList<NonNull<dyn CacheTrait>>,
 }
 
-impl<'a> CacheManager<'a> {
+impl CacheManager {
 	pub const fn new() -> Self {
 		CacheManager {
 			cache_space: SizeCache::new(),
@@ -32,24 +32,24 @@ impl<'a> CacheManager<'a> {
 
 	pub fn new_allocator<A>(&mut self) -> Result<NonNull<A>>
 	where
-		A: CacheTrait + CacheInit + 'static, // TODO why static?
+		A: CacheTrait + CacheInit + 'static,
 	{
-		let mem_cache = self.cache_space.alloc()?;
-		let cache = unsafe { A::construct_at(mem_cache) };
+		let mem_cache = self.cache_space.allocate()?;
+		let cache = unsafe { A::construct_at(mem_cache.cast()) };
 
 		match self.register(cache) {
 			Ok(_) => Ok(mem_cache.cast()),
 			Err(e) => unsafe {
-				self.cache_space.dealloc(mem_cache);
+				self.cache_space.deallocate(mem_cache.cast());
 				Err(e)
 			},
 		}
 	}
 
 	pub fn register(&mut self, cache: &'static mut dyn CacheTrait) -> Result<()> {
-		// TODO why static?
-		let mem_node = self.node_space.alloc()?.as_ptr();
-		let node = unsafe { init_list_node(mem_node, cache as *mut dyn CacheTrait) };
+		let mem_node = self.node_space.allocate()?.as_ptr();
+		let cache = cache as *mut dyn CacheTrait;
+		let node = unsafe { init_list_node(mem_node.cast(), cache) };
 
 		self.list.push_front(node);
 		Ok(())
@@ -58,10 +58,7 @@ impl<'a> CacheManager<'a> {
 	/// # Safety
 	///
 	/// `ptr` must point cache alloctor.
-	pub unsafe fn drop_allocator<A>(&mut self, ptr: NonNull<A>)
-	where
-		A: CacheTrait + 'static,
-	{
+	pub unsafe fn drop_allocator(&mut self, ptr: NonNull<dyn CacheTrait>) {
 		let cache = &mut *(ptr.as_ptr() as *mut dyn CacheTrait);
 		cache.cache_shrink();
 		if !cache.empty() {
@@ -69,7 +66,7 @@ impl<'a> CacheManager<'a> {
 		}
 
 		self.list.find(|n| n.as_ref() == cache).map(|cache_ptr| {
-			self.cache_space.dealloc(cache_ptr.cast());
+			self.cache_space.deallocate(cache_ptr.cast());
 		});
 
 		self.unregister(cache);
@@ -79,7 +76,7 @@ impl<'a> CacheManager<'a> {
 		unsafe {
 			let node_ptr = self.list.remove_if(|n| n.as_ref() == cache);
 			node_ptr.map(|node_ptr| {
-				self.node_space.dealloc(node_ptr.cast());
+				self.node_space.deallocate(node_ptr.cast());
 			});
 		}
 	}
@@ -107,27 +104,7 @@ unsafe fn init_list_node<'a>(
 	Node::construct_at(ptr, data)
 }
 
-#[macro_export]
-macro_rules! kmem_cache_register {
-	($cache:ident) => {
-		let mut err_count = 0;
-		for _ in 0..$crate::mm::cache_allocator::REGISTER_TRY {
-			match $crate::mm::cache_allocator::CM.register(&mut $cache) {
-				Ok(_) => break,
-				Err(_) => {
-					// pr_debug;
-					err_count += 1;
-					$crate::mm::cache_allocator::CM.cache_shrink();
-				}
-			}
-		}
-		if err_count == $crate::mm::cache_allocator::REGISTER_TRY {
-			$crate::pr_info!("cache_manager: register: out of memory.");
-			panic!(); // TODO 이게 맞나..?
-		}
-	};
-}
-
+#[cfg(ktest)]
 mod tests {
 	use kfs_macro::ktest;
 
