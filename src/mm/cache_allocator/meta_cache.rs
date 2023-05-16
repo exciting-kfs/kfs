@@ -113,7 +113,7 @@ impl MetaCache {
 
 pub fn get_rank(addr: usize) -> usize {
 	let pfn = addr_to_pfn(virt_to_phys(addr));
-	(&unsafe { META_PAGE_TABLE.assume_init_ref() })[pfn].rank
+	(META_PAGE_TABLE.lock().get())[pfn].rank
 }
 
 #[inline(always)]
@@ -121,6 +121,7 @@ fn count_total(rank: usize, meta_size: usize, cache_size: usize) -> usize {
 	(size_of_rank(rank) - meta_size) / cache_size
 }
 
+#[cfg(ktest)]
 mod tests {
 	// use super::*;
 	// use core::ptr::NonNull;

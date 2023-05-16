@@ -23,7 +23,8 @@ impl Backtrace {
 	/// Print call stack trace of StackDump.
 	pub fn print_trace(&self) {
 		for (idx, frame) in self.stack.iter().enumerate() {
-			let ksyms = unsafe { &BOOT_INFO.assume_init_ref().ksyms };
+			let lock = BOOT_INFO.lock();
+			let ksyms = &lock.get().ksyms;
 
 			let name = ksyms.find_name_by_addr(frame.fn_addr).unwrap_or_default();
 

@@ -2,8 +2,7 @@ pub mod mem_atomic;
 pub mod mem_normal;
 pub mod util;
 
-use core::alloc::{AllocError, Allocator, Layout};
-use core::cell::UnsafeCell;
+use core::alloc::{AllocError, Layout};
 use core::ptr::NonNull;
 
 use self::util::{level_of, LEVEL_END};
@@ -15,22 +14,32 @@ use super::GFP;
 
 #[derive(Debug)]
 pub struct MemoryAllocator {
-	cache: UnsafeCell<CacheAllocator>,
-	rank_count: UnsafeCell<[usize; MAX_RANK + 1]>,
+	cache: CacheAllocator,
+	rank_count: [usize; MAX_RANK + 1],
 }
 
 impl MemoryAllocator {
-	pub const fn new() -> Self {
-		let rank_count = UnsafeCell::new([0; MAX_RANK + 1]);
+	pub const fn uninit() -> Self {
+		let rank_count = [0; MAX_RANK + 1];
 
 		MemoryAllocator {
-			cache: UnsafeCell::new(CacheAllocator::new()),
+			cache: CacheAllocator::uninit(),
 			rank_count,
 		}
 	}
 
-	pub fn statistic(&self) -> MemoryAllocatorStat {
-		let (cache, rank) = unsafe { self.get_fields() };
+	pub fn init(&mut self) {
+		self.cache.init();
+	}
+
+	pub fn initialized() -> Self {
+		let mut allocator = MemoryAllocator::uninit();
+		allocator.init();
+		allocator
+	}
+
+	pub fn statistic(&mut self) -> MemoryAllocatorStat {
+		let (cache, rank) = (&mut self.cache, &mut self.rank_count);
 
 		let rank_stat = rank.clone();
 		let cache_stat = cache.statistic();
@@ -41,25 +50,8 @@ impl MemoryAllocator {
 		}
 	}
 
-	unsafe fn get_fields(&self) -> (&mut CacheAllocator, &mut [usize; MAX_RANK + 1]) {
-		(
-			self.cache.get().as_mut().unwrap(),
-			self.rank_count.get().as_mut().unwrap(),
-		)
-	}
-}
-
-impl Drop for MemoryAllocator {
-	fn drop(&mut self) {
-		if (self.rank_count.get_mut()).iter().sum::<usize>() != 0 {
-			panic!("It can cause memory leak!");
-		}
-	}
-}
-
-unsafe impl Allocator for MemoryAllocator {
-	fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-		let (cache, rank_count) = unsafe { self.get_fields() };
+	fn allocate(&mut self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+		let (cache, rank_count) = (&mut self.cache, &mut self.rank_count);
 
 		let level = level_of(layout);
 		match level.checked_sub(LEVEL_END) {
@@ -71,8 +63,8 @@ unsafe impl Allocator for MemoryAllocator {
 		}
 	}
 
-	unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-		let (cache, rank_count) = self.get_fields();
+	unsafe fn deallocate(&mut self, ptr: NonNull<u8>, layout: Layout) {
+		let (cache, rank_count) = (&mut self.cache, &mut self.rank_count);
 
 		let level = level_of(layout);
 		match level.checked_sub(LEVEL_END) {
@@ -81,6 +73,14 @@ unsafe impl Allocator for MemoryAllocator {
 				rank_count[rank] -= 1;
 				dealloc_block_to_page_alloc(ptr);
 			}
+		}
+	}
+}
+
+impl Drop for MemoryAllocator {
+	fn drop(&mut self) {
+		if self.rank_count.iter().sum::<usize>() != 0 {
+			panic!("It can cause memory leak!");
 		}
 	}
 }
@@ -111,9 +111,9 @@ mod tests {
 
 	#[ktest]
 	fn new() {
-		let normal = MemoryAllocator::new();
+		let mut normal = MemoryAllocator::initialized();
 		let cache = core::array::from_fn(|_| CacheStat::hand_made(0, 0, 0));
-		let ca_stat = CacheAllocatorStat::hand_made(false, cache);
+		let ca_stat = CacheAllocatorStat::hand_made(cache);
 		assert_eq!(
 			normal.statistic(),
 			MemoryAllocatorStat::hand_made(ca_stat, [0; MAX_RANK + 1])
@@ -126,9 +126,9 @@ mod tests {
 			let layout =
 				unsafe { Layout::from_size_align_unchecked(1 << (rank + PAGE_SHIFT), 4096) };
 			let cache = core::array::from_fn(|_| CacheStat::hand_made(0, 0, 0));
-			let ca_stat = CacheAllocatorStat::hand_made(false, cache);
+			let ca_stat = CacheAllocatorStat::hand_made(cache);
 			let mut rank_count = [0; MAX_RANK + 1];
-			let normal = MemoryAllocator::new();
+			let mut normal = MemoryAllocator::initialized();
 
 			let ptr = normal.allocate(layout);
 
@@ -154,9 +154,9 @@ mod tests {
 		let rank = 2;
 		let layout = unsafe { Layout::from_size_align_unchecked(1 << (rank + PAGE_SHIFT), 4096) };
 		let cache = core::array::from_fn(|_| CacheStat::hand_made(0, 0, 0));
-		let ca_stat = CacheAllocatorStat::hand_made(false, cache);
+		let ca_stat = CacheAllocatorStat::hand_made(cache);
 		let mut rank_count = [0; MAX_RANK + 1];
-		let normal = MemoryAllocator::new();
+		let mut normal = MemoryAllocator::initialized();
 
 		let ptr = [normal.allocate(layout), normal.allocate(layout)];
 
@@ -175,18 +175,5 @@ mod tests {
 			normal.statistic(),
 			MemoryAllocatorStat::hand_made(ca_stat, rank_count)
 		);
-	}
-
-	use alloc::vec::Vec;
-
-	#[ktest]
-	fn with_collection() {
-		let normal = MemoryAllocator::new();
-		{
-			let mut v = Vec::new_in(normal);
-			for _ in 0..1000000 {
-				v.push(1);
-			}
-		}
 	}
 }

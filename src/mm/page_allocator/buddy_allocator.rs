@@ -29,9 +29,8 @@ impl BuddyAllocator {
 		for mut entry in cover_pfn
 			.step_by(rank_to_pages(MAX_RANK))
 			.map(|virt_pfn| addr_to_pfn(virt_to_phys(pfn_to_addr(virt_pfn))))
-			.map(|phys_pfn| {
-				NonNull::from(&mut unsafe { META_PAGE_TABLE.assume_init_mut() }[phys_pfn])
-			}) {
+			.map(|phys_pfn| NonNull::from(&mut (META_PAGE_TABLE.lock().get_mut())[phys_pfn]))
+		{
 			entry.as_mut().rank = MAX_RANK;
 			free_list.add(entry);
 		}
@@ -85,12 +84,14 @@ impl BuddyAllocator {
 	}
 
 	fn metapage_to_index(&self, page: NonNull<MetaPage>) -> usize {
-		(page.as_ptr() as usize - unsafe { META_PAGE_TABLE.assume_init_ref().as_ptr() } as usize)
+		// (page.as_ptr() as usize - unsafe { META_PAGE_TABLE.assume_init_ref().as_ptr() } as usize)
+		// 	/ size_of::<MetaPage>()
+		(page.as_ptr() as usize - (META_PAGE_TABLE.lock().get().as_ptr()) as usize)
 			/ size_of::<MetaPage>()
 	}
 
 	fn index_to_metapage(&mut self, index: usize) -> NonNull<MetaPage> {
-		NonNull::from(&mut unsafe { META_PAGE_TABLE.assume_init_mut() }[index])
+		NonNull::from(&mut (META_PAGE_TABLE.lock().get_mut())[index])
 	}
 
 	fn metapage_to_ptr(&self, page: NonNull<MetaPage>) -> NonNull<Page> {
