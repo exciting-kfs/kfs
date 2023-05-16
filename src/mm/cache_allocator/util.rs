@@ -20,7 +20,8 @@ pub const fn align_with_hw_cache(bytes: usize) -> usize {
 pub fn alloc_block_from_page_alloc(rank: usize, flag: GFP) -> Result<NonNull<[u8]>, AllocError> {
 	unsafe {
 		let ptr = PAGE_ALLOC
-			.assume_init_mut()
+			.lock()
+			.get_mut()
 			.alloc_page(rank, flag)
 			.map_err(|_| AllocError)?;
 		let ptr = ptr.cast::<u8>().as_ptr();
@@ -34,5 +35,5 @@ pub fn alloc_block_from_page_alloc(rank: usize, flag: GFP) -> Result<NonNull<[u8
 ///
 /// `blk_ptr` must point memory block allocated by `PAGE_ALLOC`
 pub unsafe fn dealloc_block_to_page_alloc(blk_ptr: NonNull<u8>) {
-	PAGE_ALLOC.assume_init_mut().free_page(blk_ptr.cast());
+	PAGE_ALLOC.lock().get_mut().free_page(blk_ptr.cast());
 }

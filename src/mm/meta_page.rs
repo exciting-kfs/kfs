@@ -1,10 +1,10 @@
 use core::marker::{PhantomData, PhantomPinned};
-use core::mem::MaybeUninit;
 use core::ops::{Deref, DerefMut};
 use core::ptr::NonNull;
 use core::slice::from_raw_parts_mut;
 
 use crate::boot::PMemory;
+use crate::util::singleton::Singleton;
 
 use super::page_allocator::util::{addr_to_pfn_64, rank_to_pages};
 
@@ -20,7 +20,7 @@ pub struct MetaPage {
 #[repr(transparent)]
 pub struct MetaPageTable(&'static mut [MetaPage]);
 
-pub static mut META_PAGE_TABLE: MaybeUninit<MetaPageTable> = MaybeUninit::uninit();
+pub static META_PAGE_TABLE: Singleton<MetaPageTable> = Singleton::uninit();
 
 impl MetaPageTable {
 	pub unsafe fn alloc(pmem: &mut PMemory) -> (*mut MetaPage, usize) {

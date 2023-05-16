@@ -33,39 +33,32 @@ mod buddy_allocator;
 mod constant;
 mod free_list;
 
+use crate::util::singleton::Singleton;
+
 use self::constant::VM_OFFSET;
 
 use super::x86::init::VMemory;
 use buddy_allocator::BuddyAllocator;
-use core::{
-	mem::MaybeUninit,
-	ptr::{addr_of_mut, NonNull},
-};
+use core::ptr::{addr_of_mut, NonNull};
 
 pub struct PageAllocator {
 	high: BuddyAllocator,
 	normal: BuddyAllocator,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GFP {
 	Normal,
 	High,
 }
 
-pub static mut PAGE_ALLOC: MaybeUninit<PageAllocator> = MaybeUninit::uninit();
+pub static PAGE_ALLOC: Singleton<PageAllocator> = Singleton::uninit();
 
 impl PageAllocator {
 	pub unsafe fn init(vm: &VMemory) {
-		BuddyAllocator::construct_at(
-			addr_of_mut!((*PAGE_ALLOC.as_mut_ptr()).normal),
-			vm.normal_pfn.clone(),
-		);
+		let ptr = PAGE_ALLOC.as_ptr();
 
-		BuddyAllocator::construct_at(
-			addr_of_mut!((*PAGE_ALLOC.as_mut_ptr()).high),
-			vm.high_pfn.clone(),
-		);
+		BuddyAllocator::construct_at(addr_of_mut!((*ptr).normal), vm.normal_pfn.clone());
+		BuddyAllocator::construct_at(addr_of_mut!((*ptr).high), vm.high_pfn.clone());
 	}
 
 	pub fn alloc_page(&mut self, rank: usize, flag: GFP) -> Result<NonNull<Page>, ()> {
@@ -97,7 +90,7 @@ mod mmtest {
 	};
 
 	use super::{constant::MAX_RANK, *};
-	use crate::util::LCG;
+	use crate::util::lcg::LCG;
 	use kfs_macro::ktest;
 
 	static mut PAGE_STATE: [bool; (usize::MAX >> PAGE_SHIFT) + 1] =
@@ -156,7 +149,7 @@ mod mmtest {
 	}
 
 	fn alloc(rank: usize, flag: GFP) -> Result<AllocInfo, ()> {
-		let mem = unsafe { PAGE_ALLOC.assume_init_mut() }.alloc_page(rank, flag)?;
+		let mem = PAGE_ALLOC.lock().get_mut().alloc_page(rank, flag)?;
 
 		assert!(mem.as_ptr() as usize % PAGE_SIZE == 0);
 
@@ -168,7 +161,7 @@ mod mmtest {
 	fn free(info: AllocInfo) {
 		mark_freed(info.ptr.as_ptr() as usize, info.rank);
 
-		unsafe { PAGE_ALLOC.assume_init_mut() }.free_page(info.ptr);
+		PAGE_ALLOC.lock().get_mut().free_page(info.ptr);
 	}
 
 	fn is_zone_normal(ptr: NonNull<Page>) -> bool {

@@ -5,12 +5,13 @@ mod symtab;
 use core::cmp::max;
 use core::mem::align_of;
 use core::ops::Range;
-use core::{ffi::c_char, mem::size_of, mem::MaybeUninit};
+use core::{ffi::c_char, mem::size_of};
 
 use multiboot2::{ElfSection, ElfSectionsTag, MemoryMapTag};
 
 use crate::mm::constant::VM_OFFSET;
 use crate::mm::util::{next_align_64, phys_to_virt};
+use crate::util::singleton::Singleton;
 
 use self::kernel_symbol::KernelSymbol;
 use self::{
@@ -20,8 +21,8 @@ use self::{
 
 const MULTIBOOT2_MAGIC: u32 = 0x36d76289;
 
-/// Singleton object
-pub static mut BOOT_INFO: MaybeUninit<BootInfo> = MaybeUninit::uninit();
+pub static BOOT_INFO: Singleton<BootInfo> = Singleton::uninit();
+
 pub struct BootInfo {
 	pub ksyms: KernelSymbol,
 	pub mem_info: PMemory,
@@ -84,7 +85,7 @@ impl BootInfo {
 			kernel_end,
 		};
 
-		unsafe { BOOT_INFO.write(BootInfo { mem_info, ksyms }) };
+		BOOT_INFO.write(BootInfo { mem_info, ksyms });
 
 		Ok(())
 	}

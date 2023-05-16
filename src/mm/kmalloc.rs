@@ -31,7 +31,8 @@ pub fn ksize(ptr: NonNull<u8>) -> Option<usize> {
 		let addr = ptr.as_ptr() as usize;
 		let pfn = addr_to_pfn(virt_to_phys(addr));
 		for n in (0..=pfn).rev() {
-			let meta_page = &(unsafe { META_PAGE_TABLE.assume_init_ref() })[n];
+			let lock = META_PAGE_TABLE.lock();
+			let meta_page = &(lock.get())[n];
 			if meta_page.is_inuse() {
 				return Some(1 << (meta_page.rank + PAGE_SHIFT));
 			}

@@ -4,6 +4,7 @@ use crate::mm::util::bit_scan_reverse;
 
 pub const LEVEL_MIN: usize = 6;
 pub const LEVEL_END: usize = 12;
+pub const LEVEL_RNG: usize = LEVEL_END - LEVEL_MIN;
 
 pub fn level_of(layout: Layout) -> usize {
 	let size = layout.size();

@@ -29,6 +29,7 @@ use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use input::{key_event::Code, keyboard::KEYBOARD};
 
 use mm::{
+	memory_allocator::{mem_atomic::MemAtomic, mem_normal::MemNormal},
 	meta_page::MetaPageTable,
 	x86::init::{VMemory, VMEMORY},
 	PageAllocator,
@@ -116,13 +117,15 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	unsafe {
 		boot::BootInfo::init(bi_header, magic).unwrap();
 		// allocation (alloc_n<T>(count)) starts here.
-		let (meta_page_ptr, count) =
-			MetaPageTable::alloc(&mut BOOT_INFO.assume_init_mut().mem_info);
+		let (meta_page_ptr, count) = MetaPageTable::alloc(&mut BOOT_INFO.lock().get_mut().mem_info);
 		// allocation end
-		VMemory::init(&BOOT_INFO.assume_init_ref().mem_info);
+		VMemory::init(&BOOT_INFO.lock().get().mem_info);
 
 		MetaPageTable::init(meta_page_ptr, count);
-		PageAllocator::init(VMEMORY.assume_init_ref());
+		PageAllocator::init(VMEMORY.lock().get());
+
+		MemAtomic::init();
+		MemNormal::init();
 	}
 
 	match cfg!(ktest) {

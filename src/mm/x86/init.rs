@@ -4,8 +4,8 @@ use super::x86_page::{PageFlag, PD, PDE};
 use crate::boot::PMemory;
 use crate::mm::constant::*;
 use crate::mm::page_allocator::util::addr_to_pfn;
+use crate::util::singleton::Singleton;
 
-use core::mem::MaybeUninit;
 use core::ops::Range;
 
 extern "C" {
@@ -17,7 +17,7 @@ pub struct VMemory {
 	pub high_pfn: Range<usize>,
 }
 
-pub static mut VMEMORY: MaybeUninit<VMemory> = MaybeUninit::uninit();
+pub static VMEMORY: Singleton<VMemory> = Singleton::uninit();
 
 impl VMemory {
 	pub unsafe fn init(pmem: &PMemory) {
