@@ -79,6 +79,10 @@ impl<const N: usize> CacheTrait for SizeCache<N> {
 		self.partial.head() == None
 	}
 
+	fn size(&self) -> usize {
+		Self::SIZE
+	}
+
 	fn statistic(&self) -> CacheStat {
 		let (total, inuse) = self.partial.iter().fold((0, 0), |(mut t, mut i), m| {
 			i += m.inuse;
@@ -112,6 +116,12 @@ impl<const N: usize> CacheTrait for SizeCache<N> {
 				let node = unsafe { node.as_mut() };
 				self.partial.push_front(node);
 			});
+	}
+
+	fn contains(&mut self, ptr: NonNull<u8>) -> bool {
+		self.partial
+			.find(|meta_cache| meta_cache.contains(ptr))
+			.is_some()
 	}
 }
 

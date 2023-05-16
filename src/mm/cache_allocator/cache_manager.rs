@@ -89,6 +89,16 @@ impl CacheManager {
 			cache.cache_shrink();
 		})
 	}
+
+	pub fn cache_size(&mut self, ptr: NonNull<u8>) -> Option<usize> {
+		for ca in self.list.iter_mut() {
+			let allocator = unsafe { ca.as_mut() };
+			if allocator.contains(ptr) {
+				return Some(allocator.size());
+			}
+		}
+		None
+	}
 }
 
 /// # Safety

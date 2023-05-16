@@ -25,6 +25,9 @@ pub trait CacheTrait {
 	fn statistic(&self) -> CacheStat;
 	fn allocate(&mut self) -> Result<NonNull<[u8]>, AllocError>;
 	unsafe fn deallocate(&mut self, ptr: NonNull<u8>);
+
+	fn contains(&mut self, ptr: NonNull<u8>) -> bool;
+	fn size(&self) -> usize;
 }
 
 impl PartialEq for dyn CacheTrait {
