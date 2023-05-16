@@ -1,6 +1,6 @@
 use core::cell::UnsafeCell;
 
-use super::inner_mutex::InnerMutex;
+use super::{inner_mutex::InnerMutex, TryLockFail};
 
 #[derive(Debug)]
 pub struct SpinMutex<T> {
@@ -24,6 +24,10 @@ impl<T> SpinMutex<T> {
 	pub fn lock<'g>(&'g self) -> MutexGuard<'g, T> {
 		self.inner.lock();
 		MutexGuard::new(self)
+	}
+
+	pub fn try_lock<'g>(&'g self) -> Result<MutexGuard<'g, T>, TryLockFail> {
+		self.inner.try_lock().map(|_| MutexGuard::new(self))
 	}
 
 	pub fn unlock(guard: &mut MutexGuard<'_, T>) {
