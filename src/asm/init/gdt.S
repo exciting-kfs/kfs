@@ -2,16 +2,16 @@ section .text
 global load_flat_gdt:function (load_flat_gdt.end - load_flat_gdt)
 
 load_flat_gdt:
-    lgdt [gdtr_pointer]
+	lgdt [gdtr_pointer]
 	; Reload CS via long jump
 	jmp (kernel_code_entry - gdt_start):.reload_data_segment
 .reload_data_segment:
-    mov ax, (kernel_data_entry - gdt_start)
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-    mov ss, ax
+	mov ax, (kernel_data_entry - gdt_start)
+	mov ds, ax
+	mov es, ax
+	mov fs, ax
+	mov gs, ax
+	mov ss, ax
 	ret
 .end:
 
