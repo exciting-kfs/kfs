@@ -1,7 +1,7 @@
 # === User settings / toolchain ===
 
 RELEASE_MODE := n
-DEBUG_WITH_VSCODE := y
+DEBUG_WITH_VSCODE := n
 
 I386_GRUB2_PREFIX := $(I386_GRUB2_PREFIX)
 

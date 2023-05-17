@@ -4,6 +4,8 @@
 #![feature(allocator_api)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(const_maybe_uninit_uninit_array)]
+#![feature(naked_functions)]
+#![feature(abi_x86_interrupt)]
 
 extern crate alloc;
 
@@ -13,6 +15,7 @@ mod collection;
 mod console;
 mod driver;
 mod input;
+mod interrupt;
 mod io;
 mod mm;
 mod printk;
@@ -29,6 +32,7 @@ use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
 use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use input::{key_event::Code, keyboard::KEYBOARD};
 
+use interrupt::idt::IDT;
 use mm::{
 	memory_allocator::{mem_atomic::MemAtomic, mem_normal::MemNormal},
 	meta_page::MetaPageTable,
@@ -128,6 +132,8 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 		MemAtomic::init();
 		MemNormal::init();
 	}
+
+	IDT::init();
 
 	match cfg!(ktest) {
 		true => run_test(),
