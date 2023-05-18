@@ -71,5 +71,3 @@ impl IDTR {
 		IDTR { limit, addr }
 	}
 }
-
-unsafe impl Sync for IDTR {}
