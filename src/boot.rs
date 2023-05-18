@@ -11,7 +11,7 @@ use multiboot2::{ElfSection, ElfSectionsTag, MemoryMapTag};
 
 use crate::mm::constant::VM_OFFSET;
 use crate::mm::util::{next_align_64, phys_to_virt};
-use crate::util::singleton::Singleton;
+use crate::sync::singleton::Singleton;
 
 use self::kernel_symbol::KernelSymbol;
 use self::{
@@ -85,7 +85,7 @@ impl BootInfo {
 			kernel_end,
 		};
 
-		BOOT_INFO.write(BootInfo { mem_info, ksyms });
+		unsafe { BOOT_INFO.write(BootInfo { mem_info, ksyms }) };
 
 		Ok(())
 	}

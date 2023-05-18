@@ -4,15 +4,15 @@ use core::sync::atomic::Ordering;
 use super::TryLockFail;
 
 #[derive(Debug)]
-pub struct InnerMutex {
+pub struct SpinLock {
 	lock_atomic: AtomicBool,
 }
 
-unsafe impl Sync for InnerMutex {}
+unsafe impl Sync for SpinLock {}
 
-impl InnerMutex {
+impl SpinLock {
 	pub const fn new() -> Self {
-		InnerMutex {
+		SpinLock {
 			lock_atomic: AtomicBool::new(false),
 		}
 	}
