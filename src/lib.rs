@@ -18,6 +18,7 @@ mod mm;
 mod printk;
 mod subroutine;
 
+mod sync;
 mod test;
 mod util;
 
@@ -117,12 +118,12 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	unsafe {
 		boot::BootInfo::init(bi_header, magic).unwrap();
 		// allocation (alloc_n<T>(count)) starts here.
-		let (meta_page_ptr, count) = MetaPageTable::alloc(&mut BOOT_INFO.lock().get_mut().mem_info);
+		let (meta_page_ptr, count) = MetaPageTable::alloc(&mut BOOT_INFO.lock().mem_info);
 		// allocation end
-		VMemory::init(&BOOT_INFO.lock().get().mem_info);
+		VMemory::init(&BOOT_INFO.lock().mem_info);
 
 		MetaPageTable::init(meta_page_ptr, count);
-		PageAllocator::init(VMEMORY.lock().get());
+		PageAllocator::init(&VMEMORY.lock());
 
 		MemAtomic::init();
 		MemNormal::init();

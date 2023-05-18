@@ -4,7 +4,7 @@ use core::ptr::NonNull;
 use core::slice::from_raw_parts_mut;
 
 use crate::boot::PMemory;
-use crate::util::singleton::Singleton;
+use crate::sync::singleton::Singleton;
 
 use super::page_allocator::util::{addr_to_pfn_64, rank_to_pages};
 

@@ -4,7 +4,7 @@ use super::x86_page::{PageFlag, PD, PDE};
 use crate::boot::PMemory;
 use crate::mm::constant::*;
 use crate::mm::page_allocator::util::addr_to_pfn;
-use crate::util::singleton::Singleton;
+use crate::sync::singleton::Singleton;
 
 use core::ops::Range;
 

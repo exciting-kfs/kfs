@@ -3,7 +3,7 @@ use core::{
 	ptr::NonNull,
 };
 
-use crate::util::singleton::Singleton;
+use crate::sync::singleton::Singleton;
 
 use super::MemoryAllocator;
 
@@ -14,16 +14,16 @@ pub struct MemNormal;
 
 impl MemNormal {
 	pub fn init() {
-		NORMAL_ALLOC.lock().get_mut().init();
+		NORMAL_ALLOC.lock().init();
 	}
 }
 
 unsafe impl Allocator for MemNormal {
 	fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-		NORMAL_ALLOC.lock().get_mut().allocate(layout)
+		NORMAL_ALLOC.lock().allocate(layout)
 	}
 	unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-		NORMAL_ALLOC.lock().get_mut().deallocate(ptr, layout)
+		NORMAL_ALLOC.lock().deallocate(ptr, layout)
 	}
 }
 

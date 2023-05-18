@@ -1,6 +1,4 @@
 pub mod lcg;
-pub mod mutex;
-pub mod singleton;
 
 pub struct LazyInit<T> {
 	value: Option<T>,

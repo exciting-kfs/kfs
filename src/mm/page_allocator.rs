@@ -33,7 +33,7 @@ mod buddy_allocator;
 mod constant;
 mod free_list;
 
-use crate::util::singleton::Singleton;
+use crate::sync::singleton::Singleton;
 
 use self::constant::VM_OFFSET;
 
@@ -55,7 +55,7 @@ pub static PAGE_ALLOC: Singleton<PageAllocator> = Singleton::uninit();
 
 impl PageAllocator {
 	pub unsafe fn init(vm: &VMemory) {
-		let ptr = PAGE_ALLOC.as_ptr();
+		let ptr = unsafe { PAGE_ALLOC.as_mut_ptr() };
 
 		BuddyAllocator::construct_at(addr_of_mut!((*ptr).normal), vm.normal_pfn.clone());
 		BuddyAllocator::construct_at(addr_of_mut!((*ptr).high), vm.high_pfn.clone());
@@ -149,7 +149,7 @@ mod mmtest {
 	}
 
 	fn alloc(rank: usize, flag: GFP) -> Result<AllocInfo, ()> {
-		let mem = PAGE_ALLOC.lock().get_mut().alloc_page(rank, flag)?;
+		let mem = PAGE_ALLOC.lock().alloc_page(rank, flag)?;
 
 		assert!(mem.as_ptr() as usize % PAGE_SIZE == 0);
 
@@ -161,7 +161,7 @@ mod mmtest {
 	fn free(info: AllocInfo) {
 		mark_freed(info.ptr.as_ptr() as usize, info.rank);
 
-		PAGE_ALLOC.lock().get_mut().free_page(info.ptr);
+		PAGE_ALLOC.lock().free_page(info.ptr);
 	}
 
 	fn is_zone_normal(ptr: NonNull<Page>) -> bool {
