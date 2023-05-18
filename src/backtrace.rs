@@ -25,7 +25,9 @@ impl Backtrace {
 		for (idx, frame) in self.stack.iter().enumerate() {
 			let ksyms = &BOOT_INFO.lock().ksyms;
 
-			let name = ksyms.find_name_by_addr(frame.fn_addr).unwrap_or_default();
+			let name = ksyms
+				.find_name_by_addr(frame.fn_addr)
+				.unwrap_or_else(|| "<unknown>");
 
 			pr_info!("frame #{}: {:?}: {:?}", idx, frame.fn_addr, demangle(name));
 		}

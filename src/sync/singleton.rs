@@ -31,11 +31,11 @@ impl<T> Singleton<T> {
 	}
 
 	pub unsafe fn as_mut_ptr(&self) -> *mut T {
-		unsafe { (*self.value.get()).as_mut_ptr() }
+		self.value.get().as_mut().unwrap().as_mut_ptr()
 	}
 
 	pub unsafe fn write(&self, value: T) -> &mut T {
-		unsafe { (*self.value.get()).write(value) }
+		self.value.get().as_mut().unwrap().write(value)
 	}
 
 	pub fn lock(&self) -> SingletonGuard<'_, T> {
