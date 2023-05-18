@@ -1,5 +1,4 @@
 mod exception;
-mod interrupt_info;
 
 pub mod handler;
 pub mod idt;

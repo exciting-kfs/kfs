@@ -1,4 +1,6 @@
-use crate::{interrupt::interrupt_info::InterruptInfo, pr_info, pr_warn};
+use crate::{pr_info, pr_warn};
+
+use super::interrupt_info::InterruptInfo;
 
 /// # Initial Stack Frame
 /// ```
