@@ -5,11 +5,11 @@ use super::constant::*;
 use super::free_list::FreeList;
 use super::util::{addr_to_pfn, pfn_to_addr, rank_to_pages};
 
-use crate::mm::meta_page::{MetaPage, META_PAGE_TABLE};
-use crate::mm::util::{next_align, phys_to_virt, virt_to_phys};
+use crate::mm::meta_page::{MetaPage, MetaPageTable, META_PAGE_TABLE};
+use crate::mm::util::{next_align, virt_to_phys};
 
 use core::fmt::{self, Display};
-use core::mem::size_of;
+
 use core::ops::Range;
 use core::ptr::{addr_of_mut, NonNull};
 
@@ -17,6 +17,7 @@ pub struct BuddyAllocator {
 	free_list: FreeList,
 }
 
+#[derive(Debug)]
 #[repr(align(4096))]
 pub struct Page;
 
@@ -31,7 +32,7 @@ impl BuddyAllocator {
 			.map(|virt_pfn| addr_to_pfn(virt_to_phys(pfn_to_addr(virt_pfn))))
 			.map(|phys_pfn| NonNull::from(&mut META_PAGE_TABLE.lock()[phys_pfn]))
 		{
-			entry.as_mut().rank = MAX_RANK;
+			entry.as_mut().set_rank(MAX_RANK);
 			free_list.add(entry);
 		}
 	}
@@ -46,7 +47,7 @@ impl BuddyAllocator {
 	}
 
 	pub fn free_page(&mut self, ptr: NonNull<Page>) {
-		let mut page = self.ptr_to_metapage(ptr);
+		let mut page = MetaPageTable::ptr_to_metapage(ptr);
 		unsafe { page.as_mut().set_inuse(false) };
 
 		while let Some(mut buddy) = self.get_free_buddy(page) {
@@ -60,50 +61,27 @@ impl BuddyAllocator {
 	fn split_to_rank(&mut self, page: NonNull<MetaPage>, req_rank: usize) -> NonNull<Page> {
 		let mut lpage = page;
 		let mut rpage;
-		while req_rank < unsafe { lpage.as_mut().rank } {
+		while req_rank < unsafe { lpage.as_mut().rank() } {
 			(lpage, rpage) = unsafe { lpage.as_mut().split() };
 			self.free_list.add(rpage);
 		}
 
 		unsafe { lpage.as_mut().set_inuse(true) };
-		return self.metapage_to_ptr(lpage);
+		return MetaPageTable::metapage_to_ptr(lpage);
 	}
 
 	fn get_free_buddy(&mut self, page: NonNull<MetaPage>) -> Option<NonNull<MetaPage>> {
-		let rank = unsafe { page.as_ref().rank };
+		let rank = unsafe { page.as_ref().rank() };
 
 		if rank >= MAX_RANK {
 			return None;
 		}
 
-		let buddy_index = self.metapage_to_index(page) ^ rank_to_pages(rank);
-		let buddy_page = unsafe { self.index_to_metapage(buddy_index).as_ref() };
+		let buddy_index = MetaPageTable::metapage_to_index(page) ^ rank_to_pages(rank);
+		let buddy_page = unsafe { MetaPageTable::index_to_metapage(buddy_index).as_ref() };
 
-		return (!buddy_page.is_inuse() && unsafe { page.as_ref().rank } == buddy_page.rank)
+		return (!buddy_page.inuse() && unsafe { page.as_ref().rank() } == buddy_page.rank())
 			.then(|| NonNull::from(buddy_page));
-	}
-
-	fn metapage_to_index(&self, page: NonNull<MetaPage>) -> usize {
-		// (page.as_ptr() as usize - unsafe { META_PAGE_TABLE.assume_init_ref().as_ptr() } as usize)
-		// 	/ size_of::<MetaPage>()
-		(page.as_ptr() as usize - (META_PAGE_TABLE.lock().as_ptr()) as usize)
-			/ size_of::<MetaPage>()
-	}
-
-	fn index_to_metapage(&mut self, index: usize) -> NonNull<MetaPage> {
-		NonNull::from(&mut META_PAGE_TABLE.lock()[index])
-	}
-
-	fn metapage_to_ptr(&self, page: NonNull<MetaPage>) -> NonNull<Page> {
-		let index = self.metapage_to_index(page);
-
-		return unsafe { NonNull::new_unchecked(phys_to_virt(pfn_to_addr(index)) as *mut Page) };
-	}
-
-	fn ptr_to_metapage(&mut self, ptr: NonNull<Page>) -> NonNull<MetaPage> {
-		let index = addr_to_pfn(virt_to_phys(ptr.as_ptr() as usize));
-
-		return self.index_to_metapage(index);
 	}
 }
 

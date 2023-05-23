@@ -1,4 +1,8 @@
-use super::constant::{PAGE_SHIFT, VM_OFFSET};
+use super::{
+	addr_to_pfn,
+	constant::{PAGE_SHIFT, VM_OFFSET},
+	pfn_to_addr,
+};
 
 #[inline]
 pub const fn phys_to_virt(addr: usize) -> usize {
@@ -10,38 +14,15 @@ pub const fn virt_to_phys(addr: usize) -> usize {
 	addr.wrapping_sub(VM_OFFSET)
 }
 
-// #[inline]
-// pub const fn to_phys(addr: usize) -> usize {
-// 	addr - match addr >= VM_OFFSET {
-// 		true => VM_OFFSET,
-// 		false => 0,
-// 	}
-// }
+#[inline]
+pub const fn pfn_virt_to_phys(pfn: usize) -> usize {
+	addr_to_pfn(virt_to_phys(pfn_to_addr(pfn)))
+}
 
-// #[inline]
-// pub const fn to_virt(addr: usize) -> usize {
-// 	addr + match addr < VM_OFFSET {
-// 		true => VM_OFFSET,
-// 		false => 0,
-// 	}
-// }
-
-// #[inline]
-// pub const fn to_phys_64(addr: u64) -> u64 {
-// 	(1<<32).wrapping - VM_OFFSET
-// 	addr - match addr >= VM_OFFSET as u64 {
-// 		true => VM_OFFSET as u64,
-// 		false => 0,
-// 	}
-// }
-
-// #[inline]
-// pub const fn to_virt_64(addr: u64) -> u64 {
-// 	addr + match addr < VM_OFFSET as u64 {
-// 		true => VM_OFFSET as u64,
-// 		false => 0,
-// 	}
-// }
+#[inline]
+pub const fn pfn_phys_to_virt(pfn: usize) -> usize {
+	addr_to_pfn(phys_to_virt(pfn_to_addr(pfn)))
+}
 
 #[inline]
 pub const fn prev_align(p: usize, align: usize) -> usize {

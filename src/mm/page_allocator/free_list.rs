@@ -24,7 +24,7 @@ impl FreeList {
 	}
 
 	pub fn add(&mut self, page: NonNull<MetaPage>) {
-		self.list[unsafe { page.as_ref().rank }].push(page);
+		self.list[unsafe { page.as_ref().rank() }].push(page);
 	}
 
 	pub fn get(&mut self, rank: usize) -> Option<NonNull<MetaPage>> {

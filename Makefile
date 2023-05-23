@@ -84,10 +84,11 @@ run : rescue
 	@scripts/qemu.sh $(RESCUE_IMG) stdio
 
 .PHONY : debug
+debug : RUSTC_FLAG += --cfg ktest
 ifeq ($(DEBUG_WITH_VSCODE),y)
 debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
 	@scripts/vsc-debug.py $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN) &
-	@scripts/qemu.sh $(RESCUE_IMG) stdio -s -S
+	@scripts/qemu.sh $(RESCUE_IMG) stdio -s -S -display none 
 else
 debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
 	@scripts/qemu.sh $(RESCUE_IMG) stdio -s -S & rust-lldb   \
