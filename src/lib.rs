@@ -17,7 +17,6 @@ mod io;
 mod mm;
 mod printk;
 mod subroutine;
-
 mod sync;
 mod test;
 mod util;
@@ -28,13 +27,10 @@ use boot::BOOT_INFO;
 use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
 use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use input::{key_event::Code, keyboard::KEYBOARD};
-
 use mm::{
-	memory_allocator::{mem_atomic::MemAtomic, mem_normal::MemNormal},
-	meta_page::MetaPageTable,
-	virtual_allocator::vmalloc::VMALLOC,
-	x86::init::{VMemory, VMEMORY},
-	PageAllocator,
+	alloc::{vinit, MemAtomic, MemNormal, PageAlloc},
+	init::{VMemory, VMEMORY},
+	page::MetaPageTable,
 };
 use test::{exit_qemu_with, TEST_ARRAY};
 
@@ -124,11 +120,11 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 		VMemory::init(&BOOT_INFO.lock().mem_info);
 
 		MetaPageTable::init(meta_page_ptr, count);
-		PageAllocator::init(&VMEMORY.lock());
+		PageAlloc::init(&VMEMORY.lock());
 
 		MemAtomic::init();
 		MemNormal::init();
-		VMALLOC.init(VMEMORY.lock().vmalloc_pfn.clone());
+		vinit(VMEMORY.lock().vmalloc_pfn.clone());
 	}
 
 	match cfg!(ktest) {

@@ -1,8 +1,34 @@
-use super::{
-	addr_to_pfn,
-	constant::{PAGE_SHIFT, VM_OFFSET},
-	pfn_to_addr,
-};
+use super::constant::*;
+use core::alloc::Layout;
+
+#[inline]
+pub const fn addr_to_pfn(addr: usize) -> usize {
+	addr >> PAGE_SHIFT
+}
+
+#[inline]
+pub const fn addr_to_pfn_64(addr: u64) -> u64 {
+	addr >> PAGE_SHIFT
+}
+
+#[inline]
+pub const fn pfn_to_addr(pfn: usize) -> usize {
+	pfn << PAGE_SHIFT
+}
+
+#[inline]
+pub const fn rank_to_pages(rank: usize) -> usize {
+	1 << rank
+}
+
+#[inline]
+pub const fn rank_to_size(rank: usize) -> usize {
+	rank_to_pages(rank) * PAGE_SIZE
+}
+
+pub const fn size_to_rank(size: usize) -> usize {
+	(size >> PAGE_SHIFT).ilog2() as usize
+}
 
 #[inline]
 pub const fn phys_to_virt(addr: usize) -> usize {
@@ -114,3 +140,51 @@ mod test {
 		}
 	}
 }
+
+pub fn level_of(layout: Layout) -> usize {
+	let size = layout.size();
+	let align = layout.align();
+
+	if size <= 1 && align == 1 {
+		return LEVEL_MIN;
+	}
+
+	let rank = unsafe {
+		match size > align {
+			true => bit_scan_reverse(size - 1) + 1,
+			false => bit_scan_reverse(align - 1) + 1,
+		}
+	};
+
+	LEVEL_MIN + rank.checked_sub(LEVEL_MIN).unwrap_or_default()
+}
+
+pub const fn align_with_hw_cache(bytes: usize) -> usize {
+	const CACHE_LINE_SIZE: usize = 64; // L1
+
+	match bytes {
+		0..=16 => 16,
+		17..=32 => 32,
+		_ => CACHE_LINE_SIZE * ((bytes - 1) / CACHE_LINE_SIZE + 1),
+	}
+}
+
+// pub fn alloc_block_from_page_alloc(rank: usize, flag: GFP) -> Result<NonNull<[u8]>, AllocError> {
+// 	unsafe {
+// 		let ptr = PAGE_ALLOC
+// 			.lock()
+// 			.alloc_page(rank, flag)
+// 			.map_err(|_| AllocError)?;
+// 		let ptr = ptr.cast::<u8>().as_ptr();
+// 		let slice = slice::from_raw_parts_mut(ptr, size_of_rank(rank));
+// 		let ptr = NonNull::new_unchecked(slice);
+// 		Ok(ptr)
+// 	}
+// }
+
+// /// # Safety
+// ///
+// /// `blk_ptr` must point memory block allocated by `PAGE_ALLOC`
+// pub unsafe fn dealloc_block_to_page_alloc(blk_ptr: NonNull<u8>) {
+// 	PAGE_ALLOC.lock().free_page(blk_ptr.cast());
+// }
