@@ -37,7 +37,7 @@ enable_paging:
 
     ; flat-map beginning part of memory
     mov ebx, GLOBAL_PD
-    xor ecx, 0
+    xor ecx, ecx
     .loop:
         cmp ecx, INIT_DIRS
         je .loop_end

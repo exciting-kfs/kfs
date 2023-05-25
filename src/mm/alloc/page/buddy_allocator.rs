@@ -5,6 +5,7 @@ use super::free_list::FreeList;
 
 use crate::mm::page::{index_to_meta, meta_to_index, meta_to_ptr, ptr_to_meta, MetaPage};
 use crate::mm::{constant::*, util::*};
+use crate::pr_info;
 
 use core::alloc::AllocError;
 use core::fmt::{self, Display};
@@ -76,6 +77,9 @@ impl BuddyAlloc {
 		}
 
 		let buddy_index = meta_to_index(page) ^ rank_to_pages(rank);
+		if page.as_ptr() as usize >= 1000000 << 12 {
+			pr_info!("{:?}, {}, {}", page, rank, buddy_index);
+		}
 		let buddy_page = unsafe { index_to_meta(buddy_index).as_ref() };
 
 		return (!buddy_page.inuse() && unsafe { page.as_ref().rank() } == buddy_page.rank())

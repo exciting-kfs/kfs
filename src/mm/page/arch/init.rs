@@ -2,9 +2,9 @@ use super::directory::GLOBAL_PD_VIRT;
 use super::CURRENT_PD;
 use super::{util::invalidate_all_tlb, PageFlag, PDE};
 
-use crate::boot;
 use crate::mm::{constant::*, util::*};
 use crate::sync::singleton::Singleton;
+use crate::{boot, pr_info};
 
 use core::ops::Range;
 
@@ -29,40 +29,23 @@ pub fn get_vmemory_map() -> VMemory {
 
 pub unsafe fn init() {
 	let pmem = boot::get_pmem_bound();
-	let max_paddr = pmem.end as usize;
+	let mut remain_pages = addr_to_pfn(pmem.end as usize);
 
-	let mut mapped_entries = 0;
-	for i in 0..PD_ENTRIES {
-		let paddr = virt_to_phys(i * PT_COVER_SIZE);
-
-		let extra_flags = if paddr < max_paddr && ZONE_NORMAL_START <= i && i < VMALLOC_START {
-			mapped_entries += 1;
-			PageFlag::Present
-		} else {
-			PageFlag::empty()
-		};
-
-		GLOBAL_PD_VIRT[i] = PDE::new_4m(paddr, PageFlag::Write | PageFlag::Global | extra_flags);
-	}
-
-	invalidate_all_tlb();
-
-	// TODO: CLEANUP here
-	let total_pages = addr_to_pfn(pmem.end as usize) - PT_ENTRIES;
-
+	// normal
+	let normal_pages = mapping_zone_normal(pmem.end as usize);
 	let normal_start = addr_to_pfn(phys_to_virt(pmem.start as usize));
-	let normal_end = addr_to_pfn(VMALLOC_OFFSET).min(addr_to_pfn(VM_OFFSET) + total_pages);
+	let normal_end = addr_to_pfn(VMALLOC_OFFSET);
+	remain_pages -= normal_pages;
 
-	let mapped_pages = mapped_entries * PT_ENTRIES;
-	let unmapped_pages = total_pages - mapped_pages;
-
-	let vmalloc_pages = unmapped_pages.min(VMALLOC_MAX_PAGES);
+	// vmalloc
+	let vmalloc_pages = remain_pages.min(VMALLOC_MAX_PAGES);
 	let vmalloc_start = addr_to_pfn(VMALLOC_OFFSET);
 	let vmalloc_end = vmalloc_start + vmalloc_pages;
+	remain_pages -= vmalloc_pages;
 
-	let high_pages = unmapped_pages - vmalloc_pages;
+	// high
 	let high_start = 1;
-	let high_end = high_start + high_pages - 1;
+	let high_end = high_start + remain_pages - 1;
 
 	VMEMORY.write(VMemory {
 		normal_pfn: normal_start..normal_end,
@@ -70,5 +53,27 @@ pub unsafe fn init() {
 		high_pfn: high_start..high_end,
 	});
 
+	pr_info!("{:x?}", *VMEMORY.lock());
+
 	CURRENT_PD.write(&mut GLOBAL_PD_VIRT);
+}
+
+unsafe fn mapping_zone_normal(max_paddr: usize) -> usize {
+	let mut mapped_entries = 0;
+	for va_i in 0..PD_ENTRIES {
+		let paddr = virt_to_phys(va_i * PT_COVER_SIZE);
+		let in_normal = ZONE_NORMAL_START <= va_i && va_i < VMALLOC_START;
+
+		let extra_flags = if in_normal && paddr < max_paddr {
+			mapped_entries += 1;
+			PageFlag::Present
+		} else {
+			PageFlag::empty()
+		};
+
+		GLOBAL_PD_VIRT[va_i] = PDE::new_4m(paddr, PageFlag::Write | PageFlag::Global | extra_flags);
+	}
+
+	invalidate_all_tlb();
+	mapped_entries * PT_ENTRIES
 }

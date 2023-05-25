@@ -6,6 +6,7 @@ use core::{
 use super::metadata::MetaData;
 use crate::mm::util::*;
 
+#[derive(Debug)]
 #[repr(C, align(4))]
 pub struct MetaPage {
 	prev: NonNull<MetaPage>,
@@ -66,12 +67,17 @@ impl MetaPage {
 		unsafe {
 			let mut head = NonNull::from(self);
 			let mut tail = head.as_mut().prev;
-			let mut new_tail = new_head.as_mut().prev;
+			let mut new = new_head.as_mut();
+			// let mut new_tail = new_head.as_mut().prev;
 
+			// tail.as_mut().next = new_head;
+			// new_head.as_mut().prev = tail;
+			// new_tail.as_mut().next = head;
+			// head.as_mut().prev = new_tail;
 			tail.as_mut().next = new_head;
-			new_head.as_mut().prev = tail;
-			new_tail.as_mut().next = head;
-			head.as_mut().prev = new_tail;
+			head.as_mut().prev = new_head;
+			new.next = head;
+			new.prev = tail;
 		}
 	}
 

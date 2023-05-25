@@ -11,13 +11,19 @@ use super::page::MetaPage;
 
 static META_PAGE_TABLE: Singleton<&'static mut [MetaPage]> = Singleton::uninit();
 
-pub unsafe fn alloc_meta_page_table() -> (*mut MetaPage, usize) {
-	let page_count = addr_to_pfn_64(boot::get_pmem_bound().end) as usize;
+pub unsafe fn alloc_meta_page_table() -> NonNull<[MetaPage]> {
+	let pmem_end = boot::get_pmem_bound().end;
+	let page_count = addr_to_pfn_64(pmem_end) as usize;
 
-	(boot::allocate_n::<MetaPage>(page_count), page_count)
+	let ptr = boot::allocate_n::<MetaPage>(page_count);
+	let ptr = core::slice::from_raw_parts_mut(ptr, page_count);
+	NonNull::new_unchecked(ptr)
 }
 
-pub unsafe fn init(base_ptr: *mut MetaPage, count: usize) {
+pub unsafe fn init(table: NonNull<[MetaPage]>) {
+	let base_ptr = table.as_ptr() as *mut MetaPage;
+	let count = table.len();
+
 	for (pfn, entry) in (0..count).map(|x| (x, base_ptr.add(x))) {
 		MetaPage::construct_at(entry);
 		let vaddr = phys_to_virt(pfn_to_addr(pfn));

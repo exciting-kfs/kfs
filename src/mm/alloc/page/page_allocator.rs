@@ -89,7 +89,7 @@ mod test {
 	const RANDOM_SEED: u32 = 42;
 	const ALLOC_QUEUE_SIZE: usize = 100;
 
-	#[derive(Clone, Copy)]
+	#[derive(Clone, Copy, Debug)]
 	struct AllocInfo {
 		ptr: NonNull<u8>,
 		rank: usize,
@@ -173,6 +173,17 @@ mod test {
 		return VM_OFFSET <= addr && addr < VMALLOC_OFFSET;
 	}
 
+	fn free_all() {
+		for (i, is_alloced) in unsafe { PAGE_STATE }.iter().enumerate() {
+			if *is_alloced {
+				free(AllocInfo {
+					ptr: NonNull::new((i << PAGE_SHIFT) as *mut u8).unwrap(),
+					rank: 0,
+				});
+			}
+		}
+	}
+
 	#[ktest]
 	pub fn min_rank_alloc_free() {
 		reset_page_state();
@@ -188,16 +199,7 @@ mod test {
 			count,
 			count * PAGE_SIZE / 1024 / 1024
 		);
-
-		// free all
-		for (i, is_alloced) in unsafe { PAGE_STATE }.iter().enumerate() {
-			if *is_alloced {
-				free(AllocInfo {
-					ptr: NonNull::new((i << PAGE_SHIFT) as *mut u8).unwrap(),
-					rank: 0,
-				});
-			}
-		}
+		free_all();
 	}
 
 	#[ktest]
@@ -273,13 +275,6 @@ mod test {
 			count * PAGE_SIZE / MB
 		);
 
-		for (i, is_alloced) in unsafe { PAGE_STATE }.iter().enumerate() {
-			if *is_alloced {
-				free(AllocInfo {
-					ptr: NonNull::new((i << PAGE_SHIFT) as *mut u8).unwrap(),
-					rank: 0,
-				});
-			}
-		}
+		free_all();
 	}
 }

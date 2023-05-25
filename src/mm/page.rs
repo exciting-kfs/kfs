@@ -2,7 +2,7 @@ mod arch;
 mod os;
 
 use crate::mm::util::*;
-use core::alloc::AllocError;
+use core::{alloc::AllocError, ptr::NonNull};
 
 pub use arch::{get_vmemory_map, PageFlag, VMemory};
 pub(crate) use os::metapage_let;
@@ -41,7 +41,7 @@ pub fn unmap_page(vaddr: usize) -> Result<(), ()> {
 	Ok(())
 }
 
-pub unsafe fn init(ptr: *mut MetaPage, count: usize) {
+pub unsafe fn init(table: NonNull<[MetaPage]>) {
 	arch::init();
-	os::init(ptr, count);
+	os::init(table);
 }

@@ -1,6 +1,7 @@
 use crate::mm::{constant::*, util::*};
 use crate::util::bitrange::BitRange;
 
+#[derive(Debug)]
 #[repr(transparent)]
 pub struct MetaData(usize);
 
