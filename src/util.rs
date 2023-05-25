@@ -1,3 +1,4 @@
+pub mod bitrange;
 pub mod lcg;
 
 pub struct LazyInit<T> {

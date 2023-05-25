@@ -28,7 +28,7 @@ use super::buddy_allocator::BuddyAlloc;
 
 use crate::mm::alloc::Zone;
 use crate::mm::constant::*;
-use crate::mm::init::VMemory;
+use crate::mm::page::VMemory;
 use crate::sync::singleton::Singleton;
 
 use core::alloc::AllocError;
@@ -51,26 +51,26 @@ impl PageAlloc {
 		BuddyAlloc::construct_at(addr_of_mut!((*ptr).vmalloc), vm.vmalloc_pfn.clone());
 	}
 
-	pub fn alloc_page(&mut self, rank: usize, flag: Zone) -> Result<NonNull<[u8]>, AllocError> {
+	pub fn alloc_pages(&mut self, rank: usize, flag: Zone) -> Result<NonNull<[u8]>, AllocError> {
 		match flag {
 			Zone::High => self
 				.high
-				.alloc_page(rank)
-				.or_else(|_| self.vmalloc.alloc_page(rank)),
+				.alloc_pages(rank)
+				.or_else(|_| self.vmalloc.alloc_pages(rank)),
 			Zone::Normal => Err(AllocError),
 		}
-		.or_else(|_| self.normal.alloc_page(rank))
+		.or_else(|_| self.normal.alloc_pages(rank))
 	}
 
-	pub fn free_page(&mut self, page: NonNull<u8>) {
+	pub fn free_pages(&mut self, page: NonNull<u8>) {
 		let addr = page.as_ptr() as usize;
 
 		if addr < VM_OFFSET {
-			self.high.free_page(page)
+			self.high.free_pages(page)
 		} else if addr < VMALLOC_OFFSET {
-			self.normal.free_page(page)
+			self.normal.free_pages(page)
 		} else {
-			self.vmalloc.free_page(page)
+			self.vmalloc.free_pages(page)
 		};
 	}
 }
@@ -151,7 +151,7 @@ mod test {
 	}
 
 	fn alloc(rank: usize, flag: Zone) -> Result<AllocInfo, AllocError> {
-		let mem = AllocInfo::new(PAGE_ALLOC.lock().alloc_page(rank, flag)?);
+		let mem = AllocInfo::new(PAGE_ALLOC.lock().alloc_pages(rank, flag)?);
 
 		assert!(mem.as_ptr() as usize % PAGE_SIZE == 0);
 		assert!(mem.rank() == rank);
@@ -164,7 +164,7 @@ mod test {
 	fn free(info: AllocInfo) {
 		mark_freed(info.ptr.as_ptr() as usize, info.rank);
 
-		PAGE_ALLOC.lock().free_page(info.ptr);
+		PAGE_ALLOC.lock().free_pages(info.ptr);
 	}
 
 	fn is_zone_normal(ptr: NonNull<u8>) -> bool {

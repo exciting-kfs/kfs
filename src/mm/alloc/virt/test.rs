@@ -2,9 +2,10 @@ use kfs_macro::ktest;
 
 use super::*;
 
+use crate::mm::alloc::virt;
 use crate::mm::constant::*;
+use crate::pr_warn;
 use crate::util::lcg::LCG;
-use crate::{pr_err, pr_warn};
 use alloc::vec::Vec;
 
 static mut PAGE_STATE: [bool; (usize::MAX >> PAGE_SHIFT) + 1] =
@@ -53,15 +54,18 @@ fn mark_freed(addr: usize, size: usize) {
 
 fn alloc(size: usize) -> Result<AllocInfo, ()> {
 	let layout = Layout::from_size_align(size, PAGE_SIZE).unwrap();
-	let mut mem = VMALLOC.allocate(layout).or_else(|_| Err(()))?;
+	let mut mem = virt::allocate(layout).or_else(|_| Err(()))?;
 
 	let mem_slice = unsafe { mem.as_mut() };
 
 	assert!(mem_slice.len() >= size);
 
 	let l = mem_slice.len();
-	let r = vsize(NonNull::new(mem_slice.as_mut_ptr()).unwrap());
-	assert!(l == r);
+	let r = virt::lookup_size(NonNull::new(mem_slice.as_mut_ptr()).unwrap());
+	if l != r {
+		pr_warn!("l, r = {}, {}", l, r);
+		assert!(l == r);
+	}
 
 	let addr = mem_slice.as_ptr() as usize;
 
@@ -77,7 +81,7 @@ fn free(info: AllocInfo) {
 	let mem = unsafe { info.ptr.as_ref() };
 	let addr = mem.as_ptr() as usize;
 	mark_freed(addr, mem.len());
-	unsafe { VMALLOC.deallocate(NonNull::new_unchecked(addr as *mut u8), info.layout) };
+	unsafe { virt::deallocate(NonNull::new_unchecked(addr as *mut u8), info.layout) };
 }
 
 #[ktest]

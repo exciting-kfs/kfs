@@ -2,7 +2,7 @@ use core::alloc::{AllocError, Layout};
 use core::ptr::NonNull;
 
 use crate::mm::alloc::cache::{CacheAllocator, CacheAllocatorStat};
-use crate::mm::alloc::{Zone, PAGE_ALLOC};
+use crate::mm::alloc::{page, Zone};
 use crate::mm::{constant::*, util::*};
 
 #[derive(Debug)]
@@ -51,7 +51,7 @@ impl PMemAlloc {
 			None => cache.allocate(level),
 			Some(rank) => {
 				rank_count[rank] += 1;
-				PAGE_ALLOC.lock().alloc_page(rank, Zone::Normal)
+				page::alloc_pages(rank, Zone::Normal)
 			}
 		}
 	}
@@ -64,7 +64,7 @@ impl PMemAlloc {
 			None => cache.deallocate(ptr, level),
 			Some(rank) => {
 				rank_count[rank] -= 1;
-				PAGE_ALLOC.lock().free_page(ptr);
+				page::free_pages(ptr);
 			}
 		}
 	}

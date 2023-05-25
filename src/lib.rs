@@ -23,15 +23,9 @@ mod util;
 
 use core::panic::PanicInfo;
 
-use boot::BOOT_INFO;
 use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
 use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use input::{key_event::Code, keyboard::KEYBOARD};
-use mm::{
-	alloc::{vinit, MemAtomic, MemNormal, PageAlloc},
-	init::{VMemory, VMEMORY},
-	page::MetaPageTable,
-};
 use test::{exit_qemu_with, TEST_ARRAY};
 
 /// very simple panic handler.
@@ -113,18 +107,15 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	init_hardware();
 
 	unsafe {
-		boot::BootInfo::init(bi_header, magic).unwrap();
+		boot::init(bi_header, magic).unwrap();
 		// allocation (alloc_n<T>(count)) starts here.
-		let (meta_page_ptr, count) = MetaPageTable::alloc(&mut BOOT_INFO.lock().mem_info);
+		let (meta_page_ptr, count) = mm::page::alloc_meta_page_table();
 		// allocation end
-		VMemory::init(&BOOT_INFO.lock().mem_info);
+		mm::page::init(meta_page_ptr, count);
 
-		MetaPageTable::init(meta_page_ptr, count);
-		PageAlloc::init(&VMEMORY.lock());
-
-		MemAtomic::init();
-		MemNormal::init();
-		vinit(VMEMORY.lock().vmalloc_pfn.clone());
+		mm::alloc::page::init();
+		mm::alloc::phys::init();
+		mm::alloc::virt::init();
 	}
 
 	match cfg!(ktest) {

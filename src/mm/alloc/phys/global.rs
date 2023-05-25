@@ -1,7 +1,7 @@
 use core::alloc::{Allocator, GlobalAlloc, Layout};
 use core::ptr::NonNull;
 
-use super::MemNormal;
+use super::Normal;
 
 /// trait Allocator vs trait GlobalAlloc
 ///
@@ -18,7 +18,7 @@ pub struct MemGlobal;
 
 unsafe impl GlobalAlloc for MemGlobal {
 	unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-		match MemNormal.allocate(layout) {
+		match Normal.allocate(layout) {
 			Ok(p) => p.as_ptr().cast(),
 			Err(_) => 0 as *mut u8,
 		}
@@ -29,6 +29,6 @@ unsafe impl GlobalAlloc for MemGlobal {
 		}
 
 		let ptr = NonNull::new_unchecked(ptr);
-		MemNormal.deallocate(ptr, layout)
+		Normal.deallocate(ptr, layout)
 	}
 }

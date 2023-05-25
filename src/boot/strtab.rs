@@ -4,6 +4,7 @@ use core::{
 };
 
 /// String table in the '.strtab' section, used to get a symbol name.
+#[derive(Clone)]
 pub struct Strtab {
 	addr: *const c_char,
 	size: usize,

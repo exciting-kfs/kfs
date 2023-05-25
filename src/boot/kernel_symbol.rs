@@ -1,5 +1,6 @@
 use super::{Strtab, Symtab};
 
+#[derive(Clone)]
 pub struct KernelSymbol {
 	symtab: Symtab,
 	strtab: Strtab,

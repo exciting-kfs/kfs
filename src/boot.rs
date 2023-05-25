@@ -13,27 +13,20 @@ use crate::mm::constant::VM_OFFSET;
 use crate::mm::util::{next_align_64, phys_to_virt};
 use crate::sync::singleton::Singleton;
 
-use self::kernel_symbol::KernelSymbol;
-use self::{
-	strtab::Strtab,
-	symtab::{Symtab, SymtabEntry},
-};
+use kernel_symbol::KernelSymbol;
+use strtab::Strtab;
+use symtab::{Symtab, SymtabEntry};
 
 const MULTIBOOT2_MAGIC: u32 = 0x36d76289;
 
-pub static BOOT_INFO: Singleton<BootInfo> = Singleton::uninit();
-
-pub struct BootInfo {
-	pub ksyms: KernelSymbol,
-	pub mem_info: PMemory,
-}
-pub struct PMemory {
+#[derive(Clone)]
+struct PMemory {
 	pub linear: Range<u64>,
 	pub kernel_end: u64,
 }
 
 impl PMemory {
-	pub unsafe fn alloc_n<T>(&mut self, n: usize) -> *mut T {
+	unsafe fn alloc_n<T>(&mut self, n: usize) -> *mut T {
 		let begin = next_align_64(self.kernel_end, align_of::<T>() as u64);
 		let end = begin + size_of::<T>() as u64 * n as u64;
 
@@ -47,6 +40,9 @@ impl PMemory {
 	}
 }
 
+static KSYMS: Singleton<KernelSymbol> = Singleton::uninit();
+static MEM_INFO: Singleton<PMemory> = Singleton::uninit();
+
 #[derive(Debug)]
 pub enum Error {
 	InSufficientMemory,
@@ -56,39 +52,6 @@ pub enum Error {
 	MissingElfHeader,
 	MissingMemoryMap,
 	MissingLinearMemory,
-}
-
-impl BootInfo {
-	pub fn init(bi_header: usize, magic: u32) -> Result<(), Error> {
-		if !check_magic(magic) {
-			return Err(Error::WrongMagic);
-		}
-
-		let bi = unsafe { multiboot2::load(bi_header) }.map_err(|_| Error::FailedToLoadHeader)?;
-
-		let elf_tag = bi
-			.elf_sections_tag()
-			.ok_or_else(|| Error::MissingElfHeader)?;
-
-		let (symtab, strtab, kernel_end) = parse_elf_tag(&elf_tag)?;
-
-		let ksyms = KernelSymbol::new(symtab, strtab);
-
-		let end_addr = bi.end_address();
-		let header_end = end_addr.checked_sub(VM_OFFSET).unwrap_or(end_addr);
-
-		let kernel_end = max(kernel_end as u64, header_end as u64);
-
-		let mmap_tag = bi.memory_map_tag().ok_or_else(|| Error::MissingMemoryMap)?;
-		let mem_info = PMemory {
-			linear: parse_memory_map(mmap_tag)?,
-			kernel_end,
-		};
-
-		unsafe { BOOT_INFO.write(BootInfo { mem_info, ksyms }) };
-
-		Ok(())
-	}
 }
 
 fn parse_memory_map(tag: &MemoryMapTag) -> Result<Range<u64>, Error> {
@@ -140,4 +103,50 @@ fn parse_elf_tag(tag: &ElfSectionsTag) -> Result<(Symtab, Strtab, usize), Error>
 
 fn check_magic(magic: u32) -> bool {
 	magic == MULTIBOOT2_MAGIC
+}
+
+pub fn init(bi_header: usize, magic: u32) -> Result<(), Error> {
+	if !check_magic(magic) {
+		return Err(Error::WrongMagic);
+	}
+
+	let bi = unsafe { multiboot2::load(bi_header) }.map_err(|_| Error::FailedToLoadHeader)?;
+
+	let elf_tag = bi
+		.elf_sections_tag()
+		.ok_or_else(|| Error::MissingElfHeader)?;
+
+	let (symtab, strtab, kernel_end) = parse_elf_tag(&elf_tag)?;
+
+	let ksyms = KernelSymbol::new(symtab, strtab);
+
+	let end_addr = bi.end_address();
+	let header_end = end_addr.checked_sub(VM_OFFSET).unwrap_or(end_addr);
+
+	let kernel_end = max(kernel_end as u64, header_end as u64);
+
+	let mmap_tag = bi.memory_map_tag().ok_or_else(|| Error::MissingMemoryMap)?;
+	let mem_info = PMemory {
+		linear: parse_memory_map(mmap_tag)?,
+		kernel_end,
+	};
+
+	unsafe { KSYMS.write(ksyms) };
+	unsafe { MEM_INFO.write(mem_info) };
+
+	Ok(())
+}
+
+pub unsafe fn allocate_n<T>(n: usize) -> *mut T {
+	MEM_INFO.lock().alloc_n(n)
+}
+
+pub fn get_ksyms() -> KernelSymbol {
+	KSYMS.lock().clone()
+}
+
+pub fn get_pmem_bound() -> Range<u64> {
+	let pmem = MEM_INFO.lock();
+
+	pmem.kernel_end..pmem.linear.end
 }
