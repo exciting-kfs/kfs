@@ -2,7 +2,7 @@ use core::alloc::AllocError;
 use core::mem::size_of;
 use core::ptr::NonNull;
 
-use crate::mm::alloc::{Zone, PAGE_ALLOC};
+use crate::mm::alloc::{page, Zone};
 use crate::mm::{constant::*, util::*};
 
 use super::meta_cache::MetaCache;
@@ -60,7 +60,7 @@ impl<const N: usize> SizeCache<N> {
 	}
 
 	fn alloc_pages(&mut self, rank: usize) -> Result<NonNull<[u8]>> {
-		let page = PAGE_ALLOC.lock().alloc_page(rank, Zone::Normal)?;
+		let page = page::alloc_pages(rank, Zone::Normal)?;
 		self.page_count += 1 << rank;
 		Ok(page)
 	}

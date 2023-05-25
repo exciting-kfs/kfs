@@ -1,4 +1,4 @@
-use super::x86::PD;
+use super::PD;
 use core::arch::asm;
 
 /// Reload cr3 register.

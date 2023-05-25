@@ -24,7 +24,7 @@ impl<T> Singleton<T> {
 	}
 
 	pub const fn new(value: T) -> Self {
-		Singleton {
+		Self {
 			inner: SpinLock::new(),
 			value: UnsafeCell::new(MaybeUninit::new(value)),
 		}

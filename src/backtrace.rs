@@ -7,7 +7,8 @@ mod stackframe_iter;
 
 use rustc_demangle::demangle;
 
-use crate::{boot::BOOT_INFO, pr_info};
+use crate::boot;
+use crate::pr_info;
 
 pub use stack_dump::StackDump;
 
@@ -23,7 +24,7 @@ impl Backtrace {
 	/// Print call stack trace of StackDump.
 	pub fn print_trace(&self) {
 		for (idx, frame) in self.stack.iter().enumerate() {
-			let ksyms = &BOOT_INFO.lock().ksyms;
+			let ksyms = &boot::get_ksyms();
 
 			let name = ksyms
 				.find_name_by_addr(frame.fn_addr)

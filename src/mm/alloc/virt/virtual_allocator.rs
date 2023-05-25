@@ -1,16 +1,14 @@
 use core::alloc::{AllocError, Allocator, Layout};
 
 use core::iter::repeat_with;
-use core::mem::MaybeUninit;
 use core::ops::Range;
 use core::ptr::NonNull;
 
 use core::slice::from_raw_parts;
 
-use crate::mm::alloc::{Zone, PAGE_ALLOC};
-use crate::mm::init::GLOBAL_PD_VIRT;
-use crate::mm::page::{metapage_let, MetaPage, MetaPageTable, META_PAGE_TABLE};
-use crate::mm::page::{PageFlag, PD};
+use crate::mm::alloc::{page, Zone};
+use crate::mm::page::{index_to_meta, PageFlag};
+use crate::mm::page::{map_page, meta_to_ptr, metapage_let, to_phys, unmap_page, MetaPage};
 use crate::mm::util::virt_to_phys;
 use crate::mm::{constant::*, util::*};
 use crate::pr_err;
@@ -35,10 +33,8 @@ impl VMemAlloc {
 	pub fn size(&self, ptr: NonNull<u8>) -> usize {
 		metapage_let![dummy];
 
-		let page = NonNull::from(
-			&mut META_PAGE_TABLE.lock()
-				[addr_to_pfn(self.global_pd().lookup(ptr.as_ptr() as usize).unwrap())],
-		);
+		let paddr = to_phys(ptr.as_ptr() as usize).unwrap();
+		let page = index_to_meta(addr_to_pfn(paddr));
 		dummy.push(page);
 
 		let count = dummy.into_iter().count();
@@ -46,10 +42,6 @@ impl VMemAlloc {
 		dummy.disjoint();
 
 		count * PAGE_SIZE
-	}
-
-	fn global_pd(&self) -> &mut PD {
-		unsafe { &mut GLOBAL_PD_VIRT }
 	}
 
 	fn try_allocate(
@@ -64,25 +56,20 @@ impl VMemAlloc {
 
 		for vaddr in (0..pages).map(|x| base_address + x * PAGE_SIZE) {
 			let paddr = virt_to_phys(unsafe {
-				PAGE_ALLOC
-					.lock()
-					.alloc_page(0, Zone::High)
+				page::alloc_pages(0, Zone::High)
 					.map_err(|_| VMallocError::OutOfMemory(base_address))?
 					.as_mut()
 					.as_ptr() as usize
 			});
 
-			head.push(NonNull::from(
-				&mut META_PAGE_TABLE.lock()[addr_to_pfn(paddr)],
-			));
+			head.push(index_to_meta(addr_to_pfn(paddr)));
 
-			self.global_pd()
-				.map_page(
-					vaddr,
-					paddr,
-					PageFlag::Present | PageFlag::Global | PageFlag::Write,
-				)
-				.map_err(|_| VMallocError::OutOfMemory(base_address))?;
+			map_page(
+				vaddr,
+				paddr,
+				PageFlag::Present | PageFlag::Global | PageFlag::Write,
+			)
+			.map_err(|_| VMallocError::OutOfMemory(base_address))?;
 		}
 
 		Ok(NonNull::from(unsafe {
@@ -96,11 +83,10 @@ impl VMemAlloc {
 
 	fn free_pages(&self, head: &mut MetaPage, base_addr: usize, pages: usize) {
 		for (i, entry) in repeat_with(|| head.pop()).map_while(|v| v).enumerate() {
-			let page = MetaPageTable::metapage_to_ptr(entry);
-			PAGE_ALLOC.lock().free_page(page);
-
+			let page = meta_to_ptr(entry);
+			page::free_pages(page);
 			let addr = base_addr + i * PAGE_SIZE;
-			let _ = self.global_pd().unmap_page(addr);
+			let _ = unmap_page(addr);
 		}
 
 		ADDRESS_TREE.lock().dealloc(base_addr, pages);
@@ -125,7 +111,7 @@ unsafe impl Allocator for VMemAlloc {
 
 	unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
 		let virt_base_addr = ptr.as_ptr() as usize;
-		let phys_base_addr = match self.global_pd().lookup(virt_base_addr) {
+		let phys_base_addr = match to_phys(virt_base_addr) {
 			Some(x) => x,
 			None => {
 				pr_err!(
@@ -138,9 +124,7 @@ unsafe impl Allocator for VMemAlloc {
 
 		metapage_let![dummy];
 
-		dummy.push(NonNull::from(
-			&mut META_PAGE_TABLE.lock()[addr_to_pfn(phys_base_addr)],
-		));
+		dummy.push(index_to_meta(addr_to_pfn(phys_base_addr)));
 
 		let pages = Self::layout_to_pages(layout);
 		self.free_pages(dummy, virt_base_addr, pages)

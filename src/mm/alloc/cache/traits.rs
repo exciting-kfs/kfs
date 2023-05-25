@@ -1,10 +1,10 @@
 use core::alloc::AllocError;
 use core::ptr::NonNull;
 
-use crate::mm::alloc::PAGE_ALLOC;
-
 use super::meta_cache::MetaCache;
 use super::no_alloc_list::NAList;
+
+use crate::mm::alloc::page;
 
 pub trait CacheTrait {
 	fn partial(&mut self) -> &mut NAList<MetaCache>;
@@ -19,7 +19,7 @@ pub trait CacheTrait {
 		satisfied.iter_mut().for_each(|meta_cache| unsafe {
 			let ptr = meta_cache as *mut MetaCache;
 			let ptr = NonNull::new_unchecked(ptr.cast());
-			PAGE_ALLOC.lock().free_page(ptr);
+			page::free_pages(ptr);
 		});
 	}
 

@@ -1,106 +1,10 @@
-use core::marker::{PhantomData, PhantomPinned};
-use core::mem::size_of;
-use core::ops::IndexMut;
-use core::ptr::NonNull;
-use core::slice::from_raw_parts_mut;
+use core::{
+	marker::{PhantomData, PhantomPinned},
+	ptr::NonNull,
+};
 
-use crate::boot::PMemory;
-use crate::sync::singleton::Singleton;
-
-use crate::mm::{constant::*, util::*};
-
-#[repr(transparent)]
-struct MetaData(usize);
-
-#[derive(Clone, Copy)]
-struct BitRange {
-	pub start: usize,
-	pub end: usize,
-}
-
-impl BitRange {
-	pub const fn new(start: usize, end: usize) -> Self {
-		Self { start, end }
-	}
-
-	const fn make_mask(idx: usize) -> usize {
-		match 1usize.checked_shl(idx as u32) {
-			Some(x) => x,
-			None => 0,
-		}
-		.wrapping_sub(1)
-	}
-
-	pub const fn mask(&self) -> usize {
-		Self::make_mask(self.end) & !Self::make_mask(self.start)
-	}
-}
-
-impl MetaData {
-	pub const INUSE: BitRange = BitRange::new(0, 1);
-	pub const RANK: BitRange = BitRange::new(1, 5);
-	const UNUSED_AREA: BitRange = BitRange::new(5, PAGE_SHIFT);
-	const MAPPED_ADDR: BitRange = BitRange::new(PAGE_SHIFT, usize::BITS as usize);
-
-	pub fn new_unmapped() -> Self {
-		MetaData(0)
-	}
-
-	pub fn new(mapped_addr: usize) -> Self {
-		MetaData(mapped_addr & Self::MAPPED_ADDR.mask())
-	}
-
-	pub fn remap(&mut self, new_addr: usize) {
-		self.0 = (self.0 & !Self::MAPPED_ADDR.mask()) | (new_addr & Self::MAPPED_ADDR.mask());
-	}
-
-	pub fn mapped_addr(&self) -> usize {
-		self.0 & Self::MAPPED_ADDR.mask()
-	}
-
-	pub fn get_flag(&self, range: BitRange) -> usize {
-		(self.0 & range.mask()) >> range.start
-	}
-
-	pub fn set_flag(&mut self, range: BitRange, bits: usize) {
-		self.0 = (self.0 & !range.mask()) | ((bits << range.start) & range.mask())
-	}
-}
-
-mod test {
-	use super::*;
-	use kfs_macro::ktest;
-
-	#[ktest]
-	pub fn rank() {
-		let mut data = MetaData::new_unmapped();
-
-		for i in 0..=10 {
-			data.set_flag(MetaData::RANK, i);
-			assert!(data.get_flag(MetaData::RANK) == i);
-		}
-	}
-
-	#[ktest]
-	pub fn new() {
-		let addr = pfn_to_addr(42);
-
-		let data = MetaData::new(addr);
-		let new_addr = data.mapped_addr();
-
-		assert!(addr == new_addr);
-	}
-
-	#[ktest]
-	pub fn remap() {
-		let mut data = MetaData::new_unmapped();
-		assert!(data.mapped_addr() == 0);
-
-		let addr = pfn_to_addr(42);
-		data.remap(addr);
-		assert!(data.mapped_addr() == addr);
-	}
-}
+use super::metadata::MetaData;
+use crate::mm::util::*;
 
 #[repr(C, align(4))]
 pub struct MetaPage {
@@ -110,59 +14,13 @@ pub struct MetaPage {
 	_pin: PhantomPinned,
 }
 
-pub struct MetaPageTable;
-
-pub static META_PAGE_TABLE: Singleton<&'static mut [MetaPage]> = Singleton::uninit();
-
-impl MetaPageTable {
-	pub unsafe fn alloc(pmem: &mut PMemory) -> (*mut MetaPage, usize) {
-		let page_count = addr_to_pfn_64(pmem.linear.end) as usize;
-
-		(pmem.alloc_n::<MetaPage>(page_count), page_count)
-	}
-
-	pub unsafe fn init(base_ptr: *mut MetaPage, count: usize) {
-		for (pfn, entry) in (0..count).map(|x| (x, base_ptr.add(x))) {
-			let vaddr = phys_to_virt(pfn_to_addr(pfn));
-			MetaPage::construct_at(entry);
-			entry.as_mut().unwrap().remap(vaddr);
-		}
-
-		META_PAGE_TABLE.write(from_raw_parts_mut(base_ptr, count));
-	}
-
-	pub fn metapage_to_ptr(page: NonNull<MetaPage>) -> NonNull<u8> {
-		let index = Self::metapage_to_index(page);
-
-		return unsafe { NonNull::new_unchecked(phys_to_virt(pfn_to_addr(index)) as *mut u8) };
-	}
-
-	pub fn ptr_to_metapage(ptr: NonNull<u8>) -> NonNull<MetaPage> {
-		let index = addr_to_pfn(virt_to_phys(ptr.as_ptr() as usize));
-
-		return Self::index_to_metapage(index);
-	}
-
-	pub fn metapage_to_index(page: NonNull<MetaPage>) -> usize {
-		let addr = page.as_ptr() as usize;
-		let base = META_PAGE_TABLE.lock().as_ptr() as usize;
-
-		(addr - base) / size_of::<MetaPage>()
-	}
-
-	pub fn index_to_metapage(index: usize) -> NonNull<MetaPage> {
-		NonNull::from(META_PAGE_TABLE.lock().index_mut(index))
-	}
-}
-
 macro_rules! metapage_let {
 	[$x:ident] => {
-		let mut __storage: MaybeUninit<MetaPage> = MaybeUninit::uninit();
+		let mut __storage: core::mem::MaybeUninit<MetaPage> = core::mem::MaybeUninit::uninit();
 		unsafe { MetaPage::construct_at(__storage.as_mut_ptr()) };
 		let $x = unsafe { __storage.assume_init_mut() };
 	};
 }
-
 pub(crate) use metapage_let;
 
 impl MetaPage {
@@ -277,8 +135,11 @@ impl MetaPage {
 		self.data.get_flag(MetaData::RANK)
 	}
 
-	pub fn mapped_addr(&self) -> usize {
-		self.data.mapped_addr()
+	pub fn mapped_addr(&self) -> Option<usize> {
+		match self.data.mapped_addr() {
+			0 => None,
+			x => Some(x),
+		}
 	}
 
 	pub fn remap(&mut self, new_addr: usize) {

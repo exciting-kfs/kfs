@@ -1,8 +1,7 @@
 mod cache;
-mod kmalloc;
-mod page;
-mod phys;
-mod virt;
+pub mod page;
+pub mod phys;
+pub mod virt;
 
 pub enum Zone {
 	Normal,
@@ -13,8 +12,3 @@ pub enum GFP {
 	Normal,
 	Atomic,
 }
-
-pub use kmalloc::{kfree, kmalloc, ksize};
-pub use page::{PageAlloc, PAGE_ALLOC};
-pub use phys::{MemAtomic, MemNormal};
-pub use virt::{vfree, vinit, vmalloc, vsize};

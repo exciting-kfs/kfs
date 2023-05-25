@@ -168,23 +168,3 @@ pub const fn align_with_hw_cache(bytes: usize) -> usize {
 		_ => CACHE_LINE_SIZE * ((bytes - 1) / CACHE_LINE_SIZE + 1),
 	}
 }
-
-// pub fn alloc_block_from_page_alloc(rank: usize, flag: GFP) -> Result<NonNull<[u8]>, AllocError> {
-// 	unsafe {
-// 		let ptr = PAGE_ALLOC
-// 			.lock()
-// 			.alloc_page(rank, flag)
-// 			.map_err(|_| AllocError)?;
-// 		let ptr = ptr.cast::<u8>().as_ptr();
-// 		let slice = slice::from_raw_parts_mut(ptr, size_of_rank(rank));
-// 		let ptr = NonNull::new_unchecked(slice);
-// 		Ok(ptr)
-// 	}
-// }
-
-// /// # Safety
-// ///
-// /// `blk_ptr` must point memory block allocated by `PAGE_ALLOC`
-// pub unsafe fn dealloc_block_to_page_alloc(blk_ptr: NonNull<u8>) {
-// 	PAGE_ALLOC.lock().free_page(blk_ptr.cast());
-// }

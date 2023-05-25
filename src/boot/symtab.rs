@@ -1,6 +1,9 @@
 use core::marker::PhantomData;
 
 /// Symbol table in the '.symtab' section.
+///
+
+#[derive(Clone)]
 pub struct Symtab {
 	addr: *const SymtabEntry,
 	count: usize,

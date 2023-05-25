@@ -10,15 +10,15 @@ use super::PMemAlloc;
 pub static ATOMIC_ALLOC: Singleton<PMemAlloc> = Singleton::new(PMemAlloc::uninit());
 
 #[derive(Debug)]
-pub struct MemAtomic;
+pub struct Atomic;
 
-impl MemAtomic {
+impl Atomic {
 	pub fn init() {
 		ATOMIC_ALLOC.lock().init();
 	}
 }
 
-unsafe impl Allocator for MemAtomic {
+unsafe impl Allocator for Atomic {
 	fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
 		ATOMIC_ALLOC.lock().allocate(layout)
 	}

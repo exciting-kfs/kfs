@@ -4,8 +4,7 @@ use core::ptr::NonNull;
 
 use super::no_alloc_list::{NAList, Node};
 
-use crate::mm::page::META_PAGE_TABLE;
-use crate::mm::util::*;
+use crate::mm::{page::ptr_to_meta, util::*};
 
 #[derive(Debug)]
 pub struct Dummy;
@@ -26,7 +25,7 @@ impl MetaCache {
 	/// * `mem` must point memory block allocated by PAGE_ALLOC
 	/// * `cache_size` must be considered the align of L1 cache.
 	pub unsafe fn construct_at<'a>(mem: NonNull<u8>, cache_size: usize) -> &'a mut Self {
-		let rank = get_rank(mem.as_ptr() as usize);
+		let rank = get_rank(mem);
 		let count = count_total(rank, Self::META_SIZE, cache_size);
 		let first = mem.as_ptr().offset(Self::META_SIZE as isize);
 		let mut free_list = NAList::new();
@@ -83,7 +82,7 @@ impl MetaCache {
 	}
 
 	pub fn contains(&self, ptr: NonNull<u8>) -> bool {
-		let rank = get_rank(self as *const Self as usize);
+		let rank = self.rank();
 		let size = size_of_rank(rank);
 		let s = self as *const Self as usize;
 		let p = ptr.as_ptr() as usize;
@@ -94,7 +93,7 @@ impl MetaCache {
 	}
 
 	pub fn rank(&self) -> usize {
-		get_rank(self as *const Self as usize)
+		get_rank(NonNull::from(self).cast())
 	}
 
 	#[cfg(ktest)]
@@ -108,9 +107,8 @@ impl MetaCache {
 	}
 }
 
-pub fn get_rank(addr: usize) -> usize {
-	let pfn = addr_to_pfn(virt_to_phys(addr));
-	(&META_PAGE_TABLE.lock()[pfn]).rank()
+pub fn get_rank(ptr: NonNull<u8>) -> usize {
+	unsafe { ptr_to_meta(ptr).as_ref().rank() }
 }
 
 #[inline(always)]

@@ -3,7 +3,7 @@
 
 use super::free_list::FreeList;
 
-use crate::mm::page::{MetaPage, MetaPageTable, META_PAGE_TABLE};
+use crate::mm::page::{index_to_meta, meta_to_index, meta_to_ptr, ptr_to_meta, MetaPage};
 use crate::mm::{constant::*, util::*};
 
 use core::alloc::AllocError;
@@ -25,15 +25,15 @@ impl BuddyAlloc {
 
 		for mut entry in cover_pfn
 			.step_by(rank_to_pages(MAX_RANK))
-			.map(|virt_pfn| addr_to_pfn(virt_to_phys(pfn_to_addr(virt_pfn))))
-			.map(|phys_pfn| NonNull::from(&mut META_PAGE_TABLE.lock()[phys_pfn]))
+			.map(|virt_pfn| pfn_virt_to_phys(virt_pfn))
+			.map(|phys_pfn| index_to_meta(phys_pfn))
 		{
 			entry.as_mut().set_rank(MAX_RANK);
 			free_list.add(entry);
 		}
 	}
 
-	pub fn alloc_page(&mut self, req_rank: usize) -> Result<NonNull<[u8]>, AllocError> {
+	pub fn alloc_pages(&mut self, req_rank: usize) -> Result<NonNull<[u8]>, AllocError> {
 		for rank in req_rank..=MAX_RANK {
 			if let Some(page) = self.free_list.get(rank) {
 				return Ok(self.split_to_rank(page, req_rank));
@@ -42,8 +42,8 @@ impl BuddyAlloc {
 		return Err(AllocError);
 	}
 
-	pub fn free_page(&mut self, ptr: NonNull<u8>) {
-		let mut page = MetaPageTable::ptr_to_metapage(ptr);
+	pub fn free_pages(&mut self, ptr: NonNull<u8>) {
+		let mut page = ptr_to_meta(ptr);
 		unsafe { page.as_mut().set_inuse(false) };
 
 		while let Some(mut buddy) = self.get_free_buddy(page) {
@@ -64,7 +64,7 @@ impl BuddyAlloc {
 
 		unsafe { lpage.as_mut().set_inuse(true) };
 
-		let page = MetaPageTable::metapage_to_ptr(lpage);
+		let page = meta_to_ptr(lpage);
 		unsafe { NonNull::from(from_raw_parts(page.as_ptr(), rank_to_size(req_rank))) }
 	}
 
@@ -75,8 +75,8 @@ impl BuddyAlloc {
 			return None;
 		}
 
-		let buddy_index = MetaPageTable::metapage_to_index(page) ^ rank_to_pages(rank);
-		let buddy_page = unsafe { MetaPageTable::index_to_metapage(buddy_index).as_ref() };
+		let buddy_index = meta_to_index(page) ^ rank_to_pages(rank);
+		let buddy_page = unsafe { index_to_meta(buddy_index).as_ref() };
 
 		return (!buddy_page.inuse() && unsafe { page.as_ref().rank() } == buddy_page.rank())
 			.then(|| NonNull::from(buddy_page));
