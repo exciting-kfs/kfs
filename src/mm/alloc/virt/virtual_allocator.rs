@@ -23,6 +23,9 @@ enum VMallocError {
 
 static ADDRESS_TREE: Singleton<AddressTree> = Singleton::uninit();
 pub static VMALLOC: VMemAlloc = VMemAlloc;
+
+/// Virtual memory allocator
+/// Unlike Physical memory allocator, this allocates virtually continuous memory.
 pub struct VMemAlloc;
 
 impl VMemAlloc {

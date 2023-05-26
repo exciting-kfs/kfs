@@ -66,7 +66,7 @@ impl MetaPage {
 		unsafe {
 			let mut head = NonNull::from(self);
 			let mut tail = head.as_mut().prev;
-			let mut new = new_head.as_mut();
+			let new = new_head.as_mut();
 
 			tail.as_mut().next = new_head;
 			head.as_mut().prev = new_head;

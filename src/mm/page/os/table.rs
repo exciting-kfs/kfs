@@ -7,7 +7,7 @@ use crate::boot;
 use crate::mm::{self, util::*};
 use crate::sync::singleton::Singleton;
 
-use super::page::MetaPage;
+use super::metapage::MetaPage;
 
 static META_PAGE_TABLE: Singleton<&'static mut [MetaPage]> = Singleton::uninit();
 

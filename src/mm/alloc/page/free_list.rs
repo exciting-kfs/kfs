@@ -1,18 +1,15 @@
+//! free pages in each buddy allocator.
+
 use core::ptr::{addr_of_mut, NonNull};
 
 use crate::mm::page::MetaPage;
 use crate::mm::{constant::*, util::*};
 
 #[repr(transparent)]
+/// `self.list[k]` points available `k` rank pages.
 pub struct FreeList {
 	list: [MetaPage; MAX_RANK + 1],
 }
-
-/// First block's PFN.
-/// used to lookup metapage by address.
-// static mut FIRST_PFN: usize = 0;
-// static mut METADATA: *mut MetaPage = null_mut();
-// static mut FREE_LIST: FreeList = FreeList::new();
 
 impl FreeList {
 	pub unsafe fn construct_at(ptr: *mut FreeList) -> &'static mut FreeList {
@@ -25,10 +22,14 @@ impl FreeList {
 		return &mut *ptr;
 	}
 
+	/// Add new free page into this list.
+	/// Safety
+	/// - `page` must be safe to convert into reference type.
 	pub fn add(&mut self, page: NonNull<MetaPage>) {
 		self.list[unsafe { page.as_ref().rank() }].push(page);
 	}
 
+	/// Get `rank` ranked page (if exist)
 	pub fn get(&mut self, rank: usize) -> Option<NonNull<MetaPage>> {
 		match rank <= MAX_RANK {
 			true => self.list[rank].pop(),
