@@ -15,7 +15,7 @@ shift
 # -m 4032(4096 - 64): almost maximum memory in x86 (without PAE)
 qemu-system-i386                    \
     -machine pc,max-ram-below-4g=4G \
-    -m 1024                         \
+    -m 4000                         \
     -boot d                         \
     -vga std                        \
     -device isa-debug-exit          \

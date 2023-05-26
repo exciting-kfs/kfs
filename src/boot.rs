@@ -11,7 +11,6 @@ use multiboot2::{ElfSection, ElfSectionsTag, MemoryMapTag};
 
 use crate::mm::constant::VM_OFFSET;
 use crate::mm::util::{next_align_64, phys_to_virt};
-use crate::pr_info;
 use crate::sync::singleton::Singleton;
 
 use kernel_symbol::KernelSymbol;
@@ -57,7 +56,6 @@ pub enum Error {
 }
 
 fn parse_memory_map(tag: &MemoryMapTag) -> Result<Range<u64>, Error> {
-	tag.all_memory_areas().for_each(|x| pr_info!("{:x?}", x));
 	let linear = tag
 		.memory_areas()
 		.find(|x| x.start_address() == (1024 * 1024))

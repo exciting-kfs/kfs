@@ -34,8 +34,8 @@ impl VMemAlloc {
 		metapage_let![dummy];
 
 		let paddr = to_phys(ptr.as_ptr() as usize).unwrap();
-		let page = index_to_meta(addr_to_pfn(paddr));
-		dummy.push(page);
+		let mut page = index_to_meta(addr_to_pfn(paddr));
+		unsafe { page.as_mut().push(NonNull::new_unchecked(dummy)) };
 
 		let count = dummy.into_iter().count();
 
@@ -124,7 +124,9 @@ unsafe impl Allocator for VMemAlloc {
 
 		metapage_let![dummy];
 
-		dummy.push(index_to_meta(addr_to_pfn(phys_base_addr)));
+		let mut meta = index_to_meta(addr_to_pfn(phys_base_addr));
+
+		meta.as_mut().push(NonNull::new_unchecked(dummy));
 
 		let pages = Self::layout_to_pages(layout);
 		self.free_pages(dummy, virt_base_addr, pages)

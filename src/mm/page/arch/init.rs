@@ -2,9 +2,9 @@ use super::directory::GLOBAL_PD_VIRT;
 use super::CURRENT_PD;
 use super::{util::invalidate_all_tlb, PageFlag, PDE};
 
+use crate::boot;
 use crate::mm::{constant::*, util::*};
 use crate::sync::singleton::Singleton;
-use crate::{boot, pr_info};
 
 use core::ops::Range;
 
@@ -52,8 +52,6 @@ pub unsafe fn init() {
 		vmalloc_pfn: vmalloc_start..vmalloc_end,
 		high_pfn: high_start..high_end,
 	});
-
-	pr_info!("{:x?}", *VMEMORY.lock());
 
 	CURRENT_PD.write(&mut GLOBAL_PD_VIRT);
 }
