@@ -1,28 +1,4 @@
 //! Kernel page allocator.
-//! Current implementation is Buddy-allocator.
-//!
-//! # Terms used in implementation.
-//!
-//! - node: Unit of each allocation. each node holds up to `2 ^ MAX_RANK` pages.
-//!
-//! - page: Continous, `PAGE_SIZE` aligned, `PAGE_SIZE` sized space in memory.
-//!
-//! - block: Continous `2 ^ MAX_RANK` pages. simularly it's `2 ^ MAX_RANK * PAGE_SIZE` aligned.
-//!
-//! # Implementation detail
-//!
-//! After buddy_init() call memory layout(physical) will be
-//! `[ KERNEL MATAPAGES BLOCK BLOCK BLOCK ... ]`
-//!
-//! #
-//!
-//!
-//!
-//!  
-//! To get better result in term of speed,
-//! We devided big continous memory into `blocks`.
-//! That way, we can limit maximum (split, merge) operation per request by `MAX_RANK`.
-//! But, It also reduces maximum allocation size per request by `1 block`.
 
 use super::buddy_allocator::BuddyAlloc;
 
@@ -34,6 +10,9 @@ use crate::sync::singleton::Singleton;
 use core::alloc::AllocError;
 use core::ptr::{addr_of_mut, NonNull};
 
+/// PageAlloc Holds 3 different buddy allocator.
+/// - high, vmalloc: allocate from ZONE_HIGH (not mapped)
+/// - normal: allocate from ZONE_NORMAL (linear mapped)
 pub struct PageAlloc {
 	high: BuddyAlloc,
 	vmalloc: BuddyAlloc,
@@ -51,6 +30,11 @@ impl PageAlloc {
 		BuddyAlloc::construct_at(addr_of_mut!((*ptr).vmalloc), vm.vmalloc_pfn.clone());
 	}
 
+	/// Allocate new `rank` ranked pages from zone `flag`.
+	///
+	/// Note that if requested zone is `Zone::High`
+	/// and there is no sufficient pages in `Zone::High`, then
+	/// pages from `Zone::Normal` can be returned.
 	pub fn alloc_pages(&mut self, rank: usize, flag: Zone) -> Result<NonNull<[u8]>, AllocError> {
 		match flag {
 			Zone::High => self
@@ -62,6 +46,7 @@ impl PageAlloc {
 		.or_else(|_| self.normal.alloc_pages(rank))
 	}
 
+	/// Deallocate pages.
 	pub fn free_pages(&mut self, page: NonNull<u8>) {
 		let addr = page.as_ptr() as usize;
 

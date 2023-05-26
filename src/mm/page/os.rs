@@ -1,6 +1,6 @@
 mod metadata;
-mod page;
+mod metapage;
 mod table;
 
-pub use page::*;
+pub use metapage::*;
 pub use table::*;

@@ -1,5 +1,4 @@
-//! Another Buddy allocator implementation.
-//! Welcome to the WILD.
+//! Buddy allocator
 
 use super::free_list::FreeList;
 
@@ -18,6 +17,7 @@ pub struct BuddyAlloc {
 }
 
 impl BuddyAlloc {
+	/// Construct new buddy allocator which covers `cover_pfn` at pointed by `ptr`
 	pub unsafe fn construct_at(ptr: *mut BuddyAlloc, mut cover_pfn: Range<usize>) {
 		let free_list = FreeList::construct_at(addr_of_mut!((*ptr).free_list));
 
@@ -34,6 +34,7 @@ impl BuddyAlloc {
 		}
 	}
 
+	/// allocate `2 ^ req_rank` of pages.
 	pub fn alloc_pages(&mut self, req_rank: usize) -> Result<NonNull<[u8]>, AllocError> {
 		for rank in req_rank..=MAX_RANK {
 			if let Some(page) = self.free_list.get(rank) {
@@ -43,6 +44,7 @@ impl BuddyAlloc {
 		return Err(AllocError);
 	}
 
+	/// deallocate pages.
 	pub fn free_pages(&mut self, ptr: NonNull<u8>) {
 		let mut page = ptr_to_meta(ptr);
 		unsafe { page.as_mut().set_inuse(false) };

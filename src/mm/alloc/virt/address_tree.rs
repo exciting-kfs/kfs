@@ -7,6 +7,8 @@ use core::ops::{
 use crate::mm::util::*;
 
 use super::{OrdByCount, OrdByPfn, Page};
+
+/// Maintain size and begin address of pages in `area`
 pub struct AddressTree {
 	area: Range<usize>,
 	by_count: BTreeSet<OrdByCount>,
@@ -29,6 +31,8 @@ impl AddressTree {
 		}
 	}
 
+	/// Check `count` of page is available.
+	/// if so, update metadata and return begining address.
 	pub fn alloc(&mut self, count: usize) -> Option<usize> {
 		let page = self
 			.by_count
@@ -47,6 +51,7 @@ impl AddressTree {
 		Some(pfn_to_addr(page.pfn))
 	}
 
+	/// deallocate page and update metadata.
 	pub fn dealloc(&mut self, addr: usize, count: usize) {
 		let page = Page::new(addr_to_pfn(addr), count);
 
