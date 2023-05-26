@@ -17,7 +17,8 @@ use kernel_symbol::KernelSymbol;
 use strtab::Strtab;
 use symtab::{Symtab, SymtabEntry};
 
-const MULTIBOOT2_MAGIC: u32 = 0x36d76289;
+const MULTIBOOT2_MAGIC: u32 = 0x36d7_6289;
+const REQUIRED_MINIMUN_MEMORY_END: u64 = 0x3ffe_0000; // 1024MB
 
 #[derive(Clone)]
 struct PMemory {
@@ -60,7 +61,11 @@ fn parse_memory_map(tag: &MemoryMapTag) -> Result<Range<u64>, Error> {
 		.find(|x| x.start_address() == (1024 * 1024))
 		.ok_or_else(|| Error::MissingLinearMemory)?;
 
-	Ok(linear.start_address()..linear.end_address())
+	if linear.end_address() >= REQUIRED_MINIMUN_MEMORY_END {
+		Ok(linear.start_address()..linear.end_address())
+	} else {
+		Err(Error::InSufficientMemory)
+	}
 }
 
 unsafe fn get_symtab(symtab: &ElfSection) -> Symtab {

@@ -109,9 +109,9 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	unsafe {
 		boot::init(bi_header, magic).unwrap();
 		// allocation (alloc_n<T>(count)) starts here.
-		let (meta_page_ptr, count) = mm::page::alloc_meta_page_table();
+		let meta_page_table = mm::page::alloc_meta_page_table();
 		// allocation end
-		mm::page::init(meta_page_ptr, count);
+		mm::page::init(meta_page_table);
 
 		mm::alloc::page::init();
 		mm::alloc::phys::init();

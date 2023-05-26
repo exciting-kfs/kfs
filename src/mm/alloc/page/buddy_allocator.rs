@@ -22,6 +22,7 @@ impl BuddyAlloc {
 		let free_list = FreeList::construct_at(addr_of_mut!((*ptr).free_list));
 
 		cover_pfn.start = next_align(cover_pfn.start, rank_to_pages(MAX_RANK));
+		cover_pfn.end = cover_pfn.end & !(rank_to_pages(MAX_RANK) - 1);
 
 		for mut entry in cover_pfn
 			.step_by(rank_to_pages(MAX_RANK))

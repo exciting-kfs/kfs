@@ -66,12 +66,12 @@ impl MetaPage {
 		unsafe {
 			let mut head = NonNull::from(self);
 			let mut tail = head.as_mut().prev;
-			let mut new_tail = new_head.as_mut().prev;
+			let mut new = new_head.as_mut();
 
 			tail.as_mut().next = new_head;
-			new_head.as_mut().prev = tail;
-			new_tail.as_mut().next = head;
-			head.as_mut().prev = new_tail;
+			head.as_mut().prev = new_head;
+			new.next = head;
+			new.prev = tail;
 		}
 	}
 

@@ -1,4 +1,4 @@
-use core::ptr::NonNull;
+use core::ptr::{addr_of_mut, NonNull};
 
 use crate::mm::page::MetaPage;
 use crate::mm::{constant::*, util::*};
@@ -16,8 +16,10 @@ pub struct FreeList {
 
 impl FreeList {
 	pub unsafe fn construct_at(ptr: *mut FreeList) -> &'static mut FreeList {
-		for entry in &mut (*ptr).list {
-			MetaPage::construct_at(entry as *mut MetaPage);
+		let base = addr_of_mut!((*ptr).list).cast::<MetaPage>();
+
+		for p in (0..=MAX_RANK).map(|x| base.add(x)) {
+			MetaPage::construct_at(p);
 		}
 
 		return &mut *ptr;
