@@ -1,5 +1,7 @@
 pub mod bitrange;
+pub mod cpuid;
 pub mod lcg;
+pub mod msr;
 
 pub struct LazyInit<T> {
 	value: Option<T>,
