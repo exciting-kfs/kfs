@@ -15,17 +15,6 @@ pub struct IDT {
 }
 
 impl IDT {
-	pub fn init() {
-		let de = IDTE::interrupt_kernel(divide_error_handler as usize);
-		let pf = IDTE::interrupt_kernel(page_fault_handler as usize);
-
-		let mut idt = IDT.lock();
-		idt.write_exception(CpuException::DE, de);
-		idt.write_exception(CpuException::PF, pf);
-
-		idt.load();
-	}
-
 	pub const fn new() -> Self {
 		Self {
 			entry: [IDTE::null(); IDTE_COUNT],
@@ -40,11 +29,7 @@ impl IDT {
 	}
 
 	pub fn write_interrupt(&mut self, index: usize, entry: IDTE) {
-<<<<<<< HEAD
-		if  index < 32 ||  index >= IDTE_COUNT {
-=======
-		if index >= IDTE_COUNT {
->>>>>>> 4296071... feat: idt
+		if index < 32 || index >= IDTE_COUNT {
 			panic!("idt: index out of range.");
 		}
 		self.entry[index] = entry
@@ -75,4 +60,15 @@ impl IDTR {
 	const fn new(limit: u16, addr: *const IDT) -> Self {
 		IDTR { limit, addr }
 	}
+}
+
+pub fn init() {
+	let de = IDTE::interrupt_kernel(divide_error_handler as usize);
+	let pf = IDTE::interrupt_kernel(page_fault_handler as usize);
+
+	let mut idt = IDT.lock();
+	idt.write_exception(CpuException::DE, de);
+	idt.write_exception(CpuException::PF, pf);
+
+	idt.load();
 }

@@ -28,7 +28,6 @@ use core::panic::PanicInfo;
 use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
 use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use input::{key_event::Code, keyboard::KEYBOARD};
-use interrupt::idt::IDT;
 use test::{exit_qemu_with, TEST_ARRAY};
 
 /// very simple panic handler.
@@ -119,9 +118,11 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 		mm::alloc::page::init();
 		mm::alloc::phys::init();
 		mm::alloc::virt::init();
+
+		mm::page::init_mmio();
 	}
 
-	IDT::init();
+	interrupt::idt::init();
 
 	match cfg!(ktest) {
 		true => run_test(),

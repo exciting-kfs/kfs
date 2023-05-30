@@ -2,7 +2,7 @@ use core::arch::asm;
 
 use crate::sync::singleton::Singleton;
 
-static MSR_APIC_BASE: Singleton<Msr> = Singleton::new(Msr::new(0x1b));
+pub static MSR_APIC_BASE: Singleton<Msr> = Singleton::new(Msr::new(0x1b));
 
 pub struct Msr {
 	ptr: usize,
@@ -39,8 +39,8 @@ impl Msr {
 
 #[derive(Debug)]
 pub struct MsrVal {
-	high: usize,
-	low: usize,
+	pub high: usize,
+	pub low: usize,
 }
 
 impl MsrVal {
