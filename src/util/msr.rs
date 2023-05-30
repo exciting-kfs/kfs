@@ -1,9 +1,5 @@
 use core::arch::asm;
 
-use crate::sync::singleton::Singleton;
-
-pub static MSR_APIC_BASE: Singleton<Msr> = Singleton::new(Msr::new(0x1b));
-
 pub struct Msr {
 	ptr: usize,
 }

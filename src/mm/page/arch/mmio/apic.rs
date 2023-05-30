@@ -1,10 +1,11 @@
 use crate::{
+	interrupt::apic::{apic_local_pbase, apic_local_vbase},
 	mm::{
 		constant::PAGE_MASK,
 		page::{arch::init::VMEMORY, get_vmemory_map, map_mmio, PageFlag, VMemory},
-		util::{addr_to_pfn, phys_to_virt},
+		util::addr_to_pfn,
 	},
-	util::msr::{Msr, MSR_APIC_BASE},
+	util::msr::Msr,
 };
 
 /// # Description
@@ -21,16 +22,14 @@ pub(super) unsafe fn mapping_apic_registers() -> Result<(), ApicError> {
 	let mask_val = Msr::new(0x201).read();
 	let base = base_val.low & PAGE_MASK;
 	let mask = mask_val.low & PAGE_MASK;
-
-	let apic_val = MSR_APIC_BASE.lock().read();
-	let apic_paddr = apic_val.low & PAGE_MASK;
+	let apic_paddr = apic_local_pbase();
 
 	if base & mask != apic_paddr & mask {
 		return Err(ApicError::Cacheable);
 	}
 
 	// mapping apic register page.
-	let apic_vaddr = phys_to_virt(apic_paddr);
+	let apic_vaddr = apic_local_vbase();
 	let flags = PageFlag::Global | PageFlag::Write | PageFlag::Present;
 	map_mmio(apic_vaddr, apic_paddr, flags).map_err(|_| ApicError::Alloc)?;
 

@@ -60,7 +60,6 @@ impl PageAlloc {
 	}
 }
 
-#[cfg(disable)]
 mod test {
 	use super::*;
 

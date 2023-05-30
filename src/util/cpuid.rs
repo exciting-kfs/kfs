@@ -1,13 +1,13 @@
 #[derive(Debug, PartialEq)]
 pub struct CPUID {
-	eax: usize,
-	ebx: usize,
-	ecx: usize,
-	edx: usize,
+	pub eax: usize,
+	pub ebx: usize,
+	pub ecx: usize,
+	pub edx: usize,
 }
 
 impl CPUID {
-	fn run(mut leaf: usize, mut sub_leaf: usize) -> Self {
+	pub fn run(mut leaf: usize, mut sub_leaf: usize) -> Self {
 		let ebx;
 		let edx;
 
