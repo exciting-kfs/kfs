@@ -19,10 +19,11 @@ impl IDT {
 		let de = IDTE::interrupt_kernel(divide_error_handler as usize);
 		let pf = IDTE::interrupt_kernel(page_fault_handler as usize);
 
-		IDT.lock().write_exception(CpuException::DE, de);
-		IDT.lock().write_exception(CpuException::PF, pf);
+		let mut idt = IDT.lock();
+		idt.write_exception(CpuException::DE, de);
+		idt.write_exception(CpuException::PF, pf);
 
-		IDT.lock().load();
+		idt.load();
 	}
 
 	pub const fn new() -> Self {
