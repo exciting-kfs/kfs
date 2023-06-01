@@ -1,7 +1,7 @@
 mod arch;
 mod os;
 
-use crate::{mm::util::*, pr_info};
+use crate::mm::util::*;
 use core::{alloc::AllocError, ptr::NonNull};
 
 pub use arch::{get_vmemory_map, mmio_init, PageFlag, VMemory};
@@ -55,5 +55,4 @@ pub fn unmap_mmio(vaddr: usize) -> Result<(), ()> {
 pub unsafe fn init(table: NonNull<[MetaPage]>) {
 	arch::init();
 	os::init(table);
-
 }
