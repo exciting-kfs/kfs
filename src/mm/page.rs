@@ -1,7 +1,7 @@
 mod arch;
 mod os;
 
-use crate::mm::util::*;
+use crate::{mm::util::*, pr_info};
 use core::{alloc::AllocError, ptr::NonNull};
 
 pub use arch::{get_vmemory_map, init_mmio, PageFlag, VMemory};
@@ -48,7 +48,13 @@ pub fn unmap_page(vaddr: usize) -> Result<(), ()> {
 	Ok(())
 }
 
+pub fn unmap_mmio(vaddr: usize) -> Result<(), ()> {
+	arch::CURRENT_PD.lock().unmap_page(vaddr)
+}
+
 pub unsafe fn init(table: NonNull<[MetaPage]>) {
 	arch::init();
 	os::init(table);
+
+	pr_info!("{:x?}", get_vmemory_map());
 }

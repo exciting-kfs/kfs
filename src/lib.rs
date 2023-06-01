@@ -8,6 +8,7 @@
 
 extern crate alloc;
 
+mod acpi;
 mod backtrace;
 mod boot;
 mod collection;
@@ -123,6 +124,7 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	}
 
 	interrupt::idt::init();
+	acpi::init();
 
 	match cfg!(ktest) {
 		true => run_test(),

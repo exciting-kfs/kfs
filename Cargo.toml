@@ -19,6 +19,7 @@ bench = false
 bitflags = "2.0.2"
 multiboot2 = "0.14.0"
 rustc-demangle = "0.1.21"
+acpi = "4.1.1"
 kfs_macro = { path = "./kfs_macro" }
 
 [workspace]
