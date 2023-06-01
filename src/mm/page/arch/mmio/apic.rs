@@ -5,7 +5,7 @@ use crate::{
 		page::{arch::init::VMEMORY, get_vmemory_map, map_mmio, PageFlag, VMemory},
 		util::addr_to_pfn,
 	},
-	util::msr::Msr,
+	util::arch::msr::Msr,
 };
 
 /// # Description

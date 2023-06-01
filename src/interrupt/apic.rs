@@ -4,7 +4,7 @@ use crate::{
 	mm::{constant::PAGE_MASK, util::phys_to_virt},
 	pr_info,
 	sync::singleton::Singleton,
-	util::msr::Msr,
+	util::arch::msr::Msr,
 };
 
 static MSR_APIC_BASE: Singleton<Msr> = Singleton::new(Msr::new(0x1b));

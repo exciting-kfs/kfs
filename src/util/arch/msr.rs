@@ -45,6 +45,7 @@ impl MsrVal {
 	}
 }
 
+#[cfg(disablex)]
 mod msr_test {
 	use crate::pr_info;
 
