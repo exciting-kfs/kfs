@@ -13,7 +13,7 @@ pub struct VMemory {
 	pub normal_pfn: Range<usize>,
 	pub vmalloc_pfn: Range<usize>,
 	pub high_pfn: Range<usize>,
-	pub apic_pfn: usize,
+	pub local_apic_pfn: usize,
 }
 
 const ZONE_NORMAL_START: usize = VM_OFFSET / PT_COVER_SIZE;
@@ -52,7 +52,7 @@ pub unsafe fn init() {
 		normal_pfn: normal_start..normal_end,
 		vmalloc_pfn: vmalloc_start..vmalloc_end,
 		high_pfn: high_start..high_end,
-		apic_pfn: 0,
+		local_apic_pfn: 0,
 	});
 
 	CURRENT_PD.write(&mut GLOBAL_PD_VIRT);

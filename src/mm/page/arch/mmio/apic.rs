@@ -35,7 +35,7 @@ pub(super) unsafe fn mapping_apic_registers() -> Result<(), ApicError> {
 
 	let vm = get_vmemory_map();
 	VMEMORY.write(VMemory {
-		apic_pfn: addr_to_pfn(apic_vaddr),
+		local_apic_pfn: addr_to_pfn(apic_vaddr),
 		..vm
 	});
 
