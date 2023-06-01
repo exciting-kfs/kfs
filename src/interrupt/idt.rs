@@ -40,7 +40,7 @@ impl IDT {
 	}
 
 	pub fn write_interrupt(&mut self, index: usize, entry: IDTE) {
-		if index >= IDTE_COUNT {
+		if  index < 32 ||  index >= IDTE_COUNT {
 			panic!("idt: index out of range.");
 		}
 		self.entry[index] = entry
