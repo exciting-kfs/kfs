@@ -4,6 +4,7 @@
 #![feature(allocator_api)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(const_maybe_uninit_uninit_array)]
+#![feature(abi_x86_interrupt)]
 
 extern crate alloc;
 
@@ -13,6 +14,7 @@ mod collection;
 mod console;
 mod driver;
 mod input;
+mod interrupt;
 mod io;
 mod mm;
 mod printk;
@@ -26,6 +28,7 @@ use core::panic::PanicInfo;
 use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
 use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use input::{key_event::Code, keyboard::KEYBOARD};
+use interrupt::idt::IDT;
 use test::{exit_qemu_with, TEST_ARRAY};
 
 /// very simple panic handler.
@@ -117,6 +120,8 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 		mm::alloc::phys::init();
 		mm::alloc::virt::init();
 	}
+
+	IDT::init();
 
 	match cfg!(ktest) {
 		true => run_test(),

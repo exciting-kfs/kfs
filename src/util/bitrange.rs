@@ -20,4 +20,8 @@ impl BitRange {
 	pub const fn mask(&self) -> usize {
 		Self::make_mask(self.end) & !Self::make_mask(self.start)
 	}
+
+	pub fn fit(&self, data: usize) -> usize {
+		(data << self.start) & self.mask()
+	}
 }
