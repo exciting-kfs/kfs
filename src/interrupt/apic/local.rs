@@ -2,18 +2,6 @@ use alloc::vec::Vec;
 
 use crate::interrupt::apic::apic_local_vbase;
 
-pub fn init() {}
-
-fn mem_read(addr: usize, count: usize) -> Vec<usize> {
-	(0..count)
-		.into_iter()
-		.map(|x| {
-			let ptr = (addr + x) as *const usize;
-			unsafe { *ptr }
-		})
-		.collect()
-}
-
 #[repr(usize)]
 #[derive(Clone, Copy)]
 pub enum Register {
@@ -54,6 +42,11 @@ impl Register {
 			x @ Self::InterruptCommand => mem_read(base + x as usize, 2),
 			x => mem_read(base + x as usize, 1),
 		}
+	}
+
+	pub fn write(&self, value: Vec<usize>) {
+		let base = apic_local_vbase();
+		mem_write(base + *self as usize, value);
 	}
 
 	pub fn iter() -> core::slice::Iter<'static, Register> {
@@ -119,4 +112,23 @@ impl core::fmt::Display for Register {
 		};
 		write!(f, "{}", s)
 	}
+}
+
+pub fn init() {}
+
+fn mem_read(addr: usize, count: usize) -> Vec<usize> {
+	(0..count)
+		.into_iter()
+		.map(|x| {
+			let ptr = (addr + x) as *const usize;
+			unsafe { *ptr }
+		})
+		.collect()
+}
+
+fn mem_write(addr: usize, value: Vec<usize>) {
+	value.iter().enumerate().for_each(|(i, v)| {
+		let ptr = (addr + i) as *mut usize;
+		unsafe { *ptr = *v };
+	});
 }
