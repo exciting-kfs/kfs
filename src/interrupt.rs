@@ -1,5 +1,6 @@
 mod exception;
 
+pub mod apic;
 pub mod handler;
 pub mod idt;
 pub mod idte;

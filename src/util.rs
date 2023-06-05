@@ -1,3 +1,4 @@
+pub mod arch;
 pub mod bitrange;
 pub mod lcg;
 
