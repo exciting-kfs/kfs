@@ -25,6 +25,7 @@ pub enum Error {
 	MissingElfHeader,
 	MissingMemoryMap,
 	MissingLinearMemory,
+	MissingRSDP,
 }
 
 fn check_magic(magic: u32) -> bool {
@@ -42,7 +43,7 @@ pub fn init(bi_header: usize, magic: u32) -> Result<(), Error> {
 	kernel_symbol::init(&bi, &mut kernel_end)?;
 	p_memory::init(&bi, kernel_end)?;
 
-	unsafe { RSDT_PADDR = bi.rsdp_v1_tag().unwrap().rsdt_address() };
+	unsafe { RSDT_PADDR = bi.rsdp_v1_tag().ok_or(Error::MissingRSDP)?.rsdt_address() };
 
 	Ok(())
 }

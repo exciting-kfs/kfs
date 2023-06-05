@@ -4,7 +4,7 @@ mod os;
 use crate::{mm::util::*, pr_info};
 use core::{alloc::AllocError, ptr::NonNull};
 
-pub use arch::{get_vmemory_map, init_mmio, PageFlag, VMemory};
+pub use arch::{get_vmemory_map, mmio_init, PageFlag, VMemory};
 pub(crate) use os::metapage_let;
 pub use os::{
 	alloc_meta_page_table, index_to_meta, meta_to_index, meta_to_ptr, ptr_to_meta, MetaPage,

@@ -35,13 +35,12 @@ pub enum Register {
 impl Register {
 	pub fn read(&self) -> Vec<usize> {
 		let base = apic_local_vbase();
-		match self.clone() {
-			x @ (Self::InService | Self::InterruptRequest | Self::TriggerMode) => {
-				mem_read(base + x as usize, 4)
-			}
-			x @ Self::InterruptCommand => mem_read(base + x as usize, 2),
-			x => mem_read(base + x as usize, 1),
-		}
+		let (reg, count) = match self.clone() {
+			x @ (Self::InService | Self::InterruptRequest | Self::TriggerMode) => (x, 4),
+			x @ Self::InterruptCommand => (x, 2),
+			x => (x, 1),
+		};
+		mem_read(base + reg as usize, count)
 	}
 
 	pub fn write(&self, value: Vec<usize>) {
@@ -113,8 +112,6 @@ impl core::fmt::Display for Register {
 		write!(f, "{}", s)
 	}
 }
-
-pub fn init() {}
 
 fn mem_read(addr: usize, count: usize) -> Vec<usize> {
 	(0..count)
