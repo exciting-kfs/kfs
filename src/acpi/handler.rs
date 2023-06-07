@@ -70,7 +70,7 @@ impl AcpiHandler for AcpiH {
 			physical_address,
 			virtual_address,
 			size_of::<T>(),
-			mapped_length, // FIXME ?
+			mapped_length,
 			self.clone(),
 		)
 	}
