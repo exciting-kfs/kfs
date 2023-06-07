@@ -1,6 +1,6 @@
 use crate::{
-	acpi::APIC_INFO,
-	interrupt::apic::{apic_local_pbase, apic_local_vbase},
+	acpi::IOAPIC_INFO,
+	interrupt::apic,
 	mm::{
 		constant::PAGE_MASK,
 		page::{arch::init::VMEMORY, get_vmemory_map, map_mmio, PageFlag, VMemory},
@@ -15,11 +15,11 @@ use crate::{
 /// # Allocation
 /// - page table.
 pub(super) unsafe fn mapping_local_apic_registers() -> Result<(), ApicError> {
-	let apic_paddr = apic_local_pbase();
+	let apic_paddr = apic::local_pbase();
 	is_uncacheable_page(apic_paddr).map_err(|_| ApicError::Cacheable("local"))?;
 
 	// mapping local apic register page.
-	let apic_vaddr = apic_local_vbase();
+	let apic_vaddr = apic::local_vbase();
 	let flags = PageFlag::Global | PageFlag::Write | PageFlag::Present;
 	map_mmio(apic_vaddr, apic_paddr, flags).map_err(|_| ApicError::Alloc)?;
 
@@ -42,7 +42,7 @@ pub(super) unsafe fn mapping_local_apic_registers() -> Result<(), ApicError> {
 /// #Allocation
 /// - page table.
 pub(super) fn mapping_io_apic_registers() -> Result<(), ApicError> {
-	for io_apic in APIC_INFO.lock().io_apics.iter() {
+	for io_apic in IOAPIC_INFO.lock().io_apics.iter() {
 		is_uncacheable_page(io_apic.address as usize).map_err(|_| ApicError::Cacheable("io"))?;
 		let paddr = io_apic.address as usize;
 		let vaddr = phys_to_virt(paddr);

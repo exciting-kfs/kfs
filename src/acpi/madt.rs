@@ -2,7 +2,7 @@ use acpi::{madt::Madt, platform::interrupt::Apic, sdt::Signature, InterruptModel
 
 use crate::{acpi::ACPI_TABLES, sync::singleton::Singleton};
 
-pub static APIC_INFO: Singleton<Apic> = Singleton::uninit();
+pub static IOAPIC_INFO: Singleton<Apic> = Singleton::uninit();
 
 pub fn init() {
 	let madt = unsafe {
@@ -19,7 +19,7 @@ pub fn init() {
 
 	match interrupt_model {
 		InterruptModel::Apic(apic) => unsafe {
-			APIC_INFO.write(apic);
+			IOAPIC_INFO.write(apic);
 		},
 		_ => panic!("unsupported interrupt model."),
 	}

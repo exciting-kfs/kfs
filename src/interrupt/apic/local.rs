@@ -1,6 +1,8 @@
 use alloc::vec::Vec;
 
-use crate::interrupt::apic::apic_local_vbase;
+use crate::mm::{constant::PAGE_MASK, util::phys_to_virt};
+
+use super::MSR_APIC_BASE;
 
 #[repr(usize)]
 #[derive(Clone, Copy)]
@@ -34,7 +36,7 @@ pub enum Register {
 
 impl Register {
 	pub fn read(&self) -> Vec<usize> {
-		let base = apic_local_vbase();
+		let base = vbase();
 		let (reg, count) = match self.clone() {
 			x @ (Self::InService | Self::InterruptRequest | Self::TriggerMode) => (x, 4),
 			x @ Self::InterruptCommand => (x, 2),
@@ -44,7 +46,7 @@ impl Register {
 	}
 
 	pub fn write(&self, value: Vec<usize>) {
-		let base = apic_local_vbase();
+		let base = vbase();
 		mem_write(base + *self as usize, value);
 	}
 
@@ -116,8 +118,8 @@ impl core::fmt::Display for Register {
 fn mem_read(addr: usize, count: usize) -> Vec<usize> {
 	(0..count)
 		.into_iter()
-		.map(|x| {
-			let ptr = (addr + x) as *const usize;
+		.map(|i| {
+			let ptr = (addr + i * 0x10) as *const usize;
 			unsafe { *ptr }
 		})
 		.collect()
@@ -125,7 +127,15 @@ fn mem_read(addr: usize, count: usize) -> Vec<usize> {
 
 fn mem_write(addr: usize, value: Vec<usize>) {
 	value.iter().enumerate().for_each(|(i, v)| {
-		let ptr = (addr + i) as *mut usize;
+		let ptr = (addr + i * 0x10) as *mut usize;
 		unsafe { *ptr = *v };
 	});
+}
+
+pub fn pbase() -> usize {
+	MSR_APIC_BASE.lock().read().low & PAGE_MASK
+}
+
+pub fn vbase() -> usize {
+	phys_to_virt(pbase())
 }

@@ -9,7 +9,7 @@ mod madt;
 
 pub static mut RSDT_PADDR: usize = 0;
 pub static ACPI_TABLES: Singleton<AcpiTables<AcpiH>> = Singleton::uninit();
-pub use madt::APIC_INFO;
+pub use madt::IOAPIC_INFO;
 
 pub fn init() {
 	unsafe {

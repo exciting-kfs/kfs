@@ -125,6 +125,7 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	}
 
 	interrupt::idt::init();
+	interrupt::apic::init();
 
 	match cfg!(ktest) {
 		true => run_test(),
