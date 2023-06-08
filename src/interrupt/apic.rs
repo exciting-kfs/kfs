@@ -29,6 +29,7 @@ pub fn init() {
 	remap_irq();
 	disable_8259_pic();
 
+	local::init();
 	io::init();
 }
 
