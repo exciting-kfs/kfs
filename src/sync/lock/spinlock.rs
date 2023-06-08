@@ -21,7 +21,9 @@ impl SpinLock {
 		while let Err(_) =
 			self.lock_atomic
 				.compare_exchange(false, true, Ordering::Acquire, Ordering::Acquire)
-		{}
+		{
+			unsafe { core::arch::asm!("pause") };
+		}
 	}
 
 	pub fn try_lock(&self) -> Result<(), TryLockFail> {

@@ -31,13 +31,13 @@ pub const fn size_to_rank(size: usize) -> usize {
 }
 
 #[inline]
-pub const fn phys_to_virt(addr: usize) -> usize {
-	addr.wrapping_add(VM_OFFSET)
+pub const fn phys_to_virt(paddr: usize) -> usize {
+	paddr.wrapping_add(VM_OFFSET)
 }
 
 #[inline]
-pub const fn virt_to_phys(addr: usize) -> usize {
-	addr.wrapping_sub(VM_OFFSET)
+pub const fn virt_to_phys(vaddr: usize) -> usize {
+	vaddr.wrapping_sub(VM_OFFSET)
 }
 
 #[inline]

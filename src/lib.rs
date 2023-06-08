@@ -8,6 +8,7 @@
 
 extern crate alloc;
 
+mod acpi;
 mod backtrace;
 mod boot;
 mod collection;
@@ -108,21 +109,23 @@ fn run_io() -> ! {
 pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	init_hardware();
 
+	// caution: order sensitive.
 	unsafe {
-		boot::init(bi_header, magic).unwrap();
-		// allocation (alloc_n<T>(count)) starts here.
+		boot::init(bi_header, magic).expect("boot information");
 		let meta_page_table = mm::page::alloc_meta_page_table();
-		// allocation end
 		mm::page::init(meta_page_table);
 
 		mm::alloc::page::init();
 		mm::alloc::phys::init();
 		mm::alloc::virt::init();
 
-		mm::page::init_mmio();
+		// after enabling collections.
+		acpi::init();
+		mm::page::mmio_init();
 	}
 
 	interrupt::idt::init();
+	interrupt::apic::init();
 
 	match cfg!(ktest) {
 		true => run_test(),

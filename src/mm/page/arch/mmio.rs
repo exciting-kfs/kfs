@@ -1,5 +1,6 @@
 mod apic;
 
 pub unsafe fn init() {
-	apic::mapping_apic_registers().expect("mapping apic");
+	apic::mapping_local_apic_registers().expect("mapping local apic");
+	apic::mapping_io_apic_registers().expect("mapping io apic");
 }
