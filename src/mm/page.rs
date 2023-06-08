@@ -56,5 +56,4 @@ pub unsafe fn init(table: NonNull<[MetaPage]>) {
 	arch::init();
 	os::init(table);
 
-	pr_info!("{:x?}", get_vmemory_map());
 }
