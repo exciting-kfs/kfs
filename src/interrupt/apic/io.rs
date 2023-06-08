@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use crate::{acpi::APIC_INFO, mm::util::phys_to_virt, sync::locked::Locked};
+use crate::{acpi::IOAPIC_INFO, mm::util::phys_to_virt, sync::locked::Locked};
 
 pub const REDIR_TABLE_COUNT: usize = 24;
 
@@ -89,19 +89,23 @@ impl RegKind {
 				if x >= REDIR_TABLE_COUNT as u8 {
 					panic!("invalid RedirectionTable index");
 				}
-				x as usize
+				(x as usize) * 2 + 0x10
 			}
 		}
 	}
 }
 
 pub fn init() {
-	for io_apic in APIC_INFO.lock().io_apics.iter() {
+	for io_apic in IOAPIC_INFO.lock().io_apics.iter() {
 		unsafe {
 			let base_addr = phys_to_virt(io_apic.address as usize);
 			IOAPIC_ACCESS_REGISTERS.push(Locked::new(AccessRegister::new(base_addr)));
 		}
 	}
+
+	let mut v = read(0, RegKind::RedirectionTable(1));
+	v[0] = 0x21;
+	write(0, RegKind::RedirectionTable(1), v)
 }
 
 pub fn read(ioapic_id: usize, kind: RegKind) -> Vec<usize> {
@@ -113,14 +117,9 @@ pub fn write(ioapic_id: usize, kind: RegKind, value: Vec<usize>) {
 }
 
 pub fn pbase(ioapic_id: usize) -> usize {
-	APIC_INFO.lock().io_apics[ioapic_id].address as usize
+	IOAPIC_INFO.lock().io_apics[ioapic_id].address as usize
 }
 
 pub fn vbase(ioapic_id: usize) -> usize {
 	unsafe { IOAPIC_ACCESS_REGISTERS[ioapic_id].lock().base_addr }
-}
-
-pub enum Event {
-	Keyboard,
-	Unknown,
 }

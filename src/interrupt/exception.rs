@@ -1,4 +1,7 @@
-// use kfs_macro::interrupt;
+pub mod divide_error;
+pub mod general_protection;
+pub mod page_fault;
+pub mod undefined;
 
 use crate::pr_info;
 

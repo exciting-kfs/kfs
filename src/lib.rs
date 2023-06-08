@@ -84,12 +84,8 @@ fn run_io() -> ! {
 	loop {
 		if let Some(event) = unsafe { KEYBOARD.get_keyboard_event() } {
 			if event.key == Code::Backtick && event.pressed() {
-				static mut I: usize = 0;
-				unsafe {
-					pr_warn!("BACKTICK PRESSED {} TIMES!!", I);
-					I += 1;
-					panic!("panic!!");
-				}
+				pr_warn!("BACKTICK PRESSED!!");
+				panic!("panic!!");
 			}
 			text_vga::putc(24, 79, cyan);
 			unsafe {
@@ -126,6 +122,9 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 
 	interrupt::idt::init();
 	interrupt::apic::init();
+
+	// TODO keyboard interrupt handling.
+	// unsafe { core::arch::asm!("sti") };
 
 	match cfg!(ktest) {
 		true => run_test(),
