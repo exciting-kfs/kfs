@@ -54,7 +54,7 @@ pub fn clear() {
 	}
 }
 
-pub fn init_vga() {
+pub fn init() {
 	clear();
 	enable_cursor(0, 11);
 }

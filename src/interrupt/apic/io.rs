@@ -96,13 +96,14 @@ impl RegKind {
 }
 
 pub fn init() {
-	for io_apic in IOAPIC_INFO.lock().io_apics.iter() {
+	for io_apic in IOAPIC_INFO.io_apics.iter() {
 		unsafe {
 			let base_addr = phys_to_virt(io_apic.address as usize);
 			IOAPIC_ACCESS_REGISTERS.push(Locked::new(AccessRegister::new(base_addr)));
 		}
 	}
 
+	// setting keyboard interrupt vector.
 	let mut v = read(0, RegKind::RedirectionTable(1));
 	v[0] = 0x21;
 	write(0, RegKind::RedirectionTable(1), v)
@@ -117,7 +118,7 @@ pub fn write(ioapic_id: usize, kind: RegKind, value: Vec<usize>) {
 }
 
 pub fn pbase(ioapic_id: usize) -> usize {
-	IOAPIC_INFO.lock().io_apics[ioapic_id].address as usize
+	IOAPIC_INFO.io_apics[ioapic_id].address as usize
 }
 
 pub fn vbase(ioapic_id: usize) -> usize {

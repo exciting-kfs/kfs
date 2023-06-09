@@ -49,7 +49,7 @@ fn mapping_io_apic_registers() -> Result<(), ApicError> {
 	let mut pfns = Vec::new();
 
 	// mapping io apic register page.
-	for io_apic in IOAPIC_INFO.lock().io_apics.iter() {
+	for io_apic in IOAPIC_INFO.io_apics.iter() {
 		is_uncacheable_page(io_apic.address as usize).map_err(|_| ApicError::Cacheable("io"))?;
 		let paddr = io_apic.address as usize;
 		let vaddr = phys_to_virt(paddr);

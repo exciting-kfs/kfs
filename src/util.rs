@@ -1,5 +1,6 @@
 pub mod arch;
 pub mod bitrange;
+pub mod lazy_constant;
 pub mod lcg;
 
 pub struct LazyInit<T> {
