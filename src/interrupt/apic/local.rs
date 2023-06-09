@@ -1,6 +1,13 @@
 use alloc::vec::Vec;
 
-use crate::mm::{constant::PAGE_MASK, util::phys_to_virt};
+use crate::{
+	mm::{
+		constant::{MB, PAGE_MASK},
+		util::phys_to_virt,
+	},
+	pr_info,
+	util::arch::cpuid::CPUID,
+};
 
 use super::MSR_APIC_BASE;
 
@@ -138,4 +145,31 @@ pub fn pbase() -> usize {
 
 pub fn vbase() -> usize {
 	phys_to_virt(pbase())
+}
+
+pub fn init() {
+	// timer initialization
+	set_timer_frequency();
+
+	let mut v = Register::LvtTimer.read();
+	v[0] = v[0] & !(1 << 16); // enable timer
+	v[0] = v[0] | 0x22; // set vector number.
+	Register::LvtTimer.write(v);
+}
+
+fn set_timer_frequency() {
+	const TIMER_FREQUENCY_HZ: usize = 1024; // TODO config?
+	let cpuid = CPUID::run(0x16, 0);
+
+	let bus_freq = cpuid.ecx * MB;
+	let count = bus_freq / TIMER_FREQUENCY_HZ;
+	let freq = bus_freq / count;
+
+	pr_info!("Bus freqeuncy(MHz): {:?}", cpuid.ecx);
+	pr_info!("Timer interrupt freqeuncy(Hz): {:?}", freq);
+
+	let mut div_conf = Register::DivideConfiguration.read();
+	div_conf[0] = div_conf[0] | 0b1011; // divided by 1 (bus_freq / n)
+	Register::DivideConfiguration.write(div_conf);
+	Register::InitialCount.write(Vec::from([count]));
 }

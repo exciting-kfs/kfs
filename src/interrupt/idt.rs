@@ -3,7 +3,8 @@ use core::mem::size_of;
 use crate::{interrupt::exception::CpuException, sync::singleton::Singleton};
 
 use super::{
-	handler::{divide_error::divide_error_handler, page_fault::page_fault_handler},
+	exception::{divide_error, general_protection, page_fault, undefined},
+	hw::{keyboard, timer},
 	idte::IDTE,
 };
 
@@ -63,12 +64,21 @@ impl IDTR {
 }
 
 pub fn init() {
-	let de = IDTE::interrupt_kernel(divide_error_handler as usize);
-	let pf = IDTE::interrupt_kernel(page_fault_handler as usize);
+	let de = IDTE::interrupt_kernel(divide_error::handler as usize);
+	let ud = IDTE::interrupt_kernel(undefined::handler as usize);
+	let gp = IDTE::interrupt_kernel(general_protection::handler as usize);
+	let pf = IDTE::interrupt_kernel(page_fault::handler as usize);
+	let kb = IDTE::interrupt_kernel(keyboard::handler as usize);
+	let tm = IDTE::interrupt_kernel(timer::handler as usize);
 
 	let mut idt = IDT.lock();
 	idt.write_exception(CpuException::DE, de);
 	idt.write_exception(CpuException::PF, pf);
+	idt.write_exception(CpuException::UD, ud);
+	idt.write_exception(CpuException::GP, gp);
+
+	idt.write_interrupt(0x21, kb);
+	idt.write_interrupt(0x22, tm);
 
 	idt.load();
 }

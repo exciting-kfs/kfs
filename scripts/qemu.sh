@@ -22,8 +22,8 @@ qemu-system-i386                    \
     -vga std                        \
     -device isa-debug-exit          \
     -cdrom $RESCUE                  \
-    -serial $COM1                   \
     -action reboot=shutdown         \
+    -serial $COM1                   \
     $@
 
 RESULT=$?

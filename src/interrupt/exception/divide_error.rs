@@ -1,6 +1,4 @@
-use crate::{pr_info, pr_warn};
-
-use super::interrupt_info::InterruptInfo;
+use crate::{interrupt::interrupt_info::InterruptInfo, pr_info, pr_warn};
 
 /// # Initial Stack Frame
 /// ```
@@ -13,7 +11,7 @@ use super::interrupt_info::InterruptInfo;
 /// high | ss     | <- esp (user)   // privilege changed
 /// --------------------------------
 /// ```
-pub extern "x86-interrupt" fn divide_error_handler(info: InterruptInfo) {
+pub extern "x86-interrupt" fn handler(info: InterruptInfo) {
 	pr_warn!("fault: divide error");
 
 	pr_info!("{:x?}", info);

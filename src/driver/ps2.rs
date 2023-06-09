@@ -25,8 +25,8 @@ pub fn init_ps2() -> Result<(), ()> {
 	wait_then_write_byte(&control::CONTROL_PORT, 0x20);
 	let config = keyboard::wait_raw_scancode();
 
-	// disable IRQ, translation on.
-	let new_config = (config & !0b11) | (1 << 6);
+	// enable IRQ, translation on.
+	let new_config = (config & !0b11) | (1 << 6) | 1;
 	wait_then_write_byte(&control::CONTROL_PORT, 0x60);
 	wait_then_write_byte(&keyboard::KEYBOARD_PORT, new_config);
 
