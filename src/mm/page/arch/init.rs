@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use super::directory::GLOBAL_PD_VIRT;
 use super::CURRENT_PD;
 use super::{util::invalidate_all_tlb, PageFlag, PDE};
@@ -14,6 +16,7 @@ pub struct VMemory {
 	pub vmalloc_pfn: Range<usize>,
 	pub high_pfn: Range<usize>,
 	pub local_apic_pfn: usize,
+	pub io_apic_pfn: Vec<usize>,
 }
 
 const ZONE_NORMAL_START: usize = VM_OFFSET / PT_COVER_SIZE;
@@ -53,6 +56,7 @@ pub unsafe fn init() {
 		vmalloc_pfn: vmalloc_start..vmalloc_end,
 		high_pfn: high_start..high_end,
 		local_apic_pfn: 0,
+		io_apic_pfn: Vec::new(),
 	});
 
 	CURRENT_PD.write(&mut GLOBAL_PD_VIRT);

@@ -1,6 +1,8 @@
+use alloc::vec::Vec;
+
 use crate::{
 	acpi::IOAPIC_INFO,
-	interrupt::apic,
+	interrupt::apic::{self, LAPIC_PBASE, MSR_APIC_BASE},
 	mm::{
 		constant::PAGE_MASK,
 		page::{arch::init::VMEMORY, get_vmemory_map, map_mmio, PageFlag, VMemory},
@@ -14,7 +16,7 @@ use crate::{
 ///
 /// # Allocation
 /// - page table.
-pub(super) unsafe fn mapping_local_apic_registers() -> Result<(), ApicError> {
+fn mapping_local_apic_registers() -> Result<(), ApicError> {
 	let apic_paddr = apic::local_pbase();
 	is_uncacheable_page(apic_paddr).map_err(|_| ApicError::Cacheable("local"))?;
 
@@ -24,11 +26,13 @@ pub(super) unsafe fn mapping_local_apic_registers() -> Result<(), ApicError> {
 	map_mmio(apic_vaddr, apic_paddr, flags).map_err(|_| ApicError::Alloc)?;
 
 	// recording local apic pfn at VMemory.
-	let vm = get_vmemory_map();
-	VMEMORY.write(VMemory {
-		local_apic_pfn: addr_to_pfn(apic_vaddr),
-		..vm
-	});
+	unsafe {
+		let vm = get_vmemory_map();
+		VMEMORY.write(VMemory {
+			local_apic_pfn: addr_to_pfn(apic_vaddr),
+			..vm
+		});
+	}
 
 	Ok(())
 }
@@ -41,14 +45,28 @@ pub(super) unsafe fn mapping_local_apic_registers() -> Result<(), ApicError> {
 ///
 /// #Allocation
 /// - page table.
-pub(super) fn mapping_io_apic_registers() -> Result<(), ApicError> {
+fn mapping_io_apic_registers() -> Result<(), ApicError> {
+	let mut pfns = Vec::new();
+
+	// mapping io apic register page.
 	for io_apic in IOAPIC_INFO.lock().io_apics.iter() {
 		is_uncacheable_page(io_apic.address as usize).map_err(|_| ApicError::Cacheable("io"))?;
 		let paddr = io_apic.address as usize;
 		let vaddr = phys_to_virt(paddr);
 		let flags = PageFlag::Global | PageFlag::Write | PageFlag::Present;
 		map_mmio(vaddr, paddr, flags).map_err(|_| ApicError::Alloc)?; // FIXME hmm.. cleanup?
+		pfns.push(addr_to_pfn(vaddr));
 	}
+
+	// recording io apic pfn at VMemory.
+	unsafe {
+		let vm = get_vmemory_map();
+		VMEMORY.write(VMemory {
+			io_apic_pfn: pfns,
+			..vm
+		});
+	}
+
 	Ok(())
 }
 
@@ -80,4 +98,12 @@ impl core::fmt::Debug for ApicError {
 			Self::Cacheable(s) => write!(f, "{} apic register page must be uncacheable.", s),
 		}
 	}
+}
+
+pub fn init() {
+	unsafe {
+		LAPIC_PBASE = MSR_APIC_BASE.read().low & PAGE_MASK;
+	}
+	mapping_local_apic_registers().expect("mapping local apic");
+	mapping_io_apic_registers().expect("mapping io apic");
 }

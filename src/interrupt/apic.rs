@@ -4,25 +4,26 @@ mod local;
 use crate::interrupt::apic::io::REDIR_TABLE_COUNT;
 use crate::io::pmio::Port;
 use crate::util::arch::cpuid::CPUID;
-use crate::{acpi::IOAPIC_INFO, pr_info, sync::singleton::Singleton, util::arch::msr::Msr};
+use crate::{acpi::IOAPIC_INFO, pr_info, util::arch::msr::Msr};
 
 pub use io::pbase as io_pbase;
 pub use io::vbase as io_vbase;
 pub use local::pbase as local_pbase;
 pub use local::vbase as local_vbase;
+pub use local::PBASE as LAPIC_PBASE;
 
-static MSR_APIC_BASE: Singleton<Msr> = Singleton::new(Msr::new(0x1b));
+pub static MSR_APIC_BASE: Msr = Msr::new(0x1b);
 
 pub fn init() {
 	if CPUID::run(1, 0).edx & 0x100 != 0x100 {
 		panic!("apic unsupported.");
 	}
 
-	if MSR_APIC_BASE.lock().read().low & 0x800 != 0x800 {
+	if MSR_APIC_BASE.read().low & 0x800 != 0x800 {
 		panic!("apic disabled.");
 	}
 
-	if local::Register::SpuriousInterruptVector.read()[0] & 0x100 != 0x100 {
+	if local::Register::SpuriousInterruptVector.read() & 0x100 != 0x100 {
 		panic!("apic disabled.");
 	}
 
