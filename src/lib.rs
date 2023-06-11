@@ -53,12 +53,6 @@ fn panic_handler_impl(info: &PanicInfo) -> ! {
 	loop {}
 }
 
-fn init_hardware() {
-	text_vga::init_vga();
-	driver::ps2::init_ps2().expect("failed to init PS/2");
-	driver::serial::init_serial();
-}
-
 fn run_test() -> ! {
 	let tests = TEST_ARRAY.as_slice();
 	let n_test = tests.len();
@@ -103,7 +97,8 @@ fn run_io() -> ! {
 
 #[no_mangle]
 pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
-	init_hardware();
+	driver::vga::text_vga::init();
+	driver::serial::init();
 
 	// caution: order sensitive.
 	unsafe {
@@ -114,14 +109,16 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 		mm::alloc::page::init();
 		mm::alloc::phys::init();
 		mm::alloc::virt::init();
+		interrupt::idt::init();
 
 		// after enabling collections.
 		acpi::init();
 		mm::page::mmio_init();
 	}
 
-	interrupt::idt::init();
 	interrupt::apic::init();
+
+	driver::ps2::init().expect("failed to init PS/2");
 
 	// TODO keyboard interrupt handling.
 	// unsafe { core::arch::asm!("sti") };

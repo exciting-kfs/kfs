@@ -143,7 +143,7 @@ impl core::fmt::Write for Serial {
 	}
 }
 
-pub fn init_serial() {
+pub fn init() {
 	unsafe {
 		COM1.init().expect("failed to init COM1 serial port");
 		// COM2.init().expect("failed to init COM2 serial port");

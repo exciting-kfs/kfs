@@ -46,7 +46,7 @@ pub fn print_local() {
 pub fn print_io() {
 	pr_info!("\n**** apic io register ****");
 
-	for id in 0..IOAPIC_INFO.lock().io_apics.iter().count() {
+	for id in 0..IOAPIC_INFO.io_apics.iter().count() {
 		pr_info!("vbase: {:x}", io::vbase(id));
 		pr_info!("ID: {:x?}", io::read(id, io::RegKind::ID));
 		pr_info!("Version: {:x?}", io::read(id, io::RegKind::VERSION));

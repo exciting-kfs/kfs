@@ -1,20 +1,18 @@
-use acpi::{madt::Madt, platform::interrupt::Apic, sdt::Signature, InterruptModel};
+use acpi::{madt::Madt, platform::interrupt::Apic, sdt::Signature, AcpiTables, InterruptModel};
 
-use crate::{acpi::ACPI_TABLES, sync::singleton::Singleton};
+use crate::util::lazy_constant::LazyConstant;
 
-pub static IOAPIC_INFO: Singleton<Apic> = Singleton::uninit();
+use super::handler::AcpiH;
 
-pub fn init() {
-	let madt = unsafe {
-		ACPI_TABLES
-			.lock()
-			.get_sdt::<Madt>(Signature::MADT)
-			.expect("madt")
-			.expect("madt")
-			.virtual_start()
-			.as_mut()
-	};
+pub static IOAPIC_INFO: LazyConstant<Apic> = LazyConstant::uninit();
 
+pub unsafe fn init(acpi_tables: &AcpiTables<AcpiH>) {
+	let mapping = acpi_tables
+		.get_sdt::<Madt>(Signature::MADT)
+		.expect("madt")
+		.expect("madt");
+
+	let madt = mapping.virtual_start().as_mut();
 	let (interrupt_model, _) = madt.parse_interrupt_model().expect("parsing madt");
 
 	match interrupt_model {
