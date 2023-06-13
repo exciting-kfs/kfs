@@ -6,6 +6,9 @@ extern enable_paging
 extern kernel_entry
 extern load_flat_gdt
 
+extern relocate_ap_start
+extern __ap_start
+
 section .stack nobits write
 global kernel_stack_bottom
     resb STACK_SIZE
@@ -43,6 +46,8 @@ kernel_init:
     ; Load GDTR and reload segment registers.
     call load_flat_gdt
 
+    call relocate_ap_start
+
     ; Kernel main logic. (no return)
     call kernel_entry
 ; Unreachable. but just in case...
@@ -51,3 +56,4 @@ kernel_init:
     hlt
     jmp .loop
 .end:
+

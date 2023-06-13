@@ -1,5 +1,5 @@
 mod io;
-mod local;
+pub mod local;
 
 use crate::interrupt::apic::io::REDIR_TABLE_COUNT;
 use crate::io::pmio::Port;
@@ -8,7 +8,9 @@ use crate::{acpi::IOAPIC_INFO, pr_info, util::arch::msr::Msr};
 
 pub use io::pbase as io_pbase;
 pub use io::vbase as io_vbase;
+pub use local::end_of_interrupt as local_eoi;
 pub use local::pbase as local_pbase;
+pub use local::timer as local_timer;
 pub use local::vbase as local_vbase;
 pub use local::PBASE as LAPIC_PBASE;
 
@@ -39,7 +41,7 @@ pub fn print_local() {
 	pr_info!("vbase: {:x}", local::vbase());
 
 	for r in local::Register::iter() {
-		pr_info!("{}: {:x?}", r, r.read())
+		pr_info!("{}: {:x?}", r, r.read());
 	}
 }
 

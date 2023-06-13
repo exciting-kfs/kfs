@@ -1,10 +1,9 @@
+pub mod ipi;
+pub mod timer;
+
 use core::ptr;
 
-use crate::{
-	mm::{constant::MB, util::phys_to_virt},
-	pr_info,
-	util::arch::cpuid::CPUID,
-};
+use crate::{interrupt::apic::local::timer::Mode, mm::util::phys_to_virt};
 
 pub static mut PBASE: usize = 0;
 
@@ -65,24 +64,24 @@ impl Register {
 		vbase() + *self as usize
 	}
 
-	pub fn read(&self) -> usize {
-		let ptr = self.addr() as *const usize;
+	pub fn read(&self) -> u32 {
+		let ptr = self.addr() as *const u32;
 		unsafe { ptr::read_volatile(ptr) }
 	}
 
-	pub fn write(&self, value: usize) {
-		let ptr = self.addr() as *mut usize;
+	pub fn write(&self, value: u32) {
+		let ptr = self.addr() as *mut u32;
 		unsafe { ptr::write_volatile(ptr, value) };
 	}
 
 	pub fn iter() -> core::slice::Iter<'static, Register> {
-		const REGISTERS: [Register; 45] = [
+		const REGISTERS: [Register; 44] = [
 			Register::ID,
 			Register::Version,
 			Register::TaskPriorty,
 			Register::ArbitrationPriority,
 			Register::ProcessorPriority,
-			Register::RemoteRead,
+			// Register::RemoteRead,
 			Register::LogicalDestination,
 			Register::DestinationFormat,
 			Register::SpuriousInterruptVector,
@@ -183,31 +182,31 @@ impl core::fmt::Display for Register {
 	}
 }
 
-fn read_n<const N: usize>(init_register: Register, buf: &mut [usize; N]) {
+fn read_n<const N: usize>(init_register: Register, buf: &mut [u32; N]) {
 	let addr = init_register.addr();
 	for (i, b) in buf.iter_mut().enumerate() {
-		let ptr = (addr + i * 0x10) as *mut usize;
+		let ptr = (addr + i * 0x10) as *mut u32;
 		*b = unsafe { ptr::read_volatile(ptr) }
 	}
 }
 
-pub fn read_in_service(buf: &mut [usize; 8]) {
+pub fn read_in_service(buf: &mut [u32; 8]) {
 	read_n(Register::InService0, buf)
 }
 
-pub fn read_interrupt_request(buf: &mut [usize; 8]) {
+pub fn read_interrupt_request(buf: &mut [u32; 8]) {
 	read_n(Register::InterruptRequest0, buf)
 }
 
-pub fn read_interrupt_command(buf: &mut [usize; 2]) {
+pub fn read_interrupt_command(buf: &mut [u32; 2]) {
 	read_n(Register::InterruptCommand0, buf)
 }
 
-pub fn write_interrupt_command(value: &[usize; 2]) {
+pub fn write_interrupt_command(value: &[u32; 2]) {
 	let addr = Register::InterruptCommand1.addr();
 	value.iter().rev().enumerate().for_each(|(i, v)| {
-		let ptr = (addr + i * 0x10) as *mut usize;
-		unsafe { *ptr = *v };
+		let ptr = (addr - i * 0x10) as *mut u32;
+		unsafe { ptr.write(*v) };
 	});
 }
 
@@ -224,27 +223,20 @@ pub fn vbase() -> usize {
 
 pub fn init() {
 	// timer initialization
-	set_timer_frequency();
+	const TIMER_FREQ_HZ: usize = 1000 * 1000; // TODO config? precision?
+	timer::init(TIMER_FREQ_HZ, Mode::Periodic, 0x22);
 
-	let mut v = Register::LvtTimer.read();
-	v = v & !(1 << 16); // enable timer
-	v = v | 0x22; // set vector number.
-	Register::LvtTimer.write(v);
+	// disable LINT0, LINT1
+	let v = Register::LvtLint0.read();
+	Register::LvtLint0.write(v | (1 << 16));
+	let v = Register::LvtLint1.read();
+	Register::LvtLint1.write(v | (1 << 16));
+
+	// enable LVT Error handler.
+	let v = 0xfe;
+	Register::LvtError.write(v);
 }
 
-fn set_timer_frequency() {
-	const TIMER_FREQUENCY_HZ: usize = 1024; // TODO config?
-	let cpuid = CPUID::run(0x16, 0);
-
-	let bus_freq = cpuid.ecx * MB;
-	let count = bus_freq / TIMER_FREQUENCY_HZ;
-	let freq = bus_freq / count;
-
-	pr_info!("Bus freqeuncy(MHz): {:?}", cpuid.ecx);
-	pr_info!("Timer interrupt freqeuncy(Hz): {:?}", freq);
-
-	let mut div_conf = Register::DivideConfiguration.read();
-	div_conf = div_conf | 0b1011; // divided by 1 (bus_freq / n)
-	Register::DivideConfiguration.write(div_conf);
-	Register::InitialCount.write(count);
+pub fn end_of_interrupt() {
+	Register::EndOfInterrupt.write(0);
 }

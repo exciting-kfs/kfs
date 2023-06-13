@@ -15,7 +15,7 @@ shift
 # -m 4032(4096 - 64): almost maximum memory in x86 (without PAE)
 qemu-system-i386                    \
     -cpu max                        \
-    -smp sockets=1,cores=4,threads=1\
+    -smp sockets=1,cores=2,threads=1\
     -machine pc,max-ram-below-4g=4G \
     -m 4000                         \
     -boot d                         \

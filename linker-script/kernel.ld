@@ -2,6 +2,8 @@ ENTRY(__start)
 
 vm_offset = 0xc0000000;
 GLOBAL_PD_VIRT = vm_offset + GLOBAL_PD;
+AP_FLAG_VIRT = vm_offset + AP_FLAG;
+AP_START = 0x1000;
 
 SECTIONS {
 	. = 1M; /* VMA == LMA */

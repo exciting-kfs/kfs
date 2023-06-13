@@ -4,7 +4,7 @@ use crate::{interrupt::exception::CpuException, sync::singleton::Singleton};
 
 use super::{
 	exception::{divide_error, general_protection, page_fault, undefined},
-	hw::{keyboard, timer},
+	hw::{keyboard, lvt_error, timer},
 	idte::IDTE,
 };
 
@@ -70,6 +70,7 @@ pub fn init() {
 	let pf = IDTE::interrupt_kernel(page_fault::handler as usize);
 	let kb = IDTE::interrupt_kernel(keyboard::handler as usize);
 	let tm = IDTE::interrupt_kernel(timer::handler as usize);
+	let le = IDTE::interrupt_kernel(lvt_error::handler as usize);
 
 	let mut idt = IDT.lock();
 	idt.write_exception(CpuException::DE, de);
@@ -79,6 +80,7 @@ pub fn init() {
 
 	idt.write_interrupt(0x21, kb);
 	idt.write_interrupt(0x22, tm);
+	idt.write_interrupt(0xfe, le);
 
 	idt.load();
 }

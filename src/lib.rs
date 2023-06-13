@@ -18,6 +18,7 @@ mod input;
 mod interrupt;
 mod io;
 mod mm;
+mod mp;
 mod printk;
 mod subroutine;
 mod sync;
@@ -97,7 +98,7 @@ fn run_io() -> ! {
 
 #[no_mangle]
 pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
-	driver::vga::text_vga::init();
+	// driver::vga::text_vga::init();
 	driver::serial::init();
 
 	// caution: order sensitive.
@@ -122,6 +123,8 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 
 	// TODO keyboard interrupt handling.
 	// unsafe { core::arch::asm!("sti") };
+
+	mp::init();
 
 	match cfg!(ktest) {
 		true => run_test(),

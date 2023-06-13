@@ -17,6 +17,9 @@ global GLOBAL_FIRST_PT:data 0x1000
 
 global __start:function (__start.end - __start)
 
+
+global AP_FLAG
+
 ; Initially, this space holds multiboot2 header.
 ; But during booting sequence,
 ; header will be overwritten with global page directory.
@@ -48,3 +51,6 @@ times 0x1000 - $ + GLOBAL_PD db 0
 ; which holds null-page and low-address MMIO pages.
 GLOBAL_FIRST_PT:
 times 0x1000 db 0
+
+AP_FLAG:
+times 1 db 0

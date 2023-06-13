@@ -39,7 +39,7 @@ fn set_config() {
 	let config = keyboard::wait_raw_scancode();
 
 	// enable IRQ, translation on.
-	let new_config = (config & !0b11) | (1 << 6) | 1;
+	let new_config = (config & !0b11) | (1 << 6); // | 1;
 	wait_then_write_byte(&control::CONTROL_PORT, 0x60);
 	wait_then_write_byte(&keyboard::KEYBOARD_PORT, new_config);
 }

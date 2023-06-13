@@ -15,6 +15,4 @@ pub extern "x86-interrupt" fn handler(info: InterruptInfo) {
 	pr_warn!("keyboard");
 
 	pr_info!("{:x?}", info);
-
-	loop {}
 }
