@@ -1,4 +1,4 @@
-mod arch;
+pub mod arch;
 mod os;
 
 use crate::mm::util::*;

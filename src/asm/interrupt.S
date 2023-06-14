@@ -1,3 +1,4 @@
+%include "segment.S"
 %include "common.S"
 
 ; INTERRUPT_HANDLER(name: ident, callback: ident, has_error_code: bool)
@@ -42,7 +43,7 @@ handle_interrupt:
     push ebp
 
     ; load kernel data segments
-    mov ax, 16
+    mov ax, KERNEL_DATA
     mov ds, ax
     mov es, ax
     mov fs, ax

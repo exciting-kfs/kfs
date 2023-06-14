@@ -4,7 +4,6 @@
 #![feature(allocator_api)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(const_maybe_uninit_uninit_array)]
-#![feature(abi_x86_interrupt)]
 #![feature(const_maybe_uninit_zeroed)]
 
 extern crate alloc;
@@ -21,6 +20,7 @@ mod interrupt;
 mod io;
 mod mm;
 mod printk;
+mod process;
 mod smp;
 mod subroutine;
 mod sync;
@@ -32,6 +32,7 @@ use core::panic::PanicInfo;
 use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
 use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use input::{key_event::Code, keyboard::KEYBOARD};
+use process::start;
 use test::{exit_qemu_with, TEST_ARRAY};
 
 /// very simple panic handler.
@@ -125,7 +126,7 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 
 	// TODO keyboard interrupt handling.
 	// unsafe { core::arch::asm!("sti") };
-
+	unsafe { start() };
 	match cfg!(ktest) {
 		true => run_test(),
 		false => run_io(),
