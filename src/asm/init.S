@@ -17,6 +17,7 @@ kernel_stack_bottom:
 section .text
 global kernel_init:function (kernel_init.end - kernel_init)
 
+global kernel_caller_ret
 ; Represent caller of `kernel_init` who doesn't really exists.
 ; this needed for stack trace.
 kernel_caller:
@@ -45,8 +46,6 @@ kernel_init:
 
     ; Load GDTR and reload segment registers.
     call load_flat_gdt
-
-    call relocate_ap_start
 
     ; Kernel main logic. (no return)
     call kernel_entry

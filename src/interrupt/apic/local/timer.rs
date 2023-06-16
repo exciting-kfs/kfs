@@ -28,7 +28,6 @@ pub fn set_frequency(freq: usize) {
 
 	pr_info!("Bus freqeuncy(MHz): {}", cpuid.ecx);
 	pr_info!("Timer interrupt freqeuncy(Hz): {}", freq);
-	pr_info!("count: {}", count);
 
 	let mut div_conf = Register::DivideConfiguration.read();
 	div_conf = div_conf | 0b1011; // divided by 1 (bus_freq / n)

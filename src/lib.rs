@@ -124,10 +124,16 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	// TODO keyboard interrupt handling.
 	// unsafe { core::arch::asm!("sti") };
 
-	mp::init();
+	mp::init().expect("MultiProcessor Init");
 
 	match cfg!(ktest) {
 		true => run_test(),
 		false => run_io(),
 	};
+}
+
+#[no_mangle]
+fn ap_entry(id: usize) {
+	pr_info!("AP[{}] is in ap_entry now.", id);
+	loop {}
 }

@@ -9,5 +9,3 @@ pub mod privilege_level;
 
 pub use apic::LAPIC_PBASE;
 pub use apic::MSR_APIC_BASE;
-
-pub use hw::timer::Delay;

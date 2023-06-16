@@ -2,6 +2,8 @@ pub mod arch;
 pub mod bitrange;
 pub mod lazy_constant;
 pub mod lcg;
+pub mod mem;
+pub mod pit;
 
 pub struct LazyInit<T> {
 	value: Option<T>,

@@ -13,6 +13,8 @@ extern GLOBAL_PD
 section .text
 global enable_paging:function (enable_paging.end - enable_paging)
 
+global enable_paging_ap: function (enable_paging_ap.end - enable_paging_ap)
+
 ; enable paging.
 ;
 ; more specifically,
@@ -53,25 +55,24 @@ enable_paging:
         inc ecx
         jmp .loop
     .loop_end:
+    
+	; Enable PSE and PGE
+	mov eax, cr4
+	or eax, 0x90; PSE | PGE
+	mov cr4, eax
 
-    ; Enable PSE and PGE
-    mov eax, cr4
-    or eax, 0x90; PSE | PGE
-    mov cr4, eax
+	; Load global PD into CR3
+	mov eax, GLOBAL_PD
+	mov cr3, eax
 
-    ; Load global PD into CR3
-    mov eax, GLOBAL_PD
-    mov cr3, eax
+	; Enable paging
+	mov eax, cr0
+	or eax, 0x80000000; PG
+	mov cr0, eax
 
-    ; Enable paging
-    mov eax, cr0
-    or eax, 0x80000000; PG
-    mov cr0, eax
-
-    ; translate registers and return.
-    add ebp, VM_OFFSET
-    add esp, VM_OFFSET
-    add DWORD [esp], VM_OFFSET
-    ret
-
+	; translate registers and return.
+	add ebp, VM_OFFSET
+	add esp, VM_OFFSET
+	add DWORD [esp], VM_OFFSET
+	ret
 .end:

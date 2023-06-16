@@ -8,7 +8,7 @@ mod madt;
 
 pub static mut RSDT_PADDR: usize = 0;
 pub use fadt::IAPC_BOOT_ARCH;
-pub use madt::IOAPIC_INFO;
+pub use madt::{IOAPIC_INFO, PROCESSOR_INFO};
 
 pub fn init() {
 	unsafe {

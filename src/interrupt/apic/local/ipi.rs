@@ -1,6 +1,9 @@
-use crate::{pr_info, util::bitrange::BitRange};
+use crate::util::{bitrange::BitRange, pit::PIT};
 
 use super::{read_interrupt_command, write_interrupt_command};
+
+#[derive(Debug)]
+pub struct Timeout;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Target {
@@ -53,14 +56,26 @@ pub fn send(target: Target, mode: Mode, vec_num: u8) {
 	fill_common(&mut buf, target, mode, vec_num);
 
 	buf[0] |= L_ASSERT.mask() as u32;
-
-	pr_info!("target: {:?}, mode: {:?} buf: {:x?}", target, mode, buf);
 	write_interrupt_command(&buf);
 }
 
-pub fn send_then_wait(target: Target, mode: Mode, vec_num: u8) {
+pub fn wait() -> Result<(), Timeout> {
+	let mut us: usize = 0;
+	let interval = 20;
+	let deadline = 200;
+	while let Status::Pending = read_status() {
+		if us >= deadline {
+			return Err(Timeout);
+		}
+		PIT::wait_us(interval);
+		us += interval;
+	}
+	Ok(())
+}
+
+pub fn send_then_wait(target: Target, mode: Mode, vec_num: u8) -> Result<(), Timeout> {
 	send(target, mode, vec_num);
-	while let Status::Pending = read_status() {}
+	wait()
 }
 
 pub fn send_level_deassert(target: Target, mode: Mode, vec_num: u8) {
@@ -94,8 +109,6 @@ pub fn read_status() -> Status {
 	let mask = L_DELIVERY_STATUS.mask() as u32;
 
 	read_interrupt_command(&mut buf);
-
-	pr_info!("read_status: {:x?}", buf);
 
 	match buf[0] & mask == mask {
 		false => Status::Idle,

@@ -18,7 +18,7 @@ global GLOBAL_FIRST_PT:data 0x1000
 global __start:function (__start.end - __start)
 
 
-global AP_FLAG
+global AP_COUNT
 
 ; Initially, this space holds multiboot2 header.
 ; But during booting sequence,
@@ -52,5 +52,5 @@ times 0x1000 - $ + GLOBAL_PD db 0
 GLOBAL_FIRST_PT:
 times 0x1000 db 0
 
-AP_FLAG:
+AP_COUNT:
 times 1 db 0
