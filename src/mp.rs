@@ -8,7 +8,7 @@ use crate::{
 		util::{phys_to_virt, size_of_rank},
 	},
 	pr_info,
-	util::{self, pit::PIT},
+	util::pit::PIT,
 };
 
 extern "C" {
@@ -36,12 +36,12 @@ pub fn init() -> Result<(), &'static str> {
 			ipi::send_then_wait(target, mode, vec_num).map_err(|_| "timeout ipi Startup")?;
 		}
 		pr_info!("AP[{}]: init done.", id);
-		PIT::wait_ms(10);
+		PIT::wait_ms(10); // to prevent data race.
 	}
 
 	while unsafe { AP_COUNT_VIRT } != count as u8 {
-		PIT::wait_ms(35);
-		pr_info!("{}", unsafe { AP_COUNT_VIRT });
+		// PIT::wait_ms(35);
+		// pr_info!("{}", unsafe { AP_COUNT_VIRT });
 	}
 	Ok(())
 }
@@ -51,11 +51,11 @@ fn relocate_ap_start() {
 	let len = __ap_end as usize - __ap_start as usize;
 	let dst = phys_to_virt(AP_START as usize) as *mut u8;
 	let src = __ap_start as usize as *const u8;
-	util::mem::copy(dst, src, len);
+	unsafe { dst.copy_from_nonoverlapping(src, len) };
 }
 
 #[no_mangle]
-pub extern "C" fn __ap_stack_allocate() -> *mut u8 {
+pub extern "C" fn __ap_stack_alloc() -> *mut u8 {
 	let size = size_of_rank(1);
 	let layout = unsafe { Layout::from_size_align_unchecked(size, size) };
 	let ptr = allocate(layout, GFP::Atomic).expect("ap stack").as_ptr();

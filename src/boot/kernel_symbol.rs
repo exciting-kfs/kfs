@@ -49,14 +49,14 @@ pub fn init(bi: &BootInformation, kernel_end: &mut usize) -> Result<(), Error> {
 fn parse_elf_tag(tag: &ElfSectionsTag) -> Result<(Symtab, Strtab, usize), Error> {
 	let mut strtab = None;
 	let mut symtab = None;
-	let mut end = 0;
+	let mut last_end = 0;
 
 	for section in tag.sections() {
-		let section_end = (section.end_address() as usize)
-			.checked_sub(VM_OFFSET)
-			.unwrap_or(end);
+		let end = section.end_address() as usize;
+		let end = end.checked_sub(VM_OFFSET).unwrap_or(end);
 
-		end = max(end, section_end);
+		last_end = max(last_end, end);
+
 		if section.name() == ".symtab" {
 			symtab = Some(unsafe { get_symtab(&section) });
 		} else if section.name() == ".strtab" {
@@ -65,7 +65,7 @@ fn parse_elf_tag(tag: &ElfSectionsTag) -> Result<(Symtab, Strtab, usize), Error>
 	}
 
 	if let (Some(symtab), Some(strtab)) = (symtab, strtab) {
-		Ok((symtab, strtab, end))
+		Ok((symtab, strtab, last_end))
 	} else {
 		Err(Error::MissingSection)
 	}

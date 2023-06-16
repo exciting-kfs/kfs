@@ -98,7 +98,7 @@ fn run_io() -> ! {
 
 #[no_mangle]
 pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
-	// driver::vga::text_vga::init();
+	driver::vga::text_vga::init();
 	driver::serial::init();
 
 	// caution: order sensitive.
@@ -110,9 +110,9 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 		mm::alloc::page::init();
 		mm::alloc::phys::init();
 		mm::alloc::virt::init();
-		interrupt::idt::init();
 
-		// after enabling collections.
+		// now we can allocate dynamic memories.
+		interrupt::idt::init();
 		acpi::init();
 		mm::page::mmio_init();
 	}

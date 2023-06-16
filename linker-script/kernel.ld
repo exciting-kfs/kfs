@@ -32,7 +32,7 @@ SECTIONS {
 
 	.bss : ALIGN(4K) {
 		*(.bss .bss.*)
-		. = ALIGN(4K);
+		. = ALIGN(4M);
 		*(.stack)
 	}
 }

@@ -48,7 +48,7 @@ __ap_init:
 	mov esp, AP_START
 	mov ebp, esp
 
-	call __ap_enable_paging ; mapping problem
+	call __ap_enable_paging ; mapping problem, __ap_init ~ .end not mapped.
 
 	
 	; raise AP_COUNT
@@ -72,7 +72,7 @@ __ap_init:
 	; set for stack trace (?)
 	push kernel_caller_ret
 	push kernel_stack_bottom
-	push ebx ; (physical id)
+	push ebx ; (physical id), physical id and AP_COUNT is identical.
 
 
 	call ap_entry
