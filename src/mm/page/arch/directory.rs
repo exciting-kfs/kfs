@@ -173,7 +173,8 @@ impl PDE {
 		}
 
 		let pt: *mut PT = alloc_one_page()?.cast();
-		unsafe { pt.write(self.as_pt().unwrap().clone()) };
+		let src = self.as_pt().unwrap();
+		unsafe { pt.copy_from_nonoverlapping(src, PAGE_SIZE) }
 
 		Ok(Self::new(virt_to_phys(pt as usize), self.flag()))
 	}
