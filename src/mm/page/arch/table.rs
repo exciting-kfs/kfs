@@ -7,7 +7,8 @@ use crate::mm::constant::*;
 
 use super::{PageFlag, PDE};
 
-#[repr(C, align(4096))]
+#[derive(Clone)]
+#[repr(transparent)]
 pub struct PT {
 	entries: [PTE; 1024],
 }

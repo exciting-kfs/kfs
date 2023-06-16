@@ -1,25 +1,69 @@
 use super::{util::invalidate_all_tlb, PageFlag, PT, PTE};
+use crate::mm::alloc::page::{alloc_pages, free_pages};
+use crate::mm::alloc::Zone;
 use crate::mm::{constant::*, util::*};
 use crate::sync::singleton::Singleton;
 use core::alloc::AllocError;
 use core::ops::{Index, IndexMut};
+use core::ptr::{addr_of_mut, NonNull};
 
 extern "C" {
-	pub static mut GLOBAL_PD_VIRT: PD;
+	pub static mut GLOBAL_PD_VIRT: [PDE; 1024];
 }
 
-pub static CURRENT_PD: Singleton<&mut PD> = Singleton::uninit();
+pub static CURRENT_PD: Singleton<PD> = Singleton::uninit();
 
-#[repr(C, align(4096))]
-pub struct PD {
-	entries: [PDE; 1024],
+fn alloc_one_page() -> Result<*mut u8, AllocError> {
+	unsafe { Ok(alloc_pages(0, Zone::Normal)?.as_mut().as_mut_ptr()) }
 }
 
-impl PD {
+fn free_one_page(page: *mut u8) {
+	free_pages(NonNull::new(page).unwrap());
+}
+
+pub struct PD<'a> {
+	inner: &'a mut [PDE; 1024],
+}
+
+impl<'a> PD<'a> {
+	pub fn new(inner: &mut [PDE; 1024]) -> PD<'_> {
+		PD { inner }
+	}
+
+	pub fn clone(&self) -> Result<Self, AllocError> {
+		unsafe {
+			let pd: *mut [PDE; 1024] = alloc_one_page()?.cast();
+
+			for i in 0..1024 {
+				let dst = addr_of_mut!((*pd)[i]);
+				let src = &self.inner[i];
+
+				match src.clone() {
+					Ok(copied) => dst.write(copied),
+					Err(e) => {
+						Self::clone_fail_cleanup(pd, i);
+						return Err(e);
+					}
+				}
+			}
+
+			Ok(Self { inner: &mut *pd })
+		}
+	}
+
+	fn clone_fail_cleanup(pd: *mut [PDE; 1024], failed_index: usize) {
+		unsafe {
+			for i in 0..failed_index {
+				let pde = addr_of_mut!((*pd)[i]);
+				(*pde).destory();
+			}
+		}
+	}
+
 	pub fn map_4m(&mut self, vaddr: usize, paddr: usize, flags: PageFlag) {
 		let (pd_idx, _) = Self::addr_to_index(vaddr);
 
-		self.entries[pd_idx] = PDE::new_4m(paddr, flags);
+		self.inner[pd_idx] = PDE::new_4m(paddr, flags);
 	}
 
 	pub fn map_page(
@@ -30,7 +74,7 @@ impl PD {
 	) -> Result<(), AllocError> {
 		let (pd_idx, pt_idx) = Self::addr_to_index(vaddr);
 
-		let pde = &mut self.entries[pd_idx];
+		let pde = &mut self.inner[pd_idx];
 
 		let pt = if pde.is_4m() {
 			let pt = PT::new_from_4m(*pde)?;
@@ -56,7 +100,7 @@ impl PD {
 	pub fn unmap_page(&mut self, vaddr: usize) -> Result<(), ()> {
 		let (pd_idx, pt_idx) = Self::addr_to_index(vaddr);
 
-		let pde = &mut self.entries[pd_idx];
+		let pde = &mut self.inner[pd_idx];
 
 		if !pde.is_4m() {
 			let pt = unsafe { (phys_to_virt(pde.addr()) as *mut PT).as_mut().unwrap() };
@@ -75,7 +119,7 @@ impl PD {
 	pub fn lookup(&self, vaddr: usize) -> Option<usize> {
 		let (pd_idx, pt_idx) = Self::addr_to_index(vaddr);
 
-		let pde = &self.entries[pd_idx];
+		let pde = &self.inner[pd_idx];
 
 		if pde.is_4m() {
 			return pde
@@ -98,17 +142,17 @@ impl PD {
 	}
 }
 
-impl Index<usize> for PD {
+impl<'a> Index<usize> for PD<'a> {
 	type Output = PDE;
 
 	fn index(&self, index: usize) -> &Self::Output {
-		&self.entries[index]
+		&self.inner[index]
 	}
 }
 
-impl IndexMut<usize> for PD {
+impl<'a> IndexMut<usize> for PD<'a> {
 	fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-		&mut self.entries[index]
+		&mut self.inner[index]
 	}
 }
 
@@ -123,21 +167,39 @@ impl PDE {
 	const ADDR_MASK_4M: u32 = 0b11111111_11000000_00000000_00000000;
 	const ADDR_MASK: u32 = 0b11111111_11111111_11110000_00000000;
 
-	pub fn new_4m(addr: usize, flags: PageFlag) -> Self {
+	pub fn clone(&self) -> Result<Self, AllocError> {
+		if self.is_4m() {
+			return Ok(Self { data: self.data });
+		}
+
+		let pt: *mut PT = alloc_one_page()?.cast();
+		unsafe { pt.write(self.as_pt().unwrap().clone()) };
+
+		Ok(Self::new(virt_to_phys(pt as usize), self.flag()))
+	}
+
+	pub fn new_4m(paddr: usize, flags: PageFlag) -> Self {
 		Self {
-			data: PageFlag::from_bits_retain((addr as u32 & Self::ADDR_MASK_4M) | Self::PSE)
+			data: PageFlag::from_bits_retain((paddr as u32 & Self::ADDR_MASK_4M) | Self::PSE)
 				| flags,
 		}
 	}
 
-	pub fn new(addr: usize, flags: PageFlag) -> Self {
+	pub fn new(paddr: usize, flags: PageFlag) -> Self {
 		Self {
-			data: PageFlag::from_bits_retain(addr as u32 & Self::ADDR_MASK) | flags,
+			data: PageFlag::from_bits_retain(paddr as u32 & Self::ADDR_MASK) | flags,
 		}
 	}
 
 	pub fn is_4m(&self) -> bool {
 		(self.data.bits() & Self::PSE) != 0
+	}
+
+	pub fn as_pt(&self) -> Option<&PT> {
+		if self.is_4m() {
+			return None;
+		}
+		unsafe { (phys_to_virt(self.addr()) as *const PT).as_ref() }
 	}
 
 	pub fn addr(&self) -> usize {
@@ -146,6 +208,12 @@ impl PDE {
 
 	pub fn flag(&self) -> PageFlag {
 		PageFlag::from_bits_truncate(self.data.bits())
+	}
+
+	pub fn destory(self) {
+		if !self.is_4m() {
+			free_one_page(phys_to_virt(self.addr()) as *mut u8);
+		}
 	}
 }
 

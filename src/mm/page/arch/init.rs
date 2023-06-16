@@ -1,8 +1,8 @@
 use alloc::vec::Vec;
 
 use super::directory::GLOBAL_PD_VIRT;
-use super::CURRENT_PD;
 use super::{util::invalidate_all_tlb, PageFlag, PDE};
+use super::{CURRENT_PD, PD};
 
 use crate::boot;
 use crate::mm::{constant::*, util::*};
@@ -59,7 +59,7 @@ pub unsafe fn init() {
 		io_apic_pfn: Vec::new(),
 	});
 
-	CURRENT_PD.write(&mut GLOBAL_PD_VIRT);
+	CURRENT_PD.write(PD::new(&mut GLOBAL_PD_VIRT));
 }
 
 unsafe fn mapping_zone_normal(max_paddr: usize) -> usize {
