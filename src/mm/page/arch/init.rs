@@ -66,7 +66,7 @@ unsafe fn mapping_zone_normal(max_paddr: usize) -> usize {
 	let mut mapped_entries = 0;
 	for va_i in 0..PD_ENTRIES {
 		let paddr = virt_to_phys(va_i * PT_COVER_SIZE);
-		let in_normal = ZONE_NORMAL_START <= va_i && va_i < VMALLOC_START;
+		let in_normal = ZONE_NORMAL_START <= va_i && va_i < VMALLOC_START; // 0xc000_0000 ~ 0xf800_0000
 
 		let extra_flags = if in_normal && paddr < max_paddr {
 			mapped_entries += 1;

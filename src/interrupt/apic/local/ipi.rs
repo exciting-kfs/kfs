@@ -2,9 +2,6 @@ use crate::util::{bitrange::BitRange, pit::PIT};
 
 use super::{read_interrupt_command, write_interrupt_command};
 
-#[derive(Debug)]
-pub struct Timeout;
-
 #[derive(Debug, Clone, Copy)]
 pub enum Target {
 	ItSelf,
@@ -59,13 +56,13 @@ pub fn send(target: Target, mode: Mode, vec_num: u8) {
 	write_interrupt_command(&buf);
 }
 
-pub fn wait() -> Result<(), Timeout> {
+pub fn wait() -> Result<(), ()> {
 	let mut us: usize = 0;
 	let interval = 20;
 	let deadline = 200;
 	while let Status::Pending = read_status() {
 		if us >= deadline {
-			return Err(Timeout);
+			return Err(());
 		}
 		PIT::wait_us(interval);
 		us += interval;
@@ -75,7 +72,7 @@ pub fn wait() -> Result<(), Timeout> {
 
 pub fn send_then_wait(target: Target, mode: Mode, vec_num: u8) -> Result<(), Timeout> {
 	send(target, mode, vec_num);
-	wait()
+	wait().map_err(|_| Timeout(target, mode, vec_num))
 }
 
 pub fn send_level_deassert(target: Target, mode: Mode, vec_num: u8) {
@@ -113,5 +110,17 @@ pub fn read_status() -> Status {
 	match buf[0] & mask == mask {
 		false => Status::Idle,
 		true => Status::Pending,
+	}
+}
+
+pub struct Timeout(Target, Mode, u8);
+
+impl core::fmt::Debug for Timeout {
+	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+		write!(
+			f,
+			"ipi timeout: send 'vector number:{:x}' to {:?} with {:?}",
+			self.2, self.0, self.1
+		)
 	}
 }

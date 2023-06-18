@@ -1,7 +1,7 @@
 # === User settings / toolchain ===
 
 RELEASE_MODE := n
-DEBUG_WITH_VSCODE := n
+DEBUG_WITH_VSCODE := y
 
 I386_GRUB2_PREFIX := $(I386_GRUB2_PREFIX)
 
@@ -88,7 +88,7 @@ run : rescue
 ifeq ($(DEBUG_WITH_VSCODE),y)
 debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
 	@scripts/vsc-debug.py $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN) &
-	@scripts/qemu.sh $(RESCUE_IMG) stdio -s -S
+	@scripts/qemu.sh $(RESCUE_IMG) stdio -s -S -display none
 else
 debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
 	@scripts/qemu.sh $(RESCUE_IMG) stdio -s -S & rust-lldb   \

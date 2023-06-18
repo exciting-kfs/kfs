@@ -1,17 +1,12 @@
 %include "address.S"
 
+; global, PS(4M), kernel, write, present.
+%define PD_ATTRIBUTE 0b000110000011
+
 section .text
 
-global relocate_ap_start
-global __ap_start
-
-extern __ap_stack_allocate
 extern AP_START
-
 extern AP_COUNT
-
-extern enable_paging_ap
-
 extern GLOBAL_PD
 
 extern kernel_caller_ret
@@ -48,9 +43,8 @@ __ap_init:
 	mov esp, AP_START
 	mov ebp, esp
 
-	call __ap_enable_paging ; mapping problem, __ap_init ~ .end not mapped.
+	call __ap_enable_paging
 
-	
 	; raise AP_COUNT
 	xor ebx, ebx
 	lea eax, AP_COUNT
@@ -58,24 +52,13 @@ __ap_init:
 	inc bl
 	mov BYTE [eax], bl
 
-	jmp $
-
-	; allocate stack for ap
-	mov eax, __ap_stack_allocate
-	call eax
-	sub eax, VM_OFFSET
-	mov esp, eax
-	mov ebp, esp
-
-
-
 	; set for stack trace (?)
 	push kernel_caller_ret
 	push kernel_stack_bottom
-	push ebx ; (physical id), physical id and AP_COUNT is identical.
+	push ebx ; (physical id): physical id and AP_COUNT is identical.
 
-
-	call ap_entry
+	lea eax, ap_entry
+	call eax
 __ap_enable_paging:
 	; Enable PSE and PGE
 	mov eax, cr4

@@ -13,8 +13,6 @@ extern GLOBAL_PD
 section .text
 global enable_paging:function (enable_paging.end - enable_paging)
 
-global enable_paging_ap: function (enable_paging_ap.end - enable_paging_ap)
-
 ; enable paging.
 ;
 ; more specifically,
@@ -30,17 +28,18 @@ global enable_paging_ap: function (enable_paging_ap.end - enable_paging_ap)
 ; physical memory address [0, size) (where size is `4 * INIT_DIRS` megabytes)
 ; will be mapped virtual memory address [0, size) and [VM_OFFSET,  VM_OFFSET + size).
 enable_paging:
-    ; clear global PD
-    xor eax, eax
-    mov ecx, 1024
-    mov edi, GLOBAL_PD
-    cld
-    rep stosd
+	; clear global PD
+	xor eax, eax
+	mov ecx, 1024
+	mov edi, GLOBAL_PD
+	cld
+	rep stosd
 
-    ; flat-map beginning part of memory
-    mov ebx, GLOBAL_PD
-    xor ecx, ecx
-    .loop:
+	; flat-map beginning part of memory
+	mov ebx, GLOBAL_PD
+	xor ecx, ecx
+
+.loop:
         cmp ecx, INIT_DIRS
         je .loop_end
 
@@ -54,8 +53,8 @@ enable_paging:
 
         inc ecx
         jmp .loop
-    .loop_end:
-    
+.loop_end:
+
 	; Enable PSE and PGE
 	mov eax, cr4
 	or eax, 0x90; PSE | PGE

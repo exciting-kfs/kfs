@@ -11,7 +11,7 @@ use super::{
 const IDTE_COUNT: usize = 256;
 
 #[repr(align(8))]
-pub struct IDT {
+struct IDT {
 	entry: [IDTE; IDTE_COUNT],
 }
 
@@ -83,4 +83,8 @@ pub fn init() {
 	idt.write_interrupt(0xfe, le);
 
 	idt.load();
+}
+
+pub fn load_global_idt() {
+	IDT.lock().load();
 }

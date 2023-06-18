@@ -28,6 +28,7 @@ impl PIT {
 		while pit_data.read_byte() & 0x10 == 0 {}
 	}
 
+	/// max ms: 0x36
 	pub fn wait_ms(ms: usize) {
 		let one_ms = 0x4a9;
 		if ms > 0xffff / one_ms {
@@ -37,6 +38,7 @@ impl PIT {
 		Self::wait(ms * one_ms);
 	}
 
+	// max us: 0xffff
 	pub fn wait_us(us: usize) {
 		if us > 0xffff {
 			panic!("too large");

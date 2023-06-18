@@ -157,7 +157,7 @@ impl<'a> IndexMut<usize> for PD<'a> {
 	}
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[repr(transparent)]
 pub struct PDE {
 	data: PageFlag,
@@ -193,6 +193,10 @@ impl PDE {
 		}
 	}
 
+	pub fn from_data(data: PageFlag) -> Self {
+		Self { data }
+	}
+
 	pub fn is_4m(&self) -> bool {
 		(self.data.bits() & Self::PSE) != 0
 	}
@@ -216,6 +220,10 @@ impl PDE {
 		if !self.is_4m() {
 			free_one_page(phys_to_virt(self.addr()) as *mut u8);
 		}
+	}
+
+	pub fn data(&self) -> PageFlag {
+		self.data
 	}
 }
 

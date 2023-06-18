@@ -6,9 +6,6 @@ extern enable_paging
 extern kernel_entry
 extern load_flat_gdt
 
-extern relocate_ap_start
-extern __ap_start
-
 section .stack nobits write
 global kernel_stack_bottom
     resb STACK_SIZE
@@ -55,4 +52,3 @@ kernel_init:
     hlt
     jmp .loop
 .end:
-

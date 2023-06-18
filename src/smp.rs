@@ -1,11 +1,12 @@
-use core::alloc::Layout;
-
 use crate::{
 	acpi::PROCESSOR_INFO,
-	interrupt::apic::local::ipi,
+	interrupt::{
+		apic::local::ipi::{self, Mode, Target, Timeout},
+		idt::load_global_idt,
+	},
 	mm::{
-		alloc::{phys::allocate, GFP},
-		util::{phys_to_virt, size_of_rank},
+		page::{remap_page_4m, restore_page_4m, PageFlag},
+		util::phys_to_virt,
 	},
 	pr_info,
 	util::pit::PIT,
@@ -18,31 +19,38 @@ extern "C" {
 	pub static AP_COUNT_VIRT: u8;
 }
 
-pub fn init() -> Result<(), &'static str> {
+pub fn init() -> Result<(), Timeout> {
 	relocate_ap_start();
 
-	let target = ipi::Target::ExcludeSelf;
-	let mode = ipi::Mode::INIT;
-	ipi::send_then_wait(target, mode, 0).map_err(|_| "timeout ipi INIT")?;
+	let vaddr = 0x0;
+	let flag = PageFlag::Global | PageFlag::Write | PageFlag::Present;
+	let backup = remap_page_4m(vaddr, 0, flag);
+
+	wakeup_aps()?;
+
+	restore_page_4m(vaddr, backup);
+	Ok(())
+}
+
+fn wakeup_aps() -> Result<(), Timeout> {
+	ipi::send_then_wait(Target::ExcludeSelf, Mode::INIT, 0)?;
 
 	let count = PROCESSOR_INFO.application_processors.iter().count();
 	pr_info!("The number of APs: {}", count);
+
 	for id in 1..(count + 1) {
 		let target = ipi::Target::Other(id);
 		let mode = ipi::Mode::StartUp;
 		let vec_num = (AP_START as usize >> 12) as u8;
 
 		for _ in 0..2 {
-			ipi::send_then_wait(target, mode, vec_num).map_err(|_| "timeout ipi Startup")?;
+			ipi::send_then_wait(target, mode, vec_num)?;
 		}
 		pr_info!("AP[{}]: init done.", id);
 		PIT::wait_ms(10); // to prevent data race.
 	}
 
-	while unsafe { AP_COUNT_VIRT } != count as u8 {
-		// PIT::wait_ms(35);
-		// pr_info!("{}", unsafe { AP_COUNT_VIRT });
-	}
+	while unsafe { AP_COUNT_VIRT } != count as u8 {}
 	Ok(())
 }
 
@@ -55,10 +63,17 @@ fn relocate_ap_start() {
 }
 
 #[no_mangle]
-pub extern "C" fn __ap_stack_alloc() -> *mut u8 {
-	let size = size_of_rank(1);
-	let layout = unsafe { Layout::from_size_align_unchecked(size, size) };
-	let ptr = allocate(layout, GFP::Atomic).expect("ap stack").as_ptr();
-	pr_info!("__ap_stack_allocate: {:?}", ptr);
-	ptr.cast()
+fn ap_entry(id: usize) {
+	load_global_idt();
+
+	pr_info!("AP[{}] is in ap_entry now.", id); // FIXME printk race condition
+
+	// TODO MTRR etc...
+
+	loop {
+		unsafe {
+			// core::arch::asm!("sti");
+			core::arch::asm!("hlt");
+		}
+	}
 }

@@ -18,8 +18,8 @@ mod input;
 mod interrupt;
 mod io;
 mod mm;
-mod mp;
 mod printk;
+mod smp;
 mod subroutine;
 mod sync;
 mod test;
@@ -101,6 +101,8 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	driver::vga::text_vga::init();
 	driver::serial::init();
 
+	interrupt::idt::init();
+
 	// caution: order sensitive.
 	unsafe {
 		boot::init(bi_header, magic).expect("boot information");
@@ -112,28 +114,20 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 		mm::alloc::virt::init();
 
 		// now we can allocate dynamic memories.
-		interrupt::idt::init();
 		acpi::init();
 		mm::page::mmio_init();
 	}
 
 	interrupt::apic::init();
+	smp::init().expect("MultiProcessor Init");
 
 	driver::ps2::init().expect("failed to init PS/2");
 
 	// TODO keyboard interrupt handling.
 	// unsafe { core::arch::asm!("sti") };
 
-	mp::init().expect("MultiProcessor Init");
-
 	match cfg!(ktest) {
 		true => run_test(),
 		false => run_io(),
 	};
-}
-
-#[no_mangle]
-fn ap_entry(id: usize) {
-	pr_info!("AP[{}] is in ap_entry now.", id);
-	loop {}
 }
