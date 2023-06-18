@@ -58,6 +58,7 @@ impl<'a> PD<'a> {
 				(*pde).destory();
 			}
 		}
+		free_one_page(pd.cast())
 	}
 
 	pub fn map_4m(&mut self, vaddr: usize, paddr: usize, flags: PageFlag) {
