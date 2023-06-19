@@ -72,7 +72,7 @@ rescue : $(RESCUE_IMG)
 .PHONY : clean
 clean :
 	@echo '[-] cleanup...'
-	@cargo clean
+	@cargo clean -v
 	@rm -f .sw*
 
 .PHONY : re
@@ -124,9 +124,15 @@ size : $(KERNEL_BIN)
 
 .PHONY : test
 test : RUSTC_FLAG += --cfg ktest
+test : RUSTC_FLAG += --cfg 'ktest="all"'
 test : rescue
 	@scripts/qemu.sh $(RESCUE_IMG) stdio -display none
 
+.PHONY : test-dev
+test-dev : RUSTC_FLAG += --cfg ktest
+test-dev : RUSTC_FLAG += --cfg 'ktest="dev"'
+test-dev : rescue
+	@scripts/qemu.sh $(RESCUE_IMG) stdio -display none
 # === Main recipes ===
 
 .PHONY : $(LIB_KERNEL)

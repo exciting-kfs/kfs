@@ -1,10 +1,10 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse::Nothing, parse_macro_input, ItemFn, ReturnType};
+use syn::{parse_macro_input, ItemFn, ReturnType};
 
 #[proc_macro_attribute]
 pub fn ktest(attr: TokenStream, input: TokenStream) -> TokenStream {
-	parse_macro_input!(attr as Nothing);
+	let attr = attr.to_string();
 
 	let func = parse_macro_input!(input as ItemFn);
 
@@ -26,8 +26,13 @@ pub fn ktest(attr: TokenStream, input: TokenStream) -> TokenStream {
 	let func_full_name = quote!(concat!(module_path!(), "::", #func_name));
 	let static_name = format_ident!("__TEST_CASE_{}", func_name.to_uppercase());
 
-	let expanded = quote! {
-		#[cfg(ktest)]
+	let mut config = if !attr.is_empty() {
+		quote!(#[cfg(any(ktest = "all", ktest = #attr))])
+	} else {
+		quote!(#[cfg(ktest = "all")])
+	};
+
+	let test = quote! {
 		#[link_section = ".test_array"]
 		static #static_name: crate::test::TestCase = crate::test::TestCase::new(
 			#func_full_name,
@@ -36,5 +41,6 @@ pub fn ktest(attr: TokenStream, input: TokenStream) -> TokenStream {
 		#func
 	};
 
-	TokenStream::from(expanded)
+	config.extend(test);
+	TokenStream::from(config)
 }
