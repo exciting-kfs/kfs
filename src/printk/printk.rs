@@ -1,6 +1,7 @@
 #[macro_export]
 macro_rules! pr_err {
 	($($args:tt)*) => {
+		#[cfg(any(log_level = "error", log_level = "warn", log_level = "info", log_level = "debug"))]
 		$crate::printk::__printk(
 			$crate::fmt_with!(
 				WITH(ln)
@@ -14,6 +15,7 @@ macro_rules! pr_err {
 #[macro_export]
 macro_rules! pr_warn {
 	($($args:tt)*) => {
+		#[cfg(any(log_level = "warn", log_level = "info", log_level = "debug"))]
 		$crate::printk::__printk(
 			$crate::fmt_with!(
 				WITH(ln)
@@ -27,6 +29,20 @@ macro_rules! pr_warn {
 #[macro_export]
 macro_rules! pr_info {
 	($($args:tt)*) => {
+		#[cfg(any(log_level = "info", log_level = "debug"))]
+		$crate::printk::__printk(
+			$crate::fmt_with!(
+				WITH(ln)
+				FMT($($args)*)
+			)
+		).unwrap()
+	};
+}
+
+#[macro_export]
+macro_rules! pr_debug {
+	($($args:tt)*) => {
+		#[cfg(log_level = "debug")]
 		$crate::printk::__printk(
 			$crate::fmt_with!(
 				WITH(ln)

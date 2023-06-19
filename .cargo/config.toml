@@ -9,4 +9,5 @@ rustflags = [
 	"-C", "symbol-mangling-version=v0",
 	"-C", "panic=abort",
 	"-C", "relocation-model=static",
+	'--cfg', 'log_level="info"' # ALL = debug > info > warn > error
 ]
