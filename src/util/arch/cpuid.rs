@@ -26,14 +26,13 @@ impl CPUID {
 	}
 }
 
-#[cfg(disable)]
 mod cpuid_test {
 	use crate::pr_info;
 
 	use super::*;
 	use kfs_macro::ktest;
 
-	#[ktest]
+	#[ktest(develop)]
 	fn cpuid_test() {
 		assert_eq!(
 			CPUID::run(0, 0),
