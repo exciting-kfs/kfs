@@ -8,6 +8,7 @@ use crate::{acpi::IOAPIC_INFO, pr_info, util::arch::msr::Msr};
 
 pub use io::pbase as io_pbase;
 pub use io::vbase as io_vbase;
+pub use local::id as local_id;
 pub use local::pbase as local_pbase;
 pub use local::vbase as local_vbase;
 pub use local::PBASE as LAPIC_PBASE;

@@ -7,6 +7,7 @@ pub mod idt;
 pub mod idte;
 pub mod privilege_level;
 
+pub use apic::local_id as lapic_id;
 pub use apic::LAPIC_PBASE;
 pub use apic::MSR_APIC_BASE;
 
