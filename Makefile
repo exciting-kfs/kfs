@@ -72,7 +72,7 @@ rescue : $(RESCUE_IMG)
 .PHONY : clean
 clean :
 	@echo '[-] cleanup...'
-	@cargo clean
+	@cargo clean -v
 	@rm -f .sw*
 
 .PHONY : re
@@ -127,6 +127,10 @@ test : RUSTC_FLAG += --cfg ktest
 test : rescue
 	@scripts/qemu.sh $(RESCUE_IMG) stdio -display none
 
+.PHONY : test-dev
+test-dev : RUSTC_FLAG += --cfg 'ktest="dev"'
+test-dev : rescue
+	@scripts/qemu.sh $(RESCUE_IMG) stdio -display none
 # === Main recipes ===
 
 .PHONY : $(LIB_KERNEL)

@@ -26,29 +26,21 @@ pub fn ktest(attr: TokenStream, input: TokenStream) -> TokenStream {
 	let func_full_name = quote!(concat!(module_path!(), "::", #func_name));
 	let static_name = format_ident!("__TEST_CASE_{}", func_name.to_uppercase());
 
-	let expanded = /*if attr == "develop"*/ {
-		quote! {
-			#[cfg(any(ktest = "develop", ktest = "maintain"))]
-			#[cfg(ktest)]
-			#[link_section = ".test_array"]
-			static #static_name: crate::test::TestCase = crate::test::TestCase::new(
-				#func_full_name,
-				#ident,
-			);
-			#func
-		}
+	let mut config = if attr == "dev" {
+		quote!(#[cfg(any(ktest, ktest = "dev"))])
+	} else {
+		quote!(#[cfg(ktest)])
 	};
-	//  else {
-	// 	quote! {
-	// 		#[cfg(ktest = "maintain")]
-	// 		#[link_section = ".test_array"]
-	// 		static #static_name: crate::test::TestCase = crate::test::TestCase::new(
-	// 			#func_full_name,
-	// 			#ident,
-	// 		);
-	// 		#func
-	// 	}
-	// };
 
-	TokenStream::from(expanded)
+	let test = quote! {
+		#[link_section = ".test_array"]
+		static #static_name: crate::test::TestCase = crate::test::TestCase::new(
+			#func_full_name,
+			#ident,
+		);
+		#func
+	};
+
+	config.extend(test);
+	TokenStream::from(config)
 }

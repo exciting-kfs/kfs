@@ -123,8 +123,24 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	// TODO keyboard interrupt handling.
 	// unsafe { core::arch::asm!("sti") };
 
-	match cfg!(ktest) {
+	match cfg!(any(ktest, ktest = "dev")) {
 		true => run_test(),
 		false => run_io(),
 	};
+}
+
+mod example {
+	use kfs_macro::ktest;
+
+	use crate::pr_warn;
+
+	#[ktest(dev)]
+	fn hello_ktest_dev() {
+		pr_warn!("dev!")
+	}
+
+	#[ktest]
+	fn hello_ktest() {
+		pr_warn!("not dev!")
+	}
 }
