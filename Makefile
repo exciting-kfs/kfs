@@ -124,10 +124,12 @@ size : $(KERNEL_BIN)
 
 .PHONY : test
 test : RUSTC_FLAG += --cfg ktest
+test : RUSTC_FLAG += --cfg 'ktest="all"'
 test : rescue
 	@scripts/qemu.sh $(RESCUE_IMG) stdio -display none
 
 .PHONY : test-dev
+test-dev : RUSTC_FLAG += --cfg ktest
 test-dev : RUSTC_FLAG += --cfg 'ktest="dev"'
 test-dev : rescue
 	@scripts/qemu.sh $(RESCUE_IMG) stdio -display none

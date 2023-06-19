@@ -26,10 +26,10 @@ pub fn ktest(attr: TokenStream, input: TokenStream) -> TokenStream {
 	let func_full_name = quote!(concat!(module_path!(), "::", #func_name));
 	let static_name = format_ident!("__TEST_CASE_{}", func_name.to_uppercase());
 
-	let mut config = if attr == "dev" {
-		quote!(#[cfg(any(ktest, ktest = "dev"))])
+	let mut config = if !attr.is_empty() {
+		quote!(#[cfg(any(ktest = "all", ktest = #attr))])
 	} else {
-		quote!(#[cfg(ktest)])
+		quote!(#[cfg(ktest = "all")])
 	};
 
 	let test = quote! {
