@@ -39,7 +39,7 @@ impl<T> Singleton<T> {
 	}
 
 	pub fn lock(&self) -> SingletonGuard<'_, T> {
-		self.inner.lock();
+		self.inner.lock_irq_save();
 		unsafe { SingletonGuard::new(self) }
 	}
 
@@ -62,7 +62,7 @@ impl<'lock, T> SingletonGuard<'lock, T> {
 
 impl<'lock, T> Drop for SingletonGuard<'lock, T> {
 	fn drop(&mut self) {
-		self.singleton.inner.unlock()
+		self.singleton.inner.unlock_irq_restore()
 	}
 }
 

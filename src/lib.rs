@@ -5,6 +5,7 @@
 #![feature(maybe_uninit_uninit_array)]
 #![feature(const_maybe_uninit_uninit_array)]
 #![feature(abi_x86_interrupt)]
+#![feature(const_maybe_uninit_zeroed)]
 
 extern crate alloc;
 
@@ -12,6 +13,7 @@ mod acpi;
 mod backtrace;
 mod boot;
 mod collection;
+mod config;
 mod console;
 mod driver;
 mod input;
@@ -19,6 +21,7 @@ mod interrupt;
 mod io;
 mod mm;
 mod printk;
+mod smp;
 mod subroutine;
 mod sync;
 mod test;

@@ -213,3 +213,7 @@ fn set_timer_frequency() {
 	Register::DivideConfiguration.write(div_conf);
 	Register::InitialCount.write(count);
 }
+
+pub fn id() -> usize {
+	Register::ID.read()
+}
