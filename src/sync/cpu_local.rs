@@ -1,6 +1,14 @@
-use core::{cell::UnsafeCell, mem::MaybeUninit};
+use core::{
+	cell::UnsafeCell,
+	mem::MaybeUninit,
+	ops::{Deref, DerefMut},
+};
 
-use crate::{config::NR_CPUS, smp::smp_id};
+use crate::{
+	config::NR_CPUS,
+	interrupt::{check_interrupt_flag, irq_disable, irq_enable},
+	smp::smp_id,
+};
 
 pub struct CpuLocal<T> {
 	data: UnsafeCell<MaybeUninit<[T; NR_CPUS]>>,
@@ -28,18 +36,35 @@ impl<T> CpuLocal<T> {
 
 pub struct LocalValue<'l, T> {
 	value: &'l mut T,
+	iflag: bool,
 }
 
 impl<'l, T> LocalValue<'l, T> {
 	fn new(value: &'l mut T) -> Self {
-		unsafe { core::arch::asm!("cli") };
-		LocalValue { value }
+		let iflag = check_interrupt_flag();
+		irq_disable();
+		LocalValue { value, iflag }
+	}
+}
+
+impl<'l, T> Deref for LocalValue<'l, T> {
+	type Target = T;
+	fn deref(&self) -> &Self::Target {
+		self.value
+	}
+}
+
+impl<'l, T> DerefMut for LocalValue<'l, T> {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		self.value
 	}
 }
 
 impl<'l, T> Drop for LocalValue<'l, T> {
 	fn drop(&mut self) {
-		unsafe { core::arch::asm!("sti") };
+		if self.iflag {
+			irq_enable();
+		}
 	}
 }
 
