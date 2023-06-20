@@ -1,17 +1,16 @@
-use core::cell::UnsafeCell;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 
-use crate::interrupt::check_interrupt_flag;
 use crate::interrupt::irq_disable;
 use crate::interrupt::irq_enable;
+use crate::interrupt::pop_irq_stack;
+use crate::interrupt::push_irq_stack;
 
 use super::TryLockFail;
 
 #[derive(Debug)]
 pub struct SpinLock {
 	lock_atomic: AtomicBool,
-	iflag: UnsafeCell<bool>,
 }
 
 unsafe impl Sync for SpinLock {}
@@ -20,7 +19,6 @@ impl SpinLock {
 	pub const fn new() -> Self {
 		SpinLock {
 			lock_atomic: AtomicBool::new(false),
-			iflag: UnsafeCell::new(false),
 		}
 	}
 
@@ -31,9 +29,16 @@ impl SpinLock {
 		{
 			unsafe { core::arch::asm!("pause") };
 		}
+	}
 
+	pub fn lock_irq(&self) {
 		irq_disable();
-		unsafe { (*self.iflag.get()) = check_interrupt_flag() }
+		self.lock();
+	}
+
+	pub fn lock_irq_save(&self) {
+		push_irq_stack();
+		self.lock();
 	}
 
 	pub fn try_lock(&self) -> Result<(), TryLockFail> {
@@ -41,19 +46,22 @@ impl SpinLock {
 			.lock_atomic
 			.compare_exchange(false, true, Ordering::Acquire, Ordering::Acquire)
 		{
-			Ok(_) => unsafe {
-				irq_disable();
-				(*self.iflag.get()) = check_interrupt_flag();
-				Ok(())
-			},
+			Ok(_) => Ok(()),
 			Err(_) => Err(TryLockFail),
 		}
 	}
 
 	pub fn unlock(&self) {
-		if unsafe { *self.iflag.get() } {
-			irq_enable();
-		}
 		self.lock_atomic.store(false, Ordering::Release);
+	}
+
+	pub fn unlock_irq(&self) {
+		self.unlock();
+		irq_enable();
+	}
+
+	pub fn unlock_irq_save(&self) {
+		self.unlock();
+		pop_irq_stack();
 	}
 }

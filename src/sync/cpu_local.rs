@@ -6,7 +6,7 @@ use core::{
 
 use crate::{
 	config::NR_CPUS,
-	interrupt::{check_interrupt_flag, irq_disable, irq_enable},
+	interrupt::{pop_irq_stack, push_irq_stack},
 	smp::smp_id,
 };
 
@@ -36,14 +36,12 @@ impl<T> CpuLocal<T> {
 
 pub struct LocalValue<'l, T> {
 	value: &'l mut T,
-	iflag: bool,
 }
 
 impl<'l, T> LocalValue<'l, T> {
 	fn new(value: &'l mut T) -> Self {
-		let iflag = check_interrupt_flag();
-		irq_disable();
-		LocalValue { value, iflag }
+		push_irq_stack();
+		LocalValue { value }
 	}
 }
 
@@ -62,9 +60,7 @@ impl<'l, T> DerefMut for LocalValue<'l, T> {
 
 impl<'l, T> Drop for LocalValue<'l, T> {
 	fn drop(&mut self) {
-		if self.iflag {
-			irq_enable();
-		}
+		pop_irq_stack();
 	}
 }
 

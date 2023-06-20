@@ -13,6 +13,8 @@ pub use apic::MSR_APIC_BASE;
 
 pub use interrupt_frame::InterruptFrame;
 
+use crate::config::NR_CPUS;
+
 pub fn irq_enable() {
 	unsafe { core::arch::asm!("sti") };
 }
@@ -21,7 +23,7 @@ pub fn irq_disable() {
 	unsafe { core::arch::asm!("cli") };
 }
 
-pub fn check_interrupt_flag() -> bool {
+fn get_interrupt_flag() -> bool {
 	let flag_mask = 1 << 9;
 	let mut eflags: usize;
 	unsafe {
@@ -36,6 +38,59 @@ pub fn check_interrupt_flag() -> bool {
 	eflags & flag_mask == flag_mask
 }
 
+#[derive(Clone, Copy)]
+struct IrqStack {
+	sti: bool,
+	cli: usize,
+}
+
+impl IrqStack {
+	const fn new() -> Self {
+		Self { sti: false, cli: 0 }
+	}
+
+	fn push(&mut self, iflag: bool) {
+		if self.sti && iflag {
+			panic!("irq stack push");
+		}
+
+		match iflag {
+			true => self.sti = true,
+			false => self.cli += 1,
+		}
+	}
+
+	fn pop(&mut self) -> bool {
+		if self.cli == 0 && !self.sti {
+			panic!("irq stack pop");
+		}
+
+		match self.cli == 0 {
+			true => self.sti = false,
+			false => self.cli -= 1,
+		}
+
+		self.sti
+	}
+}
+
+static mut IRQ_STACK: [IrqStack; NR_CPUS] = [IrqStack::new(); NR_CPUS];
+
+pub fn push_irq_stack() {
+	let iflag = get_interrupt_flag();
+
+	unsafe { IRQ_STACK[lapic_id()].push(iflag) };
+	irq_disable();
+}
+
+pub fn pop_irq_stack() {
+	if unsafe { IRQ_STACK[lapic_id()].pop() } {
+		irq_enable();
+	} else {
+		irq_disable();
+	}
+}
+
 #[cfg(disable)]
 mod tests {
 	use super::*;
@@ -44,8 +99,8 @@ mod tests {
 	#[ktest(dev)]
 	fn test() {
 		unsafe { core::arch::asm!("sti") };
-		assert!(check_interrupt_flag());
+		assert!(get_interrupt_flag());
 		unsafe { core::arch::asm!("cli") };
-		assert!(!check_interrupt_flag());
+		assert!(!get_interrupt_flag());
 	}
 }
