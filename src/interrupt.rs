@@ -76,14 +76,14 @@ impl IrqStack {
 
 static mut IRQ_STACK: [IrqStack; NR_CPUS] = [IrqStack::new(); NR_CPUS];
 
-pub fn push_irq_stack() {
+pub fn irq_stack_save() {
 	let iflag = get_interrupt_flag();
 
 	unsafe { IRQ_STACK[lapic_id()].push(iflag) };
 	irq_disable();
 }
 
-pub fn pop_irq_stack() {
+pub fn irq_stack_restore() {
 	if unsafe { IRQ_STACK[lapic_id()].pop() } {
 		irq_enable();
 	} else {
