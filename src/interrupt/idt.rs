@@ -2,11 +2,7 @@ use core::mem::size_of;
 
 use crate::{interrupt::exception::CpuException, sync::singleton::Singleton};
 
-use super::{
-	exception::{divide_error, general_protection, page_fault, undefined},
-	hw::{keyboard, timer},
-	idte::IDTE,
-};
+use super::idte::IDTE;
 
 const IDTE_COUNT: usize = 256;
 
@@ -63,13 +59,22 @@ impl IDTR {
 	}
 }
 
+extern "C" {
+	fn handle_timer();
+	fn handle_keyboard();
+	fn handle_divide_error();
+	fn handle_invalid_opcode();
+	fn handle_general_protection();
+	fn handle_page_fault();
+}
+
 pub fn init() {
-	let de = IDTE::interrupt_kernel(divide_error::handler as usize);
-	let ud = IDTE::interrupt_kernel(undefined::handler as usize);
-	let gp = IDTE::interrupt_kernel(general_protection::handler as usize);
-	let pf = IDTE::interrupt_kernel(page_fault::handler as usize);
-	let kb = IDTE::interrupt_kernel(keyboard::handler as usize);
-	let tm = IDTE::interrupt_kernel(timer::handler as usize);
+	let de = IDTE::interrupt_kernel(handle_divide_error as usize);
+	let ud = IDTE::interrupt_kernel(handle_invalid_opcode as usize);
+	let gp = IDTE::interrupt_kernel(handle_general_protection as usize);
+	let pf = IDTE::interrupt_kernel(handle_page_fault as usize);
+	let kb = IDTE::interrupt_kernel(handle_keyboard as usize);
+	let tm = IDTE::interrupt_kernel(handle_timer as usize);
 
 	let mut idt = IDT.lock();
 	idt.write_exception(CpuException::DE, de);

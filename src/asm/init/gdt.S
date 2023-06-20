@@ -1,12 +1,14 @@
-section .text
-global load_flat_gdt:function (load_flat_gdt.end - load_flat_gdt)
+%include "segment.S"
 
+section .text
+
+global load_flat_gdt:function (load_flat_gdt.end - load_flat_gdt)
 load_flat_gdt:
-	lgdt [gdtr_pointer]
+	lgdt [gdtr]
 	; Reload CS via long jump
-	jmp (kernel_code_entry - gdt_start):.reload_data_segment
+	jmp KERNEL_CODE:.reload_data_segment
 .reload_data_segment:
-	mov ax, (kernel_data_entry - gdt_start)
+	mov ax, KERNEL_DATA
 	mov ds, ax
 	mov es, ax
 	mov fs, ax
@@ -15,22 +17,20 @@ load_flat_gdt:
 	ret
 .end:
 
-gdt_start:
-; null descriptor
-	dq 0x0000000000000000
-; KERNEL CODE
-kernel_code_entry:
-	dq 0x00cf9a000000ffff
-; KERNEL DATA
-kernel_data_entry:
-	dq 0x00cf92000000ffff
-; USER CODE
-user_code_entry:
-	dq 0x00cffa000000ffff
-; USER DATA
-user_data_entry:
-	dq 0x00cff2000000ffff
-gdt_end:
-gdtr_pointer:
-	dw gdt_end - gdt_start - 1
-	dd gdt_start
+; Index of each entry is hard coded.
+gdt:
+.start:
+	.null:
+		dq 0x0000000000000000
+	.kernel_code:
+		dq 0x00cf9a000000ffff
+	.kernel_data:
+		dq 0x00cf92000000ffff
+	.user_code:
+		dq 0x00cffa000000ffff
+	.user_data:
+		dq 0x00cff2000000ffff
+.end:
+gdtr:
+	dw gdt.end - gdt.start - 1
+	dd gdt.start
