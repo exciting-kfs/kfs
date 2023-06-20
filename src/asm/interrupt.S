@@ -19,7 +19,12 @@
 
 section .text
 
-INTERRUPT_HANDLER handle_timer, do_handle_timer, FALSE
+INTERRUPT_HANDLER handle_timer, handle_timer_impl, FALSE
+INTERRUPT_HANDLER handle_keyboard, handle_keyboard_impl, FALSE
+INTERRUPT_HANDLER handle_divide_error, handle_divide_error_impl, FALSE
+INTERRUPT_HANDLER handle_invalid_opcode, handle_invalid_opcode_impl, FALSE
+INTERRUPT_HANDLER handle_general_protection, handle_general_protection_impl, TRUE
+INTERRUPT_HANDLER handle_page_fault, handle_page_fault_impl, TRUE
 
 global handle_interrupt
 handle_interrupt:
@@ -42,10 +47,8 @@ handle_interrupt:
     mov es, ax
     mov fs, ax
     mov gs, ax
-    
-    push esp
-    call [esp + 48] ; call real handler function
-    add esp, 4
+
+    call [esp + 44] ; call real handler function
 
     pop ebp
     pop edi
