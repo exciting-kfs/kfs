@@ -29,8 +29,7 @@ fn get_interrupt_flag() -> bool {
 	unsafe {
 		core::arch::asm!(
 			"pushfd",
-			"mov eax, [esp]",
-			"popfd",
+			"pop eax",
 			out("eax") eflags
 		)
 	};
