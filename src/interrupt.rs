@@ -24,7 +24,28 @@ pub fn irq_disable() {
 pub fn check_interrupt_flag() -> bool {
 	let flag_mask = 1 << 9;
 	let mut eflags: usize;
-	unsafe { core::arch::asm!("pushfd", "popfd {}", out(reg) eflags) }
+	unsafe {
+		core::arch::asm!(
+			"pushfd",
+			"mov eax, [esp]",
+			"popfd",
+			out("eax") eflags
+		)
+	};
 
 	eflags & flag_mask == flag_mask
+}
+
+#[cfg(disable)]
+mod tests {
+	use super::*;
+	use kfs_macro::ktest;
+
+	#[ktest(dev)]
+	fn test() {
+		unsafe { core::arch::asm!("sti") };
+		assert!(check_interrupt_flag());
+		unsafe { core::arch::asm!("cli") };
+		assert!(!check_interrupt_flag());
+	}
 }
