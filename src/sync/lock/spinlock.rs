@@ -60,7 +60,7 @@ impl SpinLock {
 		irq_enable();
 	}
 
-	pub fn unlock_irq_save(&self) {
+	pub fn unlock_irq_restore(&self) {
 		self.unlock();
 		irq_stack_restore();
 	}

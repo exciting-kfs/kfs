@@ -27,7 +27,7 @@ impl<T> Locked<T> {
 	}
 
 	pub fn lock(&self) -> LockedGuard<'_, T> {
-		self.inner.lock();
+		self.inner.lock_irq_save();
 		unsafe { LockedGuard::new(self) }
 	}
 
@@ -50,7 +50,7 @@ impl<'lock, T> LockedGuard<'lock, T> {
 
 impl<'lock, T> Drop for LockedGuard<'lock, T> {
 	fn drop(&mut self) {
-		self.locked.inner.unlock()
+		self.locked.inner.unlock_irq_restore()
 	}
 }
 
