@@ -2,7 +2,6 @@ use super::{util::invalidate_all_tlb, PageFlag, PT, PTE};
 use crate::mm::alloc::page::{alloc_pages, free_pages};
 use crate::mm::alloc::Zone;
 use crate::mm::{constant::*, util::*};
-use crate::pr_info;
 use crate::sync::singleton::Singleton;
 use core::alloc::AllocError;
 use core::ops::{Index, IndexMut};
@@ -176,8 +175,6 @@ impl PDE {
 
 		let pt: *mut PT = alloc_one_page()?.cast();
 		let src = self.as_pt().unwrap();
-		pr_info!("--src: {:p}", src as *const PT);
-		pr_info!("--dst: {:p}", pt);
 		unsafe { pt.copy_from_nonoverlapping(src, 1) }
 
 		Ok(Self::new(virt_to_phys(pt as usize), self.flag()))

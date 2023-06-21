@@ -17,10 +17,23 @@ pub struct CpuLocal<T> {
 unsafe impl<T> Sync for CpuLocal<T> {}
 
 impl<T> CpuLocal<T> {
-	pub const fn zeroed() -> Self {
+	pub const fn uninit() -> Self {
 		Self {
-			data: UnsafeCell::new(MaybeUninit::zeroed()),
+			data: UnsafeCell::new(MaybeUninit::uninit()),
 		}
+	}
+
+	pub fn init(&self, value: T) {
+		unsafe {
+			self.data
+				.get()
+				.as_mut()
+				.unwrap()
+				.as_mut_ptr()
+				.cast::<T>()
+				.add(smp_id())
+				.write(value)
+		};
 	}
 
 	pub fn get_mut(&self) -> LocalValue<'_, T> {

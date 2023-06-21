@@ -32,7 +32,7 @@ use core::panic::PanicInfo;
 use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
 use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use input::{key_event::Code, keyboard::KEYBOARD};
-use process::start;
+use process::scheduler;
 use test::{exit_qemu_with, TEST_ARRAY};
 
 /// very simple panic handler.
@@ -126,9 +126,10 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 
 	// TODO keyboard interrupt handling.
 	// unsafe { core::arch::asm!("sti") };
-	unsafe { start() };
+
 	match cfg!(ktest) {
 		true => run_test(),
-		false => run_io(),
+		false => unsafe { scheduler() },
 	};
+	// run_io();
 }

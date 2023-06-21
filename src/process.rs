@@ -1,11 +1,17 @@
 use alloc::boxed::Box;
 use alloc::collections::LinkedList;
+use core::alloc::AllocError;
 use core::arch::asm;
 use core::mem::size_of;
 
+use crate::interrupt::{irq_enable, irq_stack_restore, InterruptFrame};
+use crate::mm::alloc::page::alloc_pages;
+use crate::mm::alloc::Zone;
+use crate::mm::constant::PAGE_SIZE;
 use crate::mm::page::arch::{CURRENT_PD, PD};
+use crate::sync::cpu_local::CpuLocal;
 use crate::sync::singleton::Singleton;
-use crate::{interrupt::apic::end_of_interrupt, mm::constant::MB, pr_info, sync::locked::Locked};
+use crate::{interrupt::apic::end_of_interrupt, pr_info};
 
 pub enum State {
 	Ready,
@@ -14,104 +20,80 @@ pub enum State {
 	Exited,
 }
 
-#[repr(C)]
-pub struct Context {
-	pub eip: u32,
-	pub esp: u32,
-}
-
 pub struct Task<'a> {
-	pub context: Context,
 	pub state: State,
-	pub kstack: Box<Stack>,
+	pub kstack: Stack<'a>,
 	pub pid: usize,
 	pub page_dir: PD<'a>,
 }
 
+type StackStorage = [u8; 2 * PAGE_SIZE];
+
 #[repr(C)]
-pub struct Stack {
-	_padd: [u8; 8192 - size_of::<InterruptFrame>()],
-	pub frame: InterruptFrame,
+pub struct Stack<'a> {
+	storage: &'a mut StackStorage,
+	esp: usize,
 }
 
-impl Stack {
-	pub fn new() -> Self {
-		Self {
-			_padd: [0; 8192 - size_of::<InterruptFrame>()],
-			frame: InterruptFrame::default(),
-		}
+impl<'a> Stack<'a> {
+	pub fn new() -> Result<Self, AllocError> {
+		let storage: &'a mut StackStorage = unsafe {
+			alloc_pages(1, Zone::Normal)?
+				.cast::<StackStorage>()
+				.as_ptr()
+				.as_mut()
+				.unwrap()
+		};
+
+		let esp = storage as *const _ as usize + size_of::<StackStorage>();
+
+		Ok(Self { storage, esp })
+	}
+
+	pub fn esp_mut(&mut self) -> &mut usize {
+		&mut self.esp
+	}
+
+	pub fn push(&mut self, value: usize) {
+		self.esp -= 4;
+		unsafe { (self.esp as *mut usize).write(value) };
 	}
 }
 
 impl<'a> Task<'a> {
-	#[inline(never)]
-	pub fn new() -> Task<'a> {
-		let kstack = Box::<Stack>::new(Stack::new());
+	pub fn new() -> Result<Self, AllocError> {
+		let pd = CURRENT_PD.lock().clone()?;
+		let kstack = Stack::new()?;
 
-		let context = Context {
-			eip: return_from_interrupt as usize as u32,
-			esp: &kstack.frame as *const _ as usize as u32,
-		};
-
-		let pd = CURRENT_PD.lock().clone().unwrap();
-
-		let mut task = Task {
+		Ok(Task {
 			state: State::Ready,
-			context,
 			kstack,
 			pid: 0,
 			page_dir: pd,
-		};
+		})
+	}
 
-		task
+	pub fn esp_mut(&mut self) -> &mut usize {
+		self.kstack.esp_mut()
 	}
 }
 
-static CURRENT: Singleton<Box<Task>> = Singleton::uninit();
+static CURRENT: CpuLocal<Box<Task>> = CpuLocal::uninit();
 static TASK_QUEUE: Singleton<LinkedList<Box<Task>>> = Singleton::uninit();
-
-#[derive(Debug, Default)]
-#[repr(C)]
-pub struct InterruptFrame {
-	pub ebp: u32,
-	pub edi: u32,
-	pub esi: u32,
-	pub edx: u32,
-	pub ecx: u32,
-	pub ebx: u32,
-	pub eax: u32,
-	pub ds: u32,
-	pub es: u32,
-	pub fs: u32,
-	pub gs: u32,
-
-	// additional informations
-	pub handler: u32,
-	pub error_code: u32,
-
-	// automatically set by cpu
-	pub eip: u32,
-	pub cs: u32,
-	pub eflags: u32,
-
-	// may not exist
-	pub esp: u32,
-	pub ss: u32,
-}
 
 pub extern "C" fn repeat_x(x: usize) -> ! {
 	loop {
-		pr_info!("Message from {}", x);
+		pr_info!("FROM X={}", x);
 		unsafe { asm!("hlt") }
 	}
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn do_handle_timer(frame: &InterruptFrame) {
+pub unsafe extern "C" fn handle_timer_impl(_frame: &InterruptFrame) {
 	end_of_interrupt();
 
 	let mut task_q = TASK_QUEUE.lock();
-	let mut current = CURRENT.lock();
+	let mut current = CURRENT.get_mut();
 
 	let prev = &mut *current;
 	let next = task_q.pop_front().unwrap();
@@ -122,52 +104,48 @@ pub unsafe extern "C" fn do_handle_timer(frame: &InterruptFrame) {
 
 	core::mem::swap(prev, next);
 
-	switch_process(&mut next.context, &mut prev.context);
+	switch_stack(next.esp_mut(), prev.esp_mut());
 }
 
-pub extern "C" fn kthread_create<'a>(main: usize, arg: usize) -> Box<Task<'a>> {
-	let mut task = Box::new(Task::new());
+pub unsafe extern "C" fn kthread_exec_cleanup(callback: extern "C" fn(usize) -> !, arg: usize) {
+	unsafe { TASK_QUEUE.manual_unlock() };
+	irq_stack_restore();
+	irq_enable();
 
-	task.context.eip = main as usize as u32;
+	callback(arg);
+}
 
-	let mut bottom = (&task.kstack._padd[0] as *const _ as usize as u32) + 8192;
+pub fn kthread_create<'a>(main: usize, arg: usize) -> Result<Box<Task<'a>>, AllocError> {
+	let mut task = Box::new(Task::new()?);
 
-	unsafe {
-		bottom -= 4;
-		*(bottom as *mut usize) = arg;
-		bottom -= 4;
-		*(bottom as *mut usize) = 0;
-	}
+	task.kstack.push(arg);
+	task.kstack.push(main);
+	task.kstack.push(41);
+	task.kstack.push(kthread_exec_cleanup as usize);
+	task.kstack.push(42);
+	task.kstack.push(43);
+	task.kstack.push(44);
+	task.kstack.push(45);
 
-	task.context.esp = bottom;
-
-	task
+	Ok(task)
 }
 
 extern "C" {
 	pub fn handle_timer();
-	pub fn switch_process(prev: &mut Context, next: &mut Context);
-	pub fn return_from_interrupt();
+	pub fn switch_stack(prev_stack: &mut usize, next_stack: &mut usize);
+	pub fn kthread_exec(esp: usize) -> !;
 }
 
-pub fn user_main(argc: i32, argv: &[&[u8]]) -> i32 {
-	return 1;
-}
-
-pub unsafe extern "C" fn start() -> ! {
-	let a = kthread_create(repeat_x as usize, 0);
-	let b = kthread_create(repeat_x as usize, 1);
+pub unsafe extern "C" fn scheduler() -> ! {
+	let a = kthread_create(repeat_x as usize, 1111).expect("OOM");
+	let b = kthread_create(repeat_x as usize, 2222).expect("OOM");
+	let c = kthread_create(repeat_x as usize, 3333).expect("OOM");
 
 	TASK_QUEUE.write(LinkedList::new());
-	TASK_QUEUE.lock().push_back(a);
+	TASK_QUEUE.lock().push_back(b);
+	TASK_QUEUE.lock().push_back(c);
 
-	CURRENT.write(b);
+	CURRENT.init(a);
 
-	let mut dummy = Context { eip: 0, esp: 0 };
-
-	switch_process(&mut dummy, &mut CURRENT.lock().context);
-
-	loop {
-		asm!("hlt")
-	}
+	kthread_exec(*CURRENT.get_mut().esp_mut());
 }

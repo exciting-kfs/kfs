@@ -20,12 +20,12 @@
 
 section .text
 
-INTERRUPT_HANDLER handle_timer, handle_timer_impl, FALSE
-INTERRUPT_HANDLER handle_keyboard, handle_keyboard_impl, FALSE
-INTERRUPT_HANDLER handle_divide_error, handle_divide_error_impl, FALSE
-INTERRUPT_HANDLER handle_invalid_opcode, handle_invalid_opcode_impl, FALSE
-INTERRUPT_HANDLER handle_general_protection, handle_general_protection_impl, TRUE
-INTERRUPT_HANDLER handle_page_fault, handle_page_fault_impl, TRUE
+INTERRUPT_HANDLER handle_timer,                 handle_timer_impl,              FALSE
+INTERRUPT_HANDLER handle_keyboard,              handle_keyboard_impl,           FALSE
+INTERRUPT_HANDLER handle_divide_error,          handle_divide_error_impl,       FALSE
+INTERRUPT_HANDLER handle_invalid_opcode,        handle_invalid_opcode_impl,     FALSE
+INTERRUPT_HANDLER handle_general_protection,    handle_general_protection_impl, TRUE
+INTERRUPT_HANDLER handle_page_fault,            handle_page_fault_impl,         TRUE
 
 global handle_interrupt
 handle_interrupt:
@@ -67,29 +67,29 @@ handle_interrupt:
 
     iret
 
-struc kctx
-    .eip: resd 1
-    .esp: resd 1
-endstruc
-
-global switch_process
-switch_process:
-    ; ax cx dx are caller-saved registers
-    push edi
+global switch_stack
+switch_stack:
+    ; save callee-saved registers
+    push ebp
     push esi
+    push edi
+    push ebx
 
-    mov esi, [esp + 12]
-    mov edi, [esp + 16]
+    mov esi, [esp + 24]
+    mov edi, [esp + 20]
 
-    mov DWORD [esi + kctx.esp], esp
-    mov esp, [edi + kctx.esp]
+    mov [edi], esp
+    mov esp, [esi]
 
-    mov DWORD [esi + kctx.eip], switch_end
-    push DWORD [edi + kctx.eip]
+    pop ebx
+    pop edi
+    pop esi
+    pop ebp
 
     ret
-switch_end:
-    pop esi
-    pop edi
 
+global kthread_exec
+kthread_exec:
+    mov esp, [esp + 4]
+    add esp, 16
     ret
