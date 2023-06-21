@@ -4,7 +4,7 @@ use core::{
 	ops::{Deref, DerefMut},
 };
 
-use super::lock::{spinlock::SpinLock, TryLockFail};
+use super::lock::{spinlock::SpinLock, LockType, TryLockFail};
 
 #[derive(Debug)]
 pub struct Singleton<T> {
@@ -39,30 +39,48 @@ impl<T> Singleton<T> {
 	}
 
 	pub fn lock(&self) -> SingletonGuard<'_, T> {
+		self.inner.lock();
+		unsafe { SingletonGuard::new(self, LockType::Default) }
+	}
+
+	pub fn lock_irq(&self) -> SingletonGuard<'_, T> {
+		self.inner.lock_irq();
+		unsafe { SingletonGuard::new(self, LockType::Irq) }
+	}
+
+	pub fn lock_irq_save(&self) -> SingletonGuard<'_, T> {
 		self.inner.lock_irq_save();
-		unsafe { SingletonGuard::new(self) }
+		unsafe { SingletonGuard::new(self, LockType::IrqSave) }
 	}
 
 	pub fn try_lock(&self) -> Result<SingletonGuard<'_, T>, TryLockFail> {
 		self.inner
 			.try_lock()
-			.map(|_| unsafe { SingletonGuard::new(self) })
+			.map(|_| unsafe { SingletonGuard::new(self, LockType::Default) })
 	}
 }
 
 pub struct SingletonGuard<'lock, T> {
 	singleton: &'lock Singleton<T>,
+	lock_type: LockType,
 }
 
 impl<'lock, T> SingletonGuard<'lock, T> {
-	pub unsafe fn new(singleton: &'lock Singleton<T>) -> Self {
-		Self { singleton }
+	pub unsafe fn new(singleton: &'lock Singleton<T>, lock_type: LockType) -> Self {
+		Self {
+			singleton,
+			lock_type,
+		}
 	}
 }
 
 impl<'lock, T> Drop for SingletonGuard<'lock, T> {
 	fn drop(&mut self) {
-		self.singleton.inner.unlock_irq_restore()
+		match self.lock_type {
+			LockType::Default => self.singleton.inner.unlock(),
+			LockType::Irq => self.singleton.inner.unlock_irq(),
+			LockType::IrqSave => self.singleton.inner.unlock_irq_restore(),
+		}
 	}
 }
 
