@@ -27,12 +27,16 @@ mod sync;
 mod test;
 mod util;
 
-use core::panic::PanicInfo;
+use core::{arch::asm, panic::PanicInfo};
 
+use alloc::collections::LinkedList;
 use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
 use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use input::{key_event::Code, keyboard::KEYBOARD};
-use process::scheduler;
+use process::{
+	kthread::{kthread_create, kthread_exec},
+	task::{CURRENT, TASK_QUEUE},
+};
 use test::{exit_qemu_with, TEST_ARRAY};
 
 /// very simple panic handler.
@@ -99,6 +103,27 @@ fn run_io() -> ! {
 	}
 }
 
+fn run_process() -> ! {
+	let a = kthread_create(repeat_x as usize, 1111).expect("OOM");
+	let b = kthread_create(repeat_x as usize, 2222).expect("OOM");
+	let c = kthread_create(repeat_x as usize, 3333).expect("OOM");
+
+	unsafe { TASK_QUEUE.write(LinkedList::new()) };
+	TASK_QUEUE.lock().push_back(b);
+	TASK_QUEUE.lock().push_back(c);
+
+	CURRENT.init(a);
+
+	unsafe { kthread_exec(*CURRENT.get_mut().esp_mut()) };
+}
+
+extern "C" fn repeat_x(x: usize) -> ! {
+	loop {
+		pr_info!("FROM X={}", x);
+		unsafe { asm!("hlt") }
+	}
+}
+
 #[no_mangle]
 pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	driver::vga::text_vga::init();
@@ -129,7 +154,7 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 
 	match cfg!(ktest) {
 		true => run_test(),
-		false => unsafe { scheduler() },
+		false => run_process(),
 	};
 	// run_io();
 }
