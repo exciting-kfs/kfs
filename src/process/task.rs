@@ -25,6 +25,24 @@ pub struct Task<'a> {
 	pub page_dir: PD<'a>,
 }
 
+impl<'a> Task<'a> {
+	pub fn alloc() -> Result<Self, AllocError> {
+		let pd = CURRENT_PD.lock().clone()?;
+		let kstack = Stack::alloc()?;
+
+		Ok(Task {
+			state: State::Ready,
+			kstack,
+			pid: 0,
+			page_dir: pd,
+		})
+	}
+
+	pub fn esp_mut(&mut self) -> &mut usize {
+		self.kstack.esp_mut()
+	}
+}
+
 type StackStorage = [u8; 2 * PAGE_SIZE];
 
 #[repr(C)]
@@ -34,13 +52,11 @@ pub struct Stack<'a> {
 }
 
 impl<'a> Stack<'a> {
-	pub fn new() -> Result<Self, AllocError> {
+	pub fn alloc() -> Result<Self, AllocError> {
 		let storage: &'a mut StackStorage = unsafe {
 			alloc_pages(1, Zone::Normal)?
 				.cast::<StackStorage>()
-				.as_ptr()
 				.as_mut()
-				.unwrap()
 		};
 
 		let esp = storage as *const _ as usize + size_of::<StackStorage>();
@@ -55,23 +71,5 @@ impl<'a> Stack<'a> {
 	pub fn push(&mut self, value: usize) {
 		self.esp -= 4;
 		unsafe { (self.esp as *mut usize).write(value) };
-	}
-}
-
-impl<'a> Task<'a> {
-	pub fn new() -> Result<Self, AllocError> {
-		let pd = CURRENT_PD.lock().clone()?;
-		let kstack = Stack::new()?;
-
-		Ok(Task {
-			state: State::Ready,
-			kstack,
-			pid: 0,
-			page_dir: pd,
-		})
-	}
-
-	pub fn esp_mut(&mut self) -> &mut usize {
-		self.kstack.esp_mut()
 	}
 }

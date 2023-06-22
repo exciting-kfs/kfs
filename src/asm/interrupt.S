@@ -75,8 +75,8 @@ switch_stack:
     push edi
     push ebx
 
-    mov esi, [esp + 24]
-    mov edi, [esp + 20]
+    mov esi, [esp + 24] ; next_stack
+    mov edi, [esp + 20] ; prev_stack
 
     mov [edi], esp
     mov esp, [esi]

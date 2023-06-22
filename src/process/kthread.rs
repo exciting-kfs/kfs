@@ -33,7 +33,7 @@ unsafe extern "C" fn kthread_exec_cleanup(callback: extern "C" fn(usize) -> !, a
 /// | 24 | ARG1 for EIP1               |
 /// | 28 | ARG2 for EIP1               |
 pub fn kthread_create<'a>(main: usize, arg: usize) -> Result<Box<Task<'a>>, AllocError> {
-	let mut task = Box::new(Task::new()?);
+	let mut task = Box::new(Task::alloc()?);
 
 	task.kstack.push(arg);
 	task.kstack.push(main);

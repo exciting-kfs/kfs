@@ -13,14 +13,12 @@ pub unsafe extern "C" fn handle_timer_impl(_frame: &InterruptFrame) {
 	let mut task_q = TASK_QUEUE.lock();
 	let mut current = CURRENT.get_mut();
 
-	let prev = &mut *current;
 	let next = task_q.pop_front().unwrap();
+	let prev = CURRENT.replace(next);
+	task_q.push_back(prev);
 
-	task_q.push_back(next);
+	let prev = task_q.back_mut().unwrap();
+	let next = &mut *current;
 
-	let next = task_q.back_mut().unwrap();
-
-	core::mem::swap(prev, next);
-
-	switch_stack(next.esp_mut(), prev.esp_mut());
+	switch_stack(prev.esp_mut(), next.esp_mut());
 }

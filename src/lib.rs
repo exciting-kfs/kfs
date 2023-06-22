@@ -4,7 +4,6 @@
 #![feature(allocator_api)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(const_maybe_uninit_uninit_array)]
-#![feature(const_maybe_uninit_zeroed)]
 
 extern crate alloc;
 
