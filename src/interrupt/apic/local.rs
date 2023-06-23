@@ -199,7 +199,7 @@ pub fn init() {
 }
 
 fn set_timer_frequency() {
-	const TIMER_FREQUENCY_HZ: usize = 1; // TODO config?
+	const TIMER_FREQUENCY_HZ: usize = 10; // TODO config?
 	let cpuid = CPUID::run(0x16, 0);
 
 	let bus_freq = cpuid.ecx * MB;

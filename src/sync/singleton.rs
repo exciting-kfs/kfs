@@ -59,12 +59,12 @@ impl<T> Singleton<T> {
 			.map(|_| unsafe { SingletonGuard::new(self, LockType::Default) })
 	}
 
-	pub unsafe fn manual_lock(&self) -> &mut T {
+	pub unsafe fn lock_manual(&self) -> &mut T {
 		self.inner.lock();
 		self.value.get().as_mut().unwrap().assume_init_mut()
 	}
 
-	pub unsafe fn manual_unlock(&self) {
+	pub unsafe fn unlock_manual(&self) {
 		self.inner.unlock();
 	}
 }

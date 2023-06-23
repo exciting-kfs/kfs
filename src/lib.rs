@@ -111,9 +111,10 @@ fn run_process() -> ! {
 	TASK_QUEUE.lock().push_back(b);
 	TASK_QUEUE.lock().push_back(c);
 
+	TASK_QUEUE.lock().push_back(a.clone());
 	CURRENT.init(a);
 
-	unsafe { kthread_exec(*CURRENT.get_mut().esp_mut()) };
+	unsafe { kthread_exec(*CURRENT.get_mut().get_manual().esp_mut()) };
 }
 
 extern "C" fn repeat_x(x: usize) -> ! {

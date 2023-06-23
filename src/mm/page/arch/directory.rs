@@ -13,30 +13,31 @@ extern "C" {
 
 pub static CURRENT_PD: Singleton<PD> = Singleton::uninit();
 
-fn alloc_one_page() -> Result<*mut u8, AllocError> {
-	unsafe { Ok(alloc_pages(0, Zone::Normal)?.as_mut().as_mut_ptr()) }
+pub struct PD {
+	inner: NonNull<[PDE; 1024]>,
 }
 
-fn free_one_page(page: *mut u8) {
-	free_pages(NonNull::new(page).unwrap());
-}
-
-pub struct PD<'a> {
-	inner: &'a mut [PDE; 1024],
-}
-
-impl<'a> PD<'a> {
-	pub fn new(inner: &mut [PDE; 1024]) -> PD<'_> {
+impl PD {
+	pub fn new(inner: NonNull<[PDE; 1024]>) -> PD {
 		PD { inner }
+	}
+
+	/// Safety: self.inner is allocated from `Self::new()` or from outside
+	fn inner_mut(&mut self) -> &mut [PDE; 1024] {
+		unsafe { self.inner.as_mut() }
+	}
+
+	fn inner(&self) -> &[PDE; 1024] {
+		unsafe { self.inner.as_ref() }
 	}
 
 	pub fn clone(&self) -> Result<Self, AllocError> {
 		unsafe {
-			let pd: *mut [PDE; 1024] = alloc_one_page()?.cast();
+			let mut pd: NonNull<[PDE; 1024]> = alloc_pages(0, Zone::Normal)?.cast();
 
 			for i in 0..1024 {
-				let dst = addr_of_mut!((*pd)[i]);
-				let src = &self.inner[i];
+				let dst = addr_of_mut!(pd.as_mut()[i]);
+				let src = &self.inner()[i];
 
 				match src.clone() {
 					Ok(copied) => dst.write(copied),
@@ -47,24 +48,24 @@ impl<'a> PD<'a> {
 				}
 			}
 
-			Ok(Self { inner: &mut *pd })
+			Ok(Self { inner: pd })
 		}
 	}
 
-	fn clone_fail_cleanup(pd: *mut [PDE; 1024], failed_index: usize) {
+	fn clone_fail_cleanup(mut pd: NonNull<[PDE; 1024]>, failed_index: usize) {
 		unsafe {
 			for i in 0..failed_index {
-				let pde = addr_of_mut!((*pd)[i]);
+				let pde = addr_of_mut!(pd.as_mut()[i]);
 				(*pde).destory();
 			}
 		}
-		free_one_page(pd.cast())
+		free_pages(pd.cast())
 	}
 
 	pub fn map_4m(&mut self, vaddr: usize, paddr: usize, flags: PageFlag) {
 		let (pd_idx, _) = Self::addr_to_index(vaddr);
 
-		self.inner[pd_idx] = PDE::new_4m(paddr, flags);
+		self.inner_mut()[pd_idx] = PDE::new_4m(paddr, flags);
 	}
 
 	pub fn map_page(
@@ -75,7 +76,7 @@ impl<'a> PD<'a> {
 	) -> Result<(), AllocError> {
 		let (pd_idx, pt_idx) = Self::addr_to_index(vaddr);
 
-		let pde = &mut self.inner[pd_idx];
+		let pde = &mut self.inner_mut()[pd_idx];
 
 		let pt = if pde.is_4m() {
 			let pt = PT::new_from_4m(*pde)?;
@@ -101,7 +102,7 @@ impl<'a> PD<'a> {
 	pub fn unmap_page(&mut self, vaddr: usize) -> Result<(), ()> {
 		let (pd_idx, pt_idx) = Self::addr_to_index(vaddr);
 
-		let pde = &mut self.inner[pd_idx];
+		let pde = &mut self.inner_mut()[pd_idx];
 
 		if !pde.is_4m() {
 			let pt = unsafe { (phys_to_virt(pde.addr()) as *mut PT).as_mut().unwrap() };
@@ -120,7 +121,7 @@ impl<'a> PD<'a> {
 	pub fn lookup(&self, vaddr: usize) -> Option<usize> {
 		let (pd_idx, pt_idx) = Self::addr_to_index(vaddr);
 
-		let pde = &self.inner[pd_idx];
+		let pde = &self.inner()[pd_idx];
 
 		if pde.is_4m() {
 			return pde
@@ -143,17 +144,17 @@ impl<'a> PD<'a> {
 	}
 }
 
-impl<'a> Index<usize> for PD<'a> {
+impl Index<usize> for PD {
 	type Output = PDE;
 
 	fn index(&self, index: usize) -> &Self::Output {
-		&self.inner[index]
+		&self.inner()[index]
 	}
 }
 
-impl<'a> IndexMut<usize> for PD<'a> {
+impl IndexMut<usize> for PD {
 	fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-		&mut self.inner[index]
+		&mut self.inner_mut()[index]
 	}
 }
 
@@ -173,11 +174,11 @@ impl PDE {
 			return Ok(Self { data: self.data });
 		}
 
-		let pt: *mut PT = alloc_one_page()?.cast();
+		let pt: NonNull<PT> = alloc_pages(0, Zone::Normal)?.cast();
 		let src = self.as_pt().unwrap();
-		unsafe { pt.copy_from_nonoverlapping(src, 1) }
+		unsafe { pt.as_ptr().copy_from_nonoverlapping(src, 1) }
 
-		Ok(Self::new(virt_to_phys(pt as usize), self.flag()))
+		Ok(Self::new(virt_to_phys(pt.as_ptr() as usize), self.flag()))
 	}
 
 	pub fn new_4m(paddr: usize, flags: PageFlag) -> Self {
@@ -214,7 +215,7 @@ impl PDE {
 
 	pub fn destory(self) {
 		if !self.is_4m() {
-			free_one_page(phys_to_virt(self.addr()) as *mut u8);
+			free_pages(unsafe { NonNull::new_unchecked(phys_to_virt(self.addr()) as *mut u8) });
 		}
 	}
 }

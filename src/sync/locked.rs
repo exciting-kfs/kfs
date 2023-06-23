@@ -37,12 +37,17 @@ impl<T> Locked<T> {
 			.map(|_| unsafe { LockedGuard::new(self, LockType::Default) })
 	}
 
-	pub unsafe fn manual_lock(&self) {
+	pub unsafe fn lock_manual(&self) -> &mut T {
 		self.inner.lock();
+		&mut *self.value.get()
 	}
 
-	pub unsafe fn manual_unlock(&self) {
+	pub unsafe fn unlock_manual(&self) {
 		self.inner.unlock();
+	}
+
+	pub unsafe fn get_manual(&self) -> &mut T {
+		&mut *self.value.get()
 	}
 
 	pub fn lock_irq(&self) -> LockedGuard<'_, T> {

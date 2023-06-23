@@ -50,7 +50,6 @@ handle_interrupt:
     mov gs, ax
 
     call [esp + 44] ; call real handler function
-
     pop ebp
     pop edi
     pop esi
@@ -78,8 +77,11 @@ switch_stack:
     mov esi, [esp + 24] ; next_stack
     mov edi, [esp + 20] ; prev_stack
 
-    mov [edi], esp
-    mov esp, [esi]
+    ; do stack switching with atomic operations.
+    lfence
+    xchg [edi], esp
+    xchg esp, [esi]
+    sfence
 
     pop ebx
     pop edi

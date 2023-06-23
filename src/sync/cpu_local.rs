@@ -27,10 +27,16 @@ impl<T> CpuLocal<T> {
 		unsafe { self.data.get().cast::<T>().add(smp_id()).write(value) };
 	}
 
-	pub fn get_mut(&self) -> LocalValue<'_, T> {
+	/// safety: `LocalValue::new()` disables IRQ
+	pub fn get_mut_irq_save(&self) -> LocalValue<'_, T> {
+		LocalValue::new(unsafe { self.get_mut() })
+	}
+
+	/// precondition: IRQ must be disabled.
+	pub unsafe fn get_mut(&self) -> &mut T {
 		let arr = self.arr_mut();
 
-		LocalValue::new(&mut arr[smp_id()])
+		&mut arr[smp_id()]
 	}
 
 	pub fn replace(&self, src: T) -> T {
