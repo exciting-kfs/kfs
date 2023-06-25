@@ -58,6 +58,15 @@ impl<T> Singleton<T> {
 			.try_lock()
 			.map(|_| unsafe { SingletonGuard::new(self, LockType::Default) })
 	}
+
+	pub unsafe fn lock_manual(&self) -> &mut T {
+		self.inner.lock();
+		self.value.get().as_mut().unwrap().assume_init_mut()
+	}
+
+	pub unsafe fn unlock_manual(&self) {
+		self.inner.unlock();
+	}
 }
 
 pub struct SingletonGuard<'lock, T> {

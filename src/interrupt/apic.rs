@@ -92,3 +92,7 @@ fn remap_irq() {
 	pic_master_data.write_byte(0x1);
 	pic_slave_data.write_byte(0x1);
 }
+
+pub fn end_of_interrupt() {
+	local::Register::EndOfInterrupt.write(0);
+}

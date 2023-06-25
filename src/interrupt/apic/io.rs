@@ -104,9 +104,11 @@ pub fn init() {
 	}
 
 	// setting keyboard interrupt vector.
-	let mut v = read(0, RegKind::RedirectionTable(1));
-	v[0] = 0x21;
-	write(0, RegKind::RedirectionTable(1), v)
+
+	// FIXME: uncomment here
+	// let mut v = read(0, RegKind::RedirectionTable(1));
+	// v[0] = 0x21;
+	// write(0, RegKind::RedirectionTable(1), v)
 }
 
 pub fn read(ioapic_id: usize, kind: RegKind) -> Vec<usize> {

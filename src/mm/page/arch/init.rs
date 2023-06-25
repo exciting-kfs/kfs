@@ -9,6 +9,7 @@ use crate::mm::{constant::*, util::*};
 use crate::sync::singleton::Singleton;
 
 use core::ops::Range;
+use core::ptr::NonNull;
 
 #[derive(Debug, Clone)]
 pub struct VMemory {
@@ -59,7 +60,7 @@ pub unsafe fn init() {
 		io_apic_pfn: Vec::new(),
 	});
 
-	CURRENT_PD.write(PD::new(&mut GLOBAL_PD_VIRT));
+	CURRENT_PD.write(PD::new(NonNull::from(&mut GLOBAL_PD_VIRT)));
 }
 
 unsafe fn mapping_zone_normal(max_paddr: usize) -> usize {

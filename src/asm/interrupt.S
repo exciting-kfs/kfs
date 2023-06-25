@@ -1,3 +1,4 @@
+%include "segment.S"
 %include "common.S"
 
 ; INTERRUPT_HANDLER(name: ident, callback: ident, has_error_code: bool)
@@ -19,12 +20,12 @@
 
 section .text
 
-INTERRUPT_HANDLER handle_timer, handle_timer_impl, FALSE
-INTERRUPT_HANDLER handle_keyboard, handle_keyboard_impl, FALSE
-INTERRUPT_HANDLER handle_divide_error, handle_divide_error_impl, FALSE
-INTERRUPT_HANDLER handle_invalid_opcode, handle_invalid_opcode_impl, FALSE
-INTERRUPT_HANDLER handle_general_protection, handle_general_protection_impl, TRUE
-INTERRUPT_HANDLER handle_page_fault, handle_page_fault_impl, TRUE
+INTERRUPT_HANDLER handle_timer,                 handle_timer_impl,              FALSE
+INTERRUPT_HANDLER handle_keyboard,              handle_keyboard_impl,           FALSE
+INTERRUPT_HANDLER handle_divide_error,          handle_divide_error_impl,       FALSE
+INTERRUPT_HANDLER handle_invalid_opcode,        handle_invalid_opcode_impl,     FALSE
+INTERRUPT_HANDLER handle_general_protection,    handle_general_protection_impl, TRUE
+INTERRUPT_HANDLER handle_page_fault,            handle_page_fault_impl,         TRUE
 
 global handle_interrupt
 handle_interrupt:
@@ -42,14 +43,13 @@ handle_interrupt:
     push ebp
 
     ; load kernel data segments
-    mov ax, 16
+    mov ax, KERNEL_DATA
     mov ds, ax
     mov es, ax
     mov fs, ax
     mov gs, ax
 
     call [esp + 44] ; call real handler function
-
     pop ebp
     pop edi
     pop esi
@@ -66,29 +66,32 @@ handle_interrupt:
 
     iret
 
-struc kctx
-    .eip: resd 1
-    .esp: resd 1
-endstruc
-
-global switch_process
-switch_process:
-    ; ax cx dx are caller-saved registers
-    push edi
+global switch_stack
+switch_stack:
+    ; save callee-saved registers
+    push ebp
     push esi
+    push edi
+    push ebx
 
-    mov esi, [esp + 12]
-    mov edi, [esp + 16]
+    mov esi, [esp + 24] ; next_stack
+    mov edi, [esp + 20] ; prev_stack
 
-    mov DWORD [esi + kctx.esp], esp
-    mov esp, [edi + kctx.esp]
+    ; do stack switching with atomic operations.
+    lfence
+    xchg [edi], esp
+    xchg esp, [esi]
+    sfence
 
-    mov DWORD [esi + kctx.eip], switch_end
-    push DWORD [edi + kctx.eip]
+    pop ebx
+    pop edi
+    pop esi
+    pop ebp
 
     ret
-switch_end:
-    pop esi
-    pop edi
 
+global kthread_exec
+kthread_exec:
+    mov esp, [esp + 4]
+    add esp, 16
     ret

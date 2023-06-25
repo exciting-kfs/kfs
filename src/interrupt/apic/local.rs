@@ -189,24 +189,24 @@ pub fn vbase() -> usize {
 
 pub fn init() {
 	// timer initialization
-	set_timer_frequency();
 
 	let mut v = Register::LvtTimer.read();
-	v = v & !(1 << 16); // enable timer
-	v = v | 0x22; // set vector number.
+	v &= !(1 << 16); // enable (unmask) timer
+	v |= 1 << 17; // periodic mode
+	v |= 0x22; // set vector number.
 	Register::LvtTimer.write(v);
+	set_timer_frequency();
 }
 
 fn set_timer_frequency() {
-	const TIMER_FREQUENCY_HZ: usize = 1024; // TODO config?
+	const TIMER_FREQUENCY_HZ: usize = 10; // TODO config?
 	let cpuid = CPUID::run(0x16, 0);
 
 	let bus_freq = cpuid.ecx * MB;
 	let count = bus_freq / TIMER_FREQUENCY_HZ;
-	let freq = bus_freq / count;
 
 	pr_info!("Bus freqeuncy(MHz): {:?}", cpuid.ecx);
-	pr_info!("Timer interrupt freqeuncy(Hz): {:?}", freq);
+	pr_info!("Timer interrupt freqeuncy(Hz): {:?}", TIMER_FREQUENCY_HZ);
 
 	let mut div_conf = Register::DivideConfiguration.read();
 	div_conf = div_conf | 0b1011; // divided by 1 (bus_freq / n)

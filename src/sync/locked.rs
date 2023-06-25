@@ -3,7 +3,7 @@ use core::{
 	ops::{Deref, DerefMut},
 };
 
-use super::lock::{spinlock::SpinLock, TryLockFail};
+use super::lock::{spinlock::SpinLock, LockType, TryLockFail};
 
 #[derive(Debug)]
 pub struct Locked<T> {
@@ -27,30 +27,58 @@ impl<T> Locked<T> {
 	}
 
 	pub fn lock(&self) -> LockedGuard<'_, T> {
-		self.inner.lock_irq_save();
-		unsafe { LockedGuard::new(self) }
+		self.inner.lock();
+		unsafe { LockedGuard::new(self, LockType::Default) }
 	}
 
 	pub fn try_lock(&self) -> Result<LockedGuard<'_, T>, TryLockFail> {
 		self.inner
 			.try_lock()
-			.map(|_| unsafe { LockedGuard::new(self) })
+			.map(|_| unsafe { LockedGuard::new(self, LockType::Default) })
+	}
+
+	pub unsafe fn lock_manual(&self) -> &mut T {
+		self.inner.lock();
+		&mut *self.value.get()
+	}
+
+	pub unsafe fn unlock_manual(&self) {
+		self.inner.unlock();
+	}
+
+	pub unsafe fn get_manual(&self) -> &mut T {
+		&mut *self.value.get()
+	}
+
+	pub fn lock_irq(&self) -> LockedGuard<'_, T> {
+		self.inner.lock();
+		unsafe { LockedGuard::new(self, LockType::Irq) }
+	}
+
+	pub fn lock_irq_save(&self) -> LockedGuard<'_, T> {
+		self.inner.lock();
+		unsafe { LockedGuard::new(self, LockType::IrqSave) }
 	}
 }
 
 pub struct LockedGuard<'lock, T> {
 	locked: &'lock Locked<T>,
+	kind: LockType,
 }
 
 impl<'lock, T> LockedGuard<'lock, T> {
-	pub unsafe fn new(locked: &'lock Locked<T>) -> Self {
-		Self { locked }
+	pub unsafe fn new(locked: &'lock Locked<T>, kind: LockType) -> Self {
+		Self { locked, kind }
 	}
 }
 
 impl<'lock, T> Drop for LockedGuard<'lock, T> {
 	fn drop(&mut self) {
-		self.locked.inner.unlock_irq_restore()
+		match self.kind {
+			LockType::Default => self.locked.inner.unlock(),
+			LockType::Irq => self.locked.inner.unlock_irq(),
+			LockType::IrqSave => self.locked.inner.unlock_irq_restore(),
+		}
 	}
 }
 
