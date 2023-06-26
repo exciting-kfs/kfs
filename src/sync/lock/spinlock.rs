@@ -3,8 +3,8 @@ use core::sync::atomic::Ordering;
 
 use crate::interrupt::irq_disable;
 use crate::interrupt::irq_enable;
-use crate::interrupt::irq_stack_restore;
-use crate::interrupt::irq_stack_save;
+use crate::interrupt::irq_restore;
+use crate::interrupt::irq_save;
 
 use super::TryLockFail;
 
@@ -36,9 +36,10 @@ impl SpinLock {
 		self.lock();
 	}
 
-	pub fn lock_irq_save(&self) {
-		irq_stack_save();
+	pub fn lock_irq_save(&self) -> bool {
+		let iflag = irq_save();
 		self.lock();
+		iflag
 	}
 
 	pub fn try_lock(&self) -> Result<(), TryLockFail> {
@@ -60,8 +61,8 @@ impl SpinLock {
 		irq_enable();
 	}
 
-	pub fn unlock_irq_restore(&self) {
+	pub fn unlock_irq_restore(&self, iflag: bool) {
 		self.unlock();
-		irq_stack_restore();
+		irq_restore(iflag);
 	}
 }

@@ -6,7 +6,7 @@ use core::{
 
 use crate::{
 	config::NR_CPUS,
-	interrupt::{irq_stack_restore, irq_stack_save},
+	interrupt::{irq_restore, irq_save},
 	smp::smp_id,
 };
 
@@ -52,12 +52,13 @@ impl<T> CpuLocal<T> {
 
 pub struct LocalValue<'l, T> {
 	value: &'l mut T,
+	iflag: bool,
 }
 
 impl<'l, T> LocalValue<'l, T> {
 	fn new(value: &'l mut T) -> Self {
-		irq_stack_save();
-		LocalValue { value }
+		let iflag = irq_save();
+		LocalValue { value, iflag }
 	}
 }
 
@@ -76,7 +77,7 @@ impl<'l, T> DerefMut for LocalValue<'l, T> {
 
 impl<'l, T> Drop for LocalValue<'l, T> {
 	fn drop(&mut self) {
-		irq_stack_restore();
+		irq_restore(self.iflag);
 	}
 }
 

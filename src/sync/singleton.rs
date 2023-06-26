@@ -40,23 +40,23 @@ impl<T> Singleton<T> {
 
 	pub fn lock(&self) -> SingletonGuard<'_, T> {
 		self.inner.lock();
-		unsafe { SingletonGuard::new(self, LockType::Default) }
+		unsafe { SingletonGuard::new(self, LockType::Default, false) }
 	}
 
 	pub fn lock_irq(&self) -> SingletonGuard<'_, T> {
 		self.inner.lock_irq();
-		unsafe { SingletonGuard::new(self, LockType::Irq) }
+		unsafe { SingletonGuard::new(self, LockType::Irq, false) }
 	}
 
 	pub fn lock_irq_save(&self) -> SingletonGuard<'_, T> {
-		self.inner.lock_irq_save();
-		unsafe { SingletonGuard::new(self, LockType::IrqSave) }
+		let iflag = self.inner.lock_irq_save();
+		unsafe { SingletonGuard::new(self, LockType::IrqSave, iflag) }
 	}
 
 	pub fn try_lock(&self) -> Result<SingletonGuard<'_, T>, TryLockFail> {
 		self.inner
 			.try_lock()
-			.map(|_| unsafe { SingletonGuard::new(self, LockType::Default) })
+			.map(|_| unsafe { SingletonGuard::new(self, LockType::Default, false) })
 	}
 
 	pub unsafe fn lock_manual(&self) -> &mut T {
@@ -72,13 +72,15 @@ impl<T> Singleton<T> {
 pub struct SingletonGuard<'lock, T> {
 	singleton: &'lock Singleton<T>,
 	lock_type: LockType,
+	iflag: bool,
 }
 
 impl<'lock, T> SingletonGuard<'lock, T> {
-	pub unsafe fn new(singleton: &'lock Singleton<T>, lock_type: LockType) -> Self {
+	pub unsafe fn new(singleton: &'lock Singleton<T>, lock_type: LockType, iflag: bool) -> Self {
 		Self {
 			singleton,
 			lock_type,
+			iflag,
 		}
 	}
 }
@@ -88,7 +90,7 @@ impl<'lock, T> Drop for SingletonGuard<'lock, T> {
 		match self.lock_type {
 			LockType::Default => self.singleton.inner.unlock(),
 			LockType::Irq => self.singleton.inner.unlock_irq(),
-			LockType::IrqSave => self.singleton.inner.unlock_irq_restore(),
+			LockType::IrqSave => self.singleton.inner.unlock_irq_restore(self.iflag),
 		}
 	}
 }

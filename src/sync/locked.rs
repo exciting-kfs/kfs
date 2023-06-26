@@ -28,13 +28,13 @@ impl<T> Locked<T> {
 
 	pub fn lock(&self) -> LockedGuard<'_, T> {
 		self.inner.lock();
-		unsafe { LockedGuard::new(self, LockType::Default) }
+		unsafe { LockedGuard::new(self, LockType::Default, false) }
 	}
 
 	pub fn try_lock(&self) -> Result<LockedGuard<'_, T>, TryLockFail> {
 		self.inner
 			.try_lock()
-			.map(|_| unsafe { LockedGuard::new(self, LockType::Default) })
+			.map(|_| unsafe { LockedGuard::new(self, LockType::Default, false) })
 	}
 
 	pub unsafe fn lock_manual(&self) -> &mut T {
@@ -51,24 +51,29 @@ impl<T> Locked<T> {
 	}
 
 	pub fn lock_irq(&self) -> LockedGuard<'_, T> {
-		self.inner.lock();
-		unsafe { LockedGuard::new(self, LockType::Irq) }
+		self.inner.lock_irq();
+		unsafe { LockedGuard::new(self, LockType::Irq, false) }
 	}
 
 	pub fn lock_irq_save(&self) -> LockedGuard<'_, T> {
-		self.inner.lock();
-		unsafe { LockedGuard::new(self, LockType::IrqSave) }
+		let iflag = self.inner.lock_irq_save();
+		unsafe { LockedGuard::new(self, LockType::IrqSave, iflag) }
 	}
 }
 
 pub struct LockedGuard<'lock, T> {
 	locked: &'lock Locked<T>,
 	kind: LockType,
+	iflag: bool,
 }
 
 impl<'lock, T> LockedGuard<'lock, T> {
-	pub unsafe fn new(locked: &'lock Locked<T>, kind: LockType) -> Self {
-		Self { locked, kind }
+	pub unsafe fn new(locked: &'lock Locked<T>, kind: LockType, iflag: bool) -> Self {
+		Self {
+			locked,
+			kind,
+			iflag,
+		}
 	}
 }
 
@@ -77,7 +82,7 @@ impl<'lock, T> Drop for LockedGuard<'lock, T> {
 		match self.kind {
 			LockType::Default => self.locked.inner.unlock(),
 			LockType::Irq => self.locked.inner.unlock_irq(),
-			LockType::IrqSave => self.locked.inner.unlock_irq_restore(),
+			LockType::IrqSave => self.locked.inner.unlock_irq_restore(self.iflag),
 		}
 	}
 }

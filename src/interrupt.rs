@@ -23,6 +23,21 @@ pub fn irq_disable() {
 	unsafe { core::arch::asm!("cli") };
 }
 
+pub fn irq_save() -> bool {
+	let iflag = get_interrupt_flag();
+	irq_disable();
+
+	iflag
+}
+
+pub fn irq_restore(iflag: bool) {
+	if iflag {
+		irq_enable();
+	} else {
+		irq_disable();
+	}
+}
+
 fn get_interrupt_flag() -> bool {
 	let flag_mask = 1 << 9;
 	let mut eflags: usize;
@@ -38,56 +53,62 @@ fn get_interrupt_flag() -> bool {
 }
 
 #[derive(Clone, Copy)]
-struct IrqStack {
-	sti: bool,
-	cli: usize,
+struct IrqCount {
+	nmi: u8,
+	hw: u8,
+	sw: u8,
 }
 
-impl IrqStack {
+impl IrqCount {
 	const fn new() -> Self {
-		Self { sti: false, cli: 0 }
-	}
-
-	fn push(&mut self, iflag: bool) {
-		if self.sti && iflag {
-			panic!("irq stack push");
-		}
-
-		match iflag {
-			true => self.sti = true,
-			false => self.cli += 1,
+		IrqCount {
+			nmi: 0,
+			hw: 0,
+			sw: 0,
 		}
 	}
 
-	fn pop(&mut self) -> bool {
-		if self.cli == 0 && !self.sti {
-			panic!("irq stack pop");
-		}
+	fn inc_sw(&mut self) -> Option<u8> {
+		self.sw.checked_add(1)
+	}
 
-		match self.cli == 0 {
-			true => self.sti = false,
-			false => self.cli -= 1,
-		}
+	fn dec_sw(&mut self) -> Option<u8> {
+		self.sw.checked_sub(1)
+	}
 
-		self.sti
+	fn inc_hw(&mut self) -> Option<u8> {
+		self.hw.checked_add(1)
+	}
+
+	fn dec_hw(&mut self) -> Option<u8> {
+		self.hw.checked_sub(1)
+	}
+
+	fn inc_nmi(&mut self) -> Option<u8> {
+		self.nmi.checked_add(1)
+	}
+
+	fn dec_nmi(&mut self) -> Option<u8> {
+		self.nmi.checked_sub(1)
 	}
 }
 
-static mut IRQ_STACK: [IrqStack; NR_CPUS] = [IrqStack::new(); NR_CPUS];
+static mut IRQ_COUNT: [IrqCount; NR_CPUS] = [IrqCount::new(); NR_CPUS];
 
-pub fn irq_stack_save() {
-	let iflag = get_interrupt_flag();
-
-	unsafe { IRQ_STACK[lapic_id()].push(iflag) };
-	irq_disable();
+pub fn in_interrupt() -> bool {
+	in_hw_irq() || in_sw_irq() || in_nmi()
 }
 
-pub fn irq_stack_restore() {
-	if unsafe { IRQ_STACK[lapic_id()].pop() } {
-		irq_enable();
-	} else {
-		irq_disable();
-	}
+pub fn in_sw_irq() -> bool {
+	unsafe { IRQ_COUNT[lapic_id()] }.sw > 0
+}
+
+pub fn in_hw_irq() -> bool {
+	unsafe { IRQ_COUNT[lapic_id()] }.hw > 0
+}
+
+pub fn in_nmi() -> bool {
+	unsafe { IRQ_COUNT[lapic_id()] }.nmi > 0
 }
 
 #[cfg(disable)]

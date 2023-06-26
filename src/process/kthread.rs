@@ -1,11 +1,8 @@
-use alloc::{boxed::Box, sync::Arc};
+use alloc::sync::Arc;
 use core::alloc::AllocError;
 
 use super::task::{Task, TASK_QUEUE};
-use crate::{
-	interrupt::{irq_enable, irq_stack_restore},
-	sync::locked::Locked,
-};
+use crate::{interrupt::irq_enable, sync::locked::Locked};
 
 extern "C" {
 	/// Immediately execute new task created by `kthread_create`
