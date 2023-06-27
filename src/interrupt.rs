@@ -7,6 +7,8 @@ pub mod idt;
 pub mod idte;
 pub mod privilege_level;
 
+use core::arch::asm;
+
 pub use apic::local_id as lapic_id;
 pub use apic::LAPIC_PBASE;
 pub use apic::MSR_APIC_BASE;
@@ -16,13 +18,14 @@ pub use interrupt_frame::InterruptFrame;
 use crate::config::NR_CPUS;
 
 pub fn irq_enable() {
-	unsafe { core::arch::asm!("sti") };
+	unsafe { asm!("sti") };
 }
 
 pub fn irq_disable() {
-	unsafe { core::arch::asm!("cli") };
+	unsafe { asm!("cli") };
 }
 
+#[must_use]
 pub fn irq_save() -> bool {
 	let iflag = get_interrupt_flag();
 	irq_disable();
@@ -42,7 +45,7 @@ fn get_interrupt_flag() -> bool {
 	let flag_mask = 1 << 9;
 	let mut eflags: usize;
 	unsafe {
-		core::arch::asm!(
+		asm!(
 			"pushfd",
 			"pop eax",
 			out("eax") eflags
