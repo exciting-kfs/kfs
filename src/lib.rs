@@ -134,9 +134,12 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 
 	// caution: order sensitive.
 	unsafe {
-		boot::init(bi_header, magic).expect("boot information");
-		let meta_page_table = mm::page::alloc_meta_page_table();
+		let mut bootalloc = boot::init(bi_header, magic).expect("boot information");
+
+		let meta_page_table = mm::page::alloc_meta_page_table(&mut bootalloc);
 		mm::page::init(meta_page_table);
+
+		bootalloc.deinit();
 
 		mm::alloc::page::init();
 		mm::alloc::phys::init();
@@ -153,6 +156,8 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	driver::ps2::init().expect("failed to init PS/2");
 
 	unsafe { x86::init() };
+
+	// unsafe { exec_user_space() };
 
 	match cfg!(ktest) {
 		true => run_test(),

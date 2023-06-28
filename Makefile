@@ -25,6 +25,8 @@ OBJDUMP_FLAG := --demangle                                  \
 
 LD := i686-$(UTIL)-ld
 
+ADDR2LINE := i686-$(UTIL)-addr2line
+
 PAGER := vim -
 
 # === toolchain (inferred from above) ===
@@ -94,7 +96,8 @@ run : rescue
 	@scripts/qemu.sh $(RESCUE_IMG) stdio
 
 .PHONY : debug
-# debug : RUSTC_FLAG += --cfg ktest
+debug : RUSTC_FLAG += --cfg ktest
+debug : RUSTC_FLAG += --cfg ktest='"all"'
 ifeq ($(DEBUG_WITH_VSCODE),y)
 debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
 	@scripts/vsc-debug.py $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN) &
@@ -131,6 +134,15 @@ dump-text : $(KERNEL_BIN)
 .PHONY : size
 size : $(KERNEL_BIN)
 	@ls -lh $<
+
+.PHONY : lookup-addr
+lookup-addr : $(KERNEL_DEBUG_SYMBOL)
+ifndef ADDR
+	@echo "Usage: make ADDR=\`address\` lookup-addr"
+	@exit 2
+else
+	@$(ADDR2LINE) -e $< $(ADDR) 
+endif
 
 .PHONY : test
 test : RUSTC_FLAG += --cfg ktest

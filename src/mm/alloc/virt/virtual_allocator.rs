@@ -21,7 +21,7 @@ enum VMallocError {
 	OutOfMemory(usize),
 }
 
-static ADDRESS_TREE: Singleton<AddressTree> = Singleton::uninit();
+pub static ADDRESS_TREE: Singleton<AddressTree> = Singleton::uninit();
 pub static VMALLOC: VMemAlloc = VMemAlloc;
 
 /// Virtual memory allocator

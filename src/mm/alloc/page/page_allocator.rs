@@ -2,32 +2,34 @@
 
 use super::buddy_allocator::BuddyAlloc;
 
+use crate::boot::MEM_INFO;
 use crate::mm::alloc::Zone;
-use crate::mm::constant::*;
-use crate::mm::page::VMemory;
+use crate::mm::{constant::*, util::*};
 use crate::sync::singleton::Singleton;
 
 use core::alloc::AllocError;
 use core::ptr::{addr_of_mut, NonNull};
 
-/// PageAlloc Holds 3 different buddy allocator.
+/// PageAlloc Holds 2 different buddy allocator.
 /// - high, vmalloc: allocate from ZONE_HIGH (not mapped)
 /// - normal: allocate from ZONE_NORMAL (linear mapped)
 pub struct PageAlloc {
 	high: BuddyAlloc,
-	vmalloc: BuddyAlloc,
 	normal: BuddyAlloc,
 }
 
 pub static PAGE_ALLOC: Singleton<PageAlloc> = Singleton::uninit();
 
 impl PageAlloc {
-	pub unsafe fn init(vm: &VMemory) {
-		let ptr = unsafe { PAGE_ALLOC.as_mut_ptr() };
+	pub unsafe fn init() {
+		let ptr = PAGE_ALLOC.as_mut_ptr();
+		let mem = &mut MEM_INFO;
 
-		BuddyAlloc::construct_at(addr_of_mut!((*ptr).normal), vm.normal_pfn.clone());
-		BuddyAlloc::construct_at(addr_of_mut!((*ptr).high), vm.high_pfn.clone());
-		BuddyAlloc::construct_at(addr_of_mut!((*ptr).vmalloc), vm.vmalloc_pfn.clone());
+		BuddyAlloc::construct_at(
+			addr_of_mut!((*ptr).normal),
+			mem.normal_start_pfn..mem.high_start_pfn,
+		);
+		BuddyAlloc::construct_at(addr_of_mut!((*ptr).high), mem.high_start_pfn..mem.end_pfn);
 	}
 
 	/// Allocate new `rank` ranked pages from zone `flag`.
@@ -37,10 +39,7 @@ impl PageAlloc {
 	/// pages from `Zone::Normal` can be returned.
 	pub fn alloc_pages(&mut self, rank: usize, flag: Zone) -> Result<NonNull<[u8]>, AllocError> {
 		match flag {
-			Zone::High => self
-				.high
-				.alloc_pages(rank)
-				.or_else(|_| self.vmalloc.alloc_pages(rank)),
+			Zone::High => self.high.alloc_pages(rank),
 			Zone::Normal => Err(AllocError),
 		}
 		.or_else(|_| self.normal.alloc_pages(rank))
@@ -49,13 +48,12 @@ impl PageAlloc {
 	/// Deallocate pages.
 	pub fn free_pages(&mut self, page: NonNull<u8>) {
 		let addr = page.as_ptr() as usize;
+		let pfn = addr_to_pfn(virt_to_phys(addr));
 
-		if addr < VM_OFFSET {
-			self.high.free_pages(page)
-		} else if addr < VMALLOC_OFFSET {
+		if pfn < unsafe { MEM_INFO.high_start_pfn } {
 			self.normal.free_pages(page)
 		} else {
-			self.vmalloc.free_pages(page)
+			self.high.free_pages(page)
 		};
 	}
 }
@@ -63,7 +61,7 @@ impl PageAlloc {
 mod test {
 	use super::*;
 
-	use crate::{pr_info, util::lcg::LCG};
+	use crate::{pr_info, pr_warn, util::lcg::LCG};
 	use kfs_macro::ktest;
 
 	use alloc::{collections::LinkedList, vec::Vec};
@@ -136,12 +134,16 @@ mod test {
 	}
 
 	fn alloc(rank: usize, flag: Zone) -> Result<AllocInfo, AllocError> {
-		let mem = AllocInfo::new(PAGE_ALLOC.lock().alloc_pages(rank, flag)?);
+		let mem = AllocInfo::new(PAGE_ALLOC.lock().alloc_pages(rank, flag.clone())?);
 
 		assert!(mem.as_ptr() as usize % PAGE_SIZE == 0);
 		assert!(mem.rank() == rank);
 
 		mark_alloced(mem.as_ptr() as usize, rank);
+
+		if let Zone::Normal = flag {
+			unsafe { *mem.as_non_null().as_ptr() = 42 };
+		}
 
 		Ok(mem)
 	}
@@ -182,7 +184,7 @@ mod test {
 		pr_info!(
 			" note: {} page ({}MB) allocated from ZONE_NORMAL",
 			count,
-			count * PAGE_SIZE / 1024 / 1024
+			(count * PAGE_SIZE) / MB
 		);
 		free_all();
 	}
@@ -234,7 +236,15 @@ mod test {
 	pub fn zone_high_basic() {
 		let info = alloc(0, Zone::High).unwrap();
 
-		assert!(!is_zone_normal(info.ptr));
+		if is_zone_normal(info.ptr) {
+			pr_warn!(
+				concat!(
+					" note: allocated memory came from `ZONE_NORMAL`\n",
+					"  if installed memory > {} MB, then it could be BUG",
+				),
+				virt_to_phys(VMALLOC_OFFSET) / MB
+			);
+		}
 
 		free(info);
 	}

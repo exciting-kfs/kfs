@@ -5,7 +5,7 @@ use crate::{
 	interrupt::apic::{self, LAPIC_PBASE, MSR_APIC_BASE},
 	mm::{
 		constant::PAGE_MASK,
-		page::{arch::init::VMEMORY, get_vmemory_map, map_mmio, PageFlag, VMemory},
+		page::{map_mmio, PageFlag},
 		util::{addr_to_pfn, phys_to_virt},
 	},
 	util::arch::msr::Msr,
@@ -24,15 +24,6 @@ fn mapping_local_apic_registers() -> Result<(), ApicError> {
 	let apic_vaddr = apic::local_vbase();
 	let flags = PageFlag::Global | PageFlag::Write | PageFlag::Present;
 	map_mmio(apic_vaddr, apic_paddr, flags).map_err(|_| ApicError::Alloc)?;
-
-	// recording local apic pfn at VMemory.
-	unsafe {
-		let vm = get_vmemory_map();
-		VMEMORY.write(VMemory {
-			local_apic_pfn: addr_to_pfn(apic_vaddr),
-			..vm
-		});
-	}
 
 	Ok(())
 }
@@ -59,13 +50,6 @@ fn mapping_io_apic_registers() -> Result<(), ApicError> {
 	}
 
 	// recording io apic pfn at VMemory.
-	unsafe {
-		let vm = get_vmemory_map();
-		VMEMORY.write(VMemory {
-			io_apic_pfn: pfns,
-			..vm
-		});
-	}
 
 	Ok(())
 }

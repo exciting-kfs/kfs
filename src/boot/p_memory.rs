@@ -1,69 +1,100 @@
 use core::{
 	cmp::max,
 	mem::{align_of, size_of},
-	ops::Range,
+	ptr::NonNull,
 };
 
 use multiboot2::{BootInformation, MemoryMapTag};
 
-use crate::{
-	mm::{
-		constant::VM_OFFSET,
-		util::{next_align_64, phys_to_virt},
-	},
-	sync::singleton::Singleton,
-};
+use crate::mm::{constant::*, util::*};
 
 use super::Error;
 
-const REQUIRED_MINIMUN_MEMORY_END: u64 = 0x3ffe_0000; // 1024MB
-pub static MEM_INFO: Singleton<PMemory> = Singleton::uninit();
+// safety: this will be written only once at early-boot stage.
+//  after that this is read only.
+pub static mut MEM_INFO: PMemory = PMemory {
+	normal_start_pfn: 0,
+	high_start_pfn: 0,
+	end_pfn: 0,
+};
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct PMemory {
-	pub linear: Range<u64>,
-	pub kernel_end: u64,
+	pub normal_start_pfn: usize,
+	pub high_start_pfn: usize,
+	pub end_pfn: usize,
 }
 
-impl PMemory {
-	pub unsafe fn alloc_n<T>(&mut self, n: usize) -> *mut T {
-		let begin = next_align_64(self.kernel_end, align_of::<T>() as u64);
-		let end = begin + size_of::<T>() as u64 * n as u64;
+pub struct BootAlloc {
+	offset: usize,
+}
 
-		let limit = self.linear.end;
+impl BootAlloc {
+	pub(super) fn new() -> Self {
+		Self { offset: 0 }
+	}
 
-		assert!(end <= limit);
+	pub fn alloc_n<T>(&mut self, n: usize) -> NonNull<T> {
+		// MAX supported alignment is `PAGE_SIZE`
+		let align = next_align(self.offset, align_of::<T>()) - self.offset;
+		let size = size_of::<T>() * n;
 
-		self.kernel_end = end;
+		let mem = unsafe { &mut MEM_INFO };
 
-		phys_to_virt(begin as usize) as *mut T
+		let alloc_begin = pfn_to_addr(mem.normal_start_pfn) + self.offset + align;
+
+		let mut new_offset = self.offset + align + size;
+		let nr_extra_pages = new_offset / PAGE_SIZE;
+		new_offset %= PAGE_SIZE;
+
+		if mem.normal_start_pfn + nr_extra_pages > mem.high_start_pfn {
+			panic!("bootalloc: out of memory");
+		}
+
+		mem.normal_start_pfn += nr_extra_pages;
+		self.offset = new_offset;
+
+		// safety: virtual address starts from `VM_OFFSET` which not contains null.
+		unsafe { NonNull::new_unchecked(phys_to_virt(alloc_begin) as *mut T) }
+	}
+
+	pub fn deinit(self) {
+		if self.offset != 0 {
+			// safety: this is early boot stage. no synchonization needed.
+			let mem = unsafe { &mut MEM_INFO };
+			if mem.normal_start_pfn == mem.end_pfn {
+				panic!("bootalloc: out of memory");
+			}
+			mem.normal_start_pfn += 1;
+		}
 	}
 }
 
 pub fn init(bi: &BootInformation, kernel_end: usize) -> Result<(), Error> {
-	let end_addr = bi.end_address();
-	let header_end = end_addr.checked_sub(VM_OFFSET).unwrap_or(end_addr);
-	let kernel_end = max(kernel_end as u64, header_end as u64);
+	let header_end = bi.end_address();
+	let normal_start_pfn = addr_to_pfn(virt_to_phys(max(kernel_end, header_end)));
 
 	let mmap_tag = bi.memory_map_tag().ok_or_else(|| Error::MissingMemoryMap)?;
-	let mem_info = PMemory {
-		linear: parse_memory_map(mmap_tag)?,
-		kernel_end,
+	let end_pfn = search_memory_end(mmap_tag)?;
+
+	let high_start_pfn = end_pfn.min(addr_to_pfn(virt_to_phys(VMALLOC_OFFSET)));
+
+	unsafe {
+		MEM_INFO = PMemory {
+			normal_start_pfn,
+			high_start_pfn,
+			end_pfn,
+		}
 	};
 
-	unsafe { MEM_INFO.write(mem_info) };
 	Ok(())
 }
 
-fn parse_memory_map(tag: &MemoryMapTag) -> Result<Range<u64>, Error> {
+fn search_memory_end(tag: &MemoryMapTag) -> Result<usize, Error> {
 	let linear = tag
 		.memory_areas()
 		.find(|x| x.start_address() == (1024 * 1024))
 		.ok_or_else(|| Error::MissingLinearMemory)?;
 
-	if linear.end_address() >= REQUIRED_MINIMUN_MEMORY_END {
-		Ok(linear.start_address()..linear.end_address())
-	} else {
-		Err(Error::InSufficientMemory)
-	}
+	Ok((linear.end_address() / PAGE_SIZE as u64) as usize)
 }
