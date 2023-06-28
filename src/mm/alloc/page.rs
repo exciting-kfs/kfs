@@ -2,8 +2,6 @@ mod buddy_allocator;
 mod free_list;
 mod page_allocator;
 
-use crate::mm::page::get_vmemory_map;
-
 use super::Zone;
 use core::{alloc::AllocError, ptr::NonNull};
 use page_allocator::{PageAlloc, PAGE_ALLOC};
@@ -17,5 +15,5 @@ pub fn free_pages(page: NonNull<u8>) {
 }
 
 pub fn init() {
-	unsafe { PageAlloc::init(&get_vmemory_map()) };
+	unsafe { PageAlloc::init() };
 }

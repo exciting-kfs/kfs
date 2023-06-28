@@ -24,11 +24,12 @@ impl BuddyAlloc {
 		cover_pfn.start = next_align(cover_pfn.start, rank_to_pages(MAX_RANK));
 		cover_pfn.end = cover_pfn.end & !(rank_to_pages(MAX_RANK) - 1);
 
-		for mut entry in cover_pfn
-			.step_by(rank_to_pages(MAX_RANK))
-			.map(|virt_pfn| pfn_virt_to_phys(virt_pfn))
-			.map(|phys_pfn| index_to_meta(phys_pfn))
-		{
+		for phys_pfn in cover_pfn.step_by(rank_to_pages(MAX_RANK)) {
+			// ignore zero page
+			if pfn_phys_to_virt(phys_pfn) == 0 {
+				continue;
+			}
+			let mut entry = index_to_meta(phys_pfn);
 			entry.as_mut().set_rank(MAX_RANK);
 			free_list.add(entry);
 		}

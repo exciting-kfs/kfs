@@ -6,10 +6,11 @@ mod virtual_allocator;
 use core::alloc::{AllocError, Allocator, Layout};
 use core::ptr::NonNull;
 
-use crate::mm::page::get_vmemory_map;
 use address_space::*;
 use address_tree::*;
 use virtual_allocator::*;
+
+use crate::mm::{constant::*, util::*};
 
 pub fn allocate(layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
 	VMALLOC.allocate(layout)
@@ -24,6 +25,5 @@ pub fn lookup_size(ptr: NonNull<u8>) -> usize {
 }
 
 pub fn init() {
-	let area = get_vmemory_map().vmalloc_pfn;
-	VMALLOC.init(area);
+	VMALLOC.init(addr_to_pfn(VMALLOC_OFFSET)..LAST_PFN);
 }

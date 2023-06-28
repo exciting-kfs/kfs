@@ -3,16 +3,15 @@ mod p_memory;
 mod strtab;
 mod symtab;
 
-use core::ops::Range;
-
 use kernel_symbol::KernelSymbol;
 use strtab::Strtab;
 use symtab::Symtab;
 
 use crate::acpi::RSDT_PADDR;
 
-use self::kernel_symbol::KSYMS;
-use self::p_memory::MEM_INFO;
+use kernel_symbol::KSYMS;
+pub use p_memory::BootAlloc;
+pub use p_memory::MEM_INFO;
 
 const MULTIBOOT2_MAGIC: u32 = 0x36d7_6289;
 
@@ -32,7 +31,7 @@ fn check_magic(magic: u32) -> bool {
 	magic == MULTIBOOT2_MAGIC
 }
 
-pub fn init(bi_header: usize, magic: u32) -> Result<(), Error> {
+pub fn init(bi_header: usize, magic: u32) -> Result<BootAlloc, Error> {
 	if !check_magic(magic) {
 		return Err(Error::WrongMagic);
 	}
@@ -45,19 +44,9 @@ pub fn init(bi_header: usize, magic: u32) -> Result<(), Error> {
 
 	unsafe { RSDT_PADDR = bi.rsdp_v1_tag().ok_or(Error::MissingRSDP)?.rsdt_address() };
 
-	Ok(())
-}
-
-pub unsafe fn allocate_n<T>(n: usize) -> *mut T {
-	MEM_INFO.lock().alloc_n(n)
+	Ok(BootAlloc::new())
 }
 
 pub fn get_ksyms() -> KernelSymbol {
 	KSYMS.lock().clone()
-}
-
-pub fn get_pmem_bound() -> Range<u64> {
-	let pmem = MEM_INFO.lock();
-
-	pmem.kernel_end..pmem.linear.end
 }

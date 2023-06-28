@@ -1,9 +1,9 @@
 use core::mem::size_of;
 use core::ops::IndexMut;
 use core::ptr::NonNull;
-use core::slice::from_raw_parts_mut;
+use core::slice::{self, from_raw_parts_mut};
 
-use crate::boot;
+use crate::boot::{self, BootAlloc};
 use crate::mm::{self, util::*};
 use crate::sync::singleton::Singleton;
 
@@ -11,12 +11,12 @@ use super::metapage::MetaPage;
 
 static META_PAGE_TABLE: Singleton<&'static mut [MetaPage]> = Singleton::uninit();
 
-pub unsafe fn alloc_meta_page_table() -> NonNull<[MetaPage]> {
-	let pmem_end = boot::get_pmem_bound().end;
-	let page_count = addr_to_pfn_64(pmem_end) as usize;
+pub unsafe fn alloc_meta_page_table(bootalloc: &mut BootAlloc) -> NonNull<[MetaPage]> {
+	let page_count = unsafe { boot::MEM_INFO.end_pfn };
 
-	let ptr = boot::allocate_n::<MetaPage>(page_count);
-	let ptr = core::slice::from_raw_parts_mut(ptr, page_count);
+	let ptr = bootalloc.alloc_n::<MetaPage>(page_count);
+	let ptr = slice::from_raw_parts_mut(ptr.as_ptr(), page_count);
+
 	NonNull::new_unchecked(ptr)
 }
 
