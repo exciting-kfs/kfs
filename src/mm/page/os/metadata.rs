@@ -1,8 +1,8 @@
 use crate::mm::{constant::*, util::*};
-use crate::util::bitrange::BitRange;
+use crate::util::bitrange::{BitData, BitRange};
 
 #[repr(transparent)]
-pub struct MetaData(usize);
+pub struct MetaData(BitData);
 
 impl MetaData {
 	pub const INUSE: BitRange = BitRange::new(0, 1);
@@ -11,27 +11,29 @@ impl MetaData {
 	const MAPPED_ADDR: BitRange = BitRange::new(PAGE_SHIFT, usize::BITS as usize);
 
 	pub fn new_unmapped() -> Self {
-		MetaData(0)
+		MetaData(BitData::new(0))
 	}
 
 	pub fn new(mapped_addr: usize) -> Self {
-		MetaData(mapped_addr & Self::MAPPED_ADDR.mask())
+		MetaData(BitData::new(mapped_addr & Self::MAPPED_ADDR.mask()))
 	}
 
 	pub fn remap(&mut self, new_addr: usize) {
-		self.0 = (self.0 & !Self::MAPPED_ADDR.mask()) | (new_addr & Self::MAPPED_ADDR.mask());
+		self.0
+			.erase_bits(&Self::MAPPED_ADDR)
+			.add_bits(&Self::MAPPED_ADDR, new_addr);
 	}
 
 	pub fn mapped_addr(&self) -> usize {
-		self.0 & Self::MAPPED_ADDR.mask()
+		self.0.get_bits(&Self::MAPPED_ADDR)
 	}
 
 	pub fn get_flag(&self, range: BitRange) -> usize {
-		(self.0 & range.mask()) >> range.start
+		self.0.shift_get_bits(&range)
 	}
 
 	pub fn set_flag(&mut self, range: BitRange, bits: usize) {
-		self.0 = (self.0 & !range.mask()) | ((bits << range.start) & range.mask())
+		self.0.erase_bits(&range).shift_add_bits(&range, bits);
 	}
 }
 

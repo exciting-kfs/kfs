@@ -3,7 +3,7 @@ use super::stackframe::{self, Stackframe};
 extern "C" {
 	/// Do not __call__ this function. it's not function at all.
 	/// but just pointer, which points bottom of the kernel stack.
-	fn kernel_stack_bottom();
+	pub fn kernel_stack_bottom();
 }
 
 pub struct StackframeIter {

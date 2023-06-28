@@ -2,6 +2,7 @@
 
 RELEASE_MODE := n
 DEBUG_WITH_VSCODE := y
+TEST_CASE := all
 
 I386_GRUB2_PREFIX := $(I386_GRUB2_PREFIX)
 
@@ -124,15 +125,10 @@ size : $(KERNEL_BIN)
 
 .PHONY : test
 test : RUSTC_FLAG += --cfg ktest
-test : RUSTC_FLAG += --cfg 'ktest="all"'
+test : RUSTC_FLAG += --cfg ktest='"$(TEST_CASE)"'
 test : rescue
 	@scripts/qemu.sh $(RESCUE_IMG) stdio -display none
 
-.PHONY : test-dev
-test-dev : RUSTC_FLAG += --cfg ktest
-test-dev : RUSTC_FLAG += --cfg 'ktest="dev"'
-test-dev : rescue
-	@scripts/qemu.sh $(RESCUE_IMG) stdio -display none
 # === Main recipes ===
 
 .PHONY : $(LIB_KERNEL)

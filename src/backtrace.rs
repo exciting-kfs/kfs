@@ -11,6 +11,7 @@ use crate::boot;
 use crate::pr_info;
 
 pub use stack_dump::StackDump;
+pub use stackframe_iter::kernel_stack_bottom;
 
 pub struct Backtrace {
 	stack: StackDump,
