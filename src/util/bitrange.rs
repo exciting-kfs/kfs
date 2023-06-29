@@ -26,6 +26,7 @@ impl BitRange {
 	}
 }
 
+#[derive(Clone, Copy)]
 #[repr(transparent)]
 pub struct BitData {
 	data: usize,

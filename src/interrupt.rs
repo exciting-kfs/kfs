@@ -4,7 +4,6 @@ mod interrupt_frame;
 
 pub mod apic;
 pub mod idt;
-pub mod idte;
 pub mod privilege_level;
 
 pub use apic::local_id as lapic_id;
