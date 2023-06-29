@@ -20,12 +20,14 @@
 
 section .text
 
-INTERRUPT_HANDLER handle_timer,                 handle_timer_impl,              FALSE
-INTERRUPT_HANDLER handle_keyboard,              handle_keyboard_impl,           FALSE
 INTERRUPT_HANDLER handle_divide_error,          handle_divide_error_impl,       FALSE
 INTERRUPT_HANDLER handle_invalid_opcode,        handle_invalid_opcode_impl,     FALSE
 INTERRUPT_HANDLER handle_general_protection,    handle_general_protection_impl, TRUE
 INTERRUPT_HANDLER handle_page_fault,            handle_page_fault_impl,         TRUE
+
+INTERRUPT_HANDLER handle_timer,                 handle_timer_impl,              FALSE
+INTERRUPT_HANDLER handle_keyboard,              handle_keyboard_impl,           FALSE
+INTERRUPT_HANDLER handle_syscall,               handle_syscall_impl,            FALSE
 
 global handle_interrupt
 handle_interrupt:
@@ -50,6 +52,7 @@ handle_interrupt:
     mov gs, ax
 
     call [esp + 44] ; call real handler function
+return_from_interrupt:
     pop ebp
     pop edi
     pop esi
@@ -95,3 +98,8 @@ kthread_exec:
     mov esp, [esp + 4]
     add esp, 16
     ret
+
+global user_process_exec
+user_process_exec:
+    mov esp, [esp + 4]
+    jmp return_from_interrupt

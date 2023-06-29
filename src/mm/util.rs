@@ -27,7 +27,7 @@ pub const fn rank_to_size(rank: usize) -> usize {
 }
 
 pub const fn size_to_rank(size: usize) -> usize {
-	(size >> PAGE_SHIFT).ilog2() as usize
+	(32 - (size >> PAGE_SHIFT).leading_zeros()) as usize
 }
 
 #[inline]

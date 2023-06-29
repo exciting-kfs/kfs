@@ -68,6 +68,7 @@ impl IDTR {
 
 extern "C" {
 	fn handle_timer();
+	fn handle_syscall();
 	fn handle_keyboard();
 	fn handle_divide_error();
 	fn handle_invalid_opcode();
@@ -77,7 +78,7 @@ extern "C" {
 
 #[no_mangle]
 pub extern "C" fn handle_syscall_impl(frame: InterruptFrame) {
-	pr_info!("VECTOR NO: {}\nARG1: {}", frame.eax, frame.ebx);
+	pr_info!("SYSCALL NO: {}, ARG1: {}", frame.eax, frame.ebx);
 }
 
 pub fn init() {
@@ -92,6 +93,7 @@ pub fn init() {
 
 	let keyboard = SystemDesc::new_interrupt(handle_keyboard as usize, GDT::KERNEL_CODE, DPL_USER);
 	let lapic_timer = SystemDesc::new_interrupt(handle_timer as usize, GDT::KERNEL_CODE, DPL_USER);
+	let syscall = SystemDesc::new_interrupt(handle_syscall as usize, GDT::KERNEL_CODE, DPL_USER);
 
 	let mut idt = IDT.lock();
 	idt.write_exception(CpuException::DE, de);
@@ -101,6 +103,7 @@ pub fn init() {
 
 	idt.write_interrupt(0x21, keyboard);
 	idt.write_interrupt(0x22, lapic_timer);
+	idt.write_interrupt(0x80, syscall);
 
 	idt.load();
 }

@@ -60,8 +60,10 @@ impl fmt::Display for InterruptFrame {
 				" ES: {}\n",
 				" FS: {}\n",
 				" GS: {}\n",
-				"[EFLAGS]\n",
-				" EFLAGS: {:032b}",
+				"[EXTRA]\n",
+				" EFLAGS: {:032b}\n",
+				" HANDLER: {:#010x}\n",
+				" ERROR_CODE: {:#010x}"
 			),
 			self.esp,
 			self.ebp,
@@ -78,7 +80,9 @@ impl fmt::Display for InterruptFrame {
 			self.es & 0x0000ffff,
 			self.fs & 0x0000ffff,
 			self.gs & 0x0000ffff,
-			self.eflags
+			self.eflags,
+			self.handler,
+			self.error_code,
 		)
 	}
 }
