@@ -25,3 +25,44 @@ impl BitRange {
 		(data << self.start) & self.mask()
 	}
 }
+
+#[repr(transparent)]
+pub struct BitData {
+	data: usize,
+}
+
+impl BitData {
+	pub const fn new(data: usize) -> Self {
+		Self { data }
+	}
+
+	pub fn erase_bits(&mut self, range: &BitRange) -> &mut Self {
+		self.data &= !range.mask();
+
+		self
+	}
+
+	pub fn shift_add_bits(&mut self, range: &BitRange, data: usize) -> &mut Self {
+		self.data |= range.fit(data);
+
+		self
+	}
+
+	pub fn add_bits(&mut self, range: &BitRange, data: usize) -> &mut Self {
+		self.data |= data & range.mask();
+
+		self
+	}
+
+	pub fn get_raw_bits(&self) -> usize {
+		self.data
+	}
+
+	pub fn get_bits(&self, range: &BitRange) -> usize {
+		self.data & range.mask()
+	}
+
+	pub fn shift_get_bits(&self, range: &BitRange) -> usize {
+		(self.data & range.mask()) >> range.start
+	}
+}

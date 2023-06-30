@@ -4,6 +4,7 @@
 #![feature(allocator_api)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(const_maybe_uninit_uninit_array)]
+#![feature(asm_const)]
 
 extern crate alloc;
 
@@ -25,6 +26,7 @@ mod subroutine;
 mod sync;
 mod test;
 mod util;
+mod x86;
 
 use core::{arch::asm, panic::PanicInfo};
 
@@ -148,6 +150,8 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	interrupt::apic::init();
 
 	driver::ps2::init().expect("failed to init PS/2");
+
+	x86::init();
 
 	// TODO keyboard interrupt handling.
 	// unsafe { core::arch::asm!("sti") };
