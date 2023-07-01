@@ -1,11 +1,6 @@
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 
-use crate::interrupt::irq_disable;
-use crate::interrupt::irq_enable;
-use crate::interrupt::irq_stack_restore;
-use crate::interrupt::irq_stack_save;
-
 use super::TryLockFail;
 
 #[derive(Debug)]
@@ -31,16 +26,6 @@ impl SpinLock {
 		}
 	}
 
-	pub fn lock_irq(&self) {
-		irq_disable();
-		self.lock();
-	}
-
-	pub fn lock_irq_save(&self) {
-		irq_stack_save();
-		self.lock();
-	}
-
 	pub fn try_lock(&self) -> Result<(), TryLockFail> {
 		match self
 			.lock_atomic
@@ -53,15 +38,5 @@ impl SpinLock {
 
 	pub fn unlock(&self) {
 		self.lock_atomic.store(false, Ordering::Release);
-	}
-
-	pub fn unlock_irq(&self) {
-		self.unlock();
-		irq_enable();
-	}
-
-	pub fn unlock_irq_restore(&self) {
-		self.unlock();
-		irq_stack_restore();
 	}
 }

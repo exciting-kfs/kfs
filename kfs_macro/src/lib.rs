@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, ItemFn, ReturnType};
+use syn::{parse_macro_input, FnArg, ItemFn, ReturnType, Visibility};
 
 #[proc_macro_attribute]
 pub fn ktest(attr: TokenStream, input: TokenStream) -> TokenStream {
@@ -43,4 +43,54 @@ pub fn ktest(attr: TokenStream, input: TokenStream) -> TokenStream {
 
 	config.extend(test);
 	TokenStream::from(config)
+}
+
+#[proc_macro_attribute]
+pub fn context(attr: TokenStream, input: TokenStream) -> TokenStream {
+	let mut inner = parse_macro_input!(input as ItemFn);
+
+	// backup some stuff about inner function for making outer function.
+	let ident = inner.sig.ident.clone();
+	let vis = inner.vis.clone();
+	let param = inner.sig.inputs.clone();
+	let ret = inner.sig.output.clone();
+	let abi = inner.sig.abi.clone();
+	let unsafety = inner.sig.unsafety.clone();
+
+	// add prefix '__inner_' and restrict visibility of inner function.
+	let inner_name = format!("__inner_{}", inner.sig.ident.to_string());
+	inner.sig.ident = format_ident!("{}", inner_name);
+	inner.vis = Visibility::Inherited; // private
+	let call_inner = inner.sig.ident.clone();
+
+	let mut inner_param = quote!();
+	inner.sig.inputs.clone().into_iter().for_each(|arg| {
+		inner_param.extend(match arg {
+			FnArg::Receiver(_) => panic!("kfs_macro: context: not supported"),
+			FnArg::Typed(pat_type) => {
+				let pat = pat_type.pat;
+				quote!(#pat,)
+			}
+		})
+	});
+
+	let to_context = match attr.to_string().as_str() {
+		"nmi" => quote!(InContext::NMI),
+		"kernel" => quote!(InContext::Kernel),
+		"irq_disabled" => quote!(InContext::IrqDisabled),
+		_ => panic!("kfs_macro: context: invalid context"),
+	};
+
+	let new_func = quote! {
+		#[no_mangle]
+		#vis #unsafety #abi fn #ident(#param) #ret {
+			#inner
+
+			let backup = context_switch(#to_context);
+			let ret = #call_inner(#inner_param);
+			context_switch(backup);
+			ret
+		}
+	};
+	TokenStream::from(new_func)
 }

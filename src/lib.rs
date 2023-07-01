@@ -152,10 +152,7 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 
 	driver::ps2::init().expect("failed to init PS/2");
 
-	x86::init();
-
-	// TODO keyboard interrupt handling.
-	// unsafe { core::arch::asm!("sti") };
+	unsafe { x86::init() };
 
 	match cfg!(ktest) {
 		true => run_test(),

@@ -10,6 +10,7 @@ use crate::{
 		page::{map_mmio, PageFlag},
 		util::{size_to_rank, virt_to_phys},
 	},
+	process::context::{context_switch, InContext},
 	x86::{CPU_STACK, DPL_USER, GDT},
 };
 
@@ -70,7 +71,8 @@ pub unsafe fn exec_user_space() -> ! {
 	// set IF (enable interrupt)
 	new_eflags |= 1 << 9;
 
-	let mut stack = CPU_STACK.get_mut_irq_save();
+	context_switch(InContext::IrqDisabled);
+	let stack = CPU_STACK.get_mut();
 
 	stack
 		.as_mut_ptr()

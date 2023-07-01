@@ -4,8 +4,11 @@ use core::{
 	mem::size_of,
 };
 
+use kfs_macro::context;
+
 use crate::{
 	mm::constant::PAGE_SIZE,
+	process::context::{context_switch, InContext},
 	sync::cpu_local::CpuLocal,
 	util::bitrange::{BitData, BitRange},
 };
@@ -380,18 +383,19 @@ impl Display for SystemDesc {
 	}
 }
 
-pub fn init() {
-	let cpu_stack = CPU_STACK.get_mut_irq_save();
+#[context(irq_disabled)]
+pub unsafe fn init() {
+	let cpu_stack = CPU_STACK.get_mut();
 
 	CPU_TASK_STATE.init(TaskState::new(
 		(&*cpu_stack) as *const u8 as usize + PAGE_SIZE,
 	));
 
 	CPU_GDT.init(GDT::new(
-		(&*CPU_TASK_STATE.get_mut_irq_save()) as *const TaskState as usize,
+		(&*CPU_TASK_STATE.get_mut()) as *const TaskState as usize,
 	));
 
-	let gdt = CPU_GDT.get_mut_irq_save();
+	let gdt = CPU_GDT.get_mut();
 
 	gdt.pick_up();
 	gdt.load_kernel_code();

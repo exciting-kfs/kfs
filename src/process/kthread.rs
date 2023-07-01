@@ -1,8 +1,11 @@
 use alloc::sync::Arc;
 use core::alloc::AllocError;
 
-use super::task::{Task, TASK_QUEUE};
-use crate::{interrupt::irq_enable, sync::locked::Locked};
+use super::{
+	context::{context_switch, InContext},
+	task::{Task, TASK_QUEUE},
+};
+use crate::sync::locked::Locked;
 
 extern "C" {
 	/// Immediately execute new task created by `kthread_create`
@@ -13,7 +16,7 @@ extern "C" {
 /// Cleanup IRQ mask and locks after new kernel thread started.
 unsafe extern "C" fn kthread_exec_cleanup(callback: extern "C" fn(usize) -> !, arg: usize) {
 	unsafe { TASK_QUEUE.unlock_manual() };
-	irq_enable();
+	context_switch(InContext::Kernel);
 
 	callback(arg);
 }
