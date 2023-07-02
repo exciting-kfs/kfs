@@ -48,14 +48,16 @@ pub unsafe fn copy_to_user(from: *const u8, mut ptr: NonNull<[u8]>, size: usize)
 		(TEMP_SPACE_BEGIN as *mut u8).write_bytes(0, PAGE_SIZE);
 		(TEMP_SPACE_BEGIN as *mut u8).copy_from_nonoverlapping(src, PAGE_SIZE.min(remain));
 		remain -= PAGE_SIZE.min(remain);
+
+		// TODO: TEMP_SPACE TLB flushing
 	}
 }
 
 extern "C" {
-	fn user_process_exec(esp: *mut usize);
+	fn user_process_exec(esp: *mut usize) -> !;
 }
 
-pub unsafe fn exec_user_space() {
+pub unsafe fn exec_user_space() -> ! {
 	let total_size = user_end as usize - user_start as usize;
 
 	let storage = page::alloc_pages(size_to_rank(total_size), Zone::High).unwrap();
@@ -65,6 +67,7 @@ pub unsafe fn exec_user_space() {
 	let mut new_eflags: usize;
 	asm!("pushfd", "pop {eflags}", eflags = out(reg) new_eflags);
 
+	// set IF (enable interrupt)
 	new_eflags |= 1 << 9;
 
 	let mut stack = CPU_STACK.get_mut_irq_save();

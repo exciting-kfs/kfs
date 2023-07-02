@@ -157,11 +157,11 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	// TODO keyboard interrupt handling.
 	// unsafe { core::arch::asm!("sti") };
 
-	unsafe { exec_user_space() };
-
 	match cfg!(ktest) {
 		true => run_test(),
-		false => run_process(),
+		false => unsafe { exec_user_space() },
 	};
+
+	// run_process();
 	// run_io();
 }
