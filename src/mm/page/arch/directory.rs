@@ -83,7 +83,7 @@ impl PD {
 
 			*pde = PDE::new(
 				virt_to_phys(pt as *mut PT as usize),
-				pde.flag() | PageFlag::Present,
+				PageFlag::User | PageFlag::Write | PageFlag::Present,
 			);
 
 			pt

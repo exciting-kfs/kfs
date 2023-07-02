@@ -5,16 +5,19 @@ use core::{
 };
 
 use crate::{
-	interrupt::InterruptFrame,
+	mm::constant::PAGE_SIZE,
 	sync::cpu_local::CpuLocal,
 	util::bitrange::{BitData, BitRange},
 };
 
 pub static CPU_TASK_STATE: CpuLocal<TaskState> = CpuLocal::uninit();
-pub static CPU_STACK: CpuLocal<InterruptFrame> = CpuLocal::uninit();
+pub static CPU_STACK: CpuLocal<[u8; PAGE_SIZE]> = CpuLocal::uninit();
 pub static CPU_GDT: CpuLocal<GDT> = CpuLocal::uninit();
 
-#[derive(Default)]
+pub const DPL_USER: usize = 0b11;
+pub const DPL_KERNEL: usize = 0b00;
+
+#[derive(Default, Debug)]
 #[repr(C)]
 pub struct TaskState {
 	prev_task_link: usize,
@@ -52,6 +55,7 @@ impl TaskState {
 
 		ts.ss0 = GDT::KERNEL_DATA;
 		ts.esp0 = cpu_stack;
+		ts.io_map = 0x68;
 
 		ts
 	}
@@ -135,9 +139,7 @@ impl GDT {
 	}
 }
 
-const DPL_USER: usize = 0b11;
-const DPL_KERNEL: usize = 0b00;
-
+#[derive(Clone, Copy)]
 #[repr(C)]
 pub struct SystemDesc {
 	low: BitData,
@@ -145,20 +147,31 @@ pub struct SystemDesc {
 }
 
 impl SystemDesc {
-	const LIMIT_LOW: BitRange = BitRange::new(0, 16);
+	// self.low for segment desc
 	const BASE_LOW: BitRange = BitRange::new(16, 32);
+	const LIMIT_LOW: BitRange = BitRange::new(0, 16);
 
-	const BASE_MID: BitRange = BitRange::new(0, 8);
+	// self.low for call gate
+	const OFFSET_LOW: BitRange = BitRange::new(0, 16);
+	const SELECTOR: BitRange = BitRange::new(16, 32);
+
+	// common self.high
 	const TYPE: BitRange = BitRange::new(8, 12);
 	const SYSTEM: BitRange = BitRange::new(12, 13);
 	const DPL: BitRange = BitRange::new(13, 15);
 	const PRESENT: BitRange = BitRange::new(15, 16);
+
+	// self.high for segment desc
+	const BASE_MID: BitRange = BitRange::new(0, 8);
 	const LIMIT_HIGH: BitRange = BitRange::new(16, 20);
 	const AVAILABLE: BitRange = BitRange::new(20, 21);
 	const LONG: BitRange = BitRange::new(21, 22);
 	const OPERATION_SIZE: BitRange = BitRange::new(22, 23);
 	const GRANULARITY: BitRange = BitRange::new(23, 24);
 	const BASE_HIGH: BitRange = BitRange::new(24, 32);
+
+	// self.high for call gate
+	const OFFSET_HIGH: BitRange = BitRange::new(16, 32);
 
 	pub fn new_tss(base: usize) -> Self {
 		let mut tss_desc = Self::new_null();
@@ -203,15 +216,59 @@ impl SystemDesc {
 		code
 	}
 
-	// TODO
-	// pub fn new_interrupt_gate() -> Self {}
-	// pub fn new_trap_gate() -> Self {}
+	pub fn new_interrupt(handler: usize, selector: usize, dpl: usize) -> Self {
+		let mut interrupt = Self::new_null();
 
-	pub fn new_null() -> Self {
+		interrupt
+			.set_offset(handler)
+			.set_selector(selector)
+			.set_type(0b1110)
+			.set_dpl(dpl)
+			.set_present(true);
+
+		interrupt
+	}
+
+	pub fn new_trap(handler: usize, selector: usize, dpl: usize) -> Self {
+		let mut trap = Self::new_null();
+
+		trap.set_offset(handler)
+			.set_selector(selector)
+			.set_type(0b1111)
+			.set_dpl(dpl)
+			.set_present(true);
+
+		trap
+	}
+
+	pub const fn new_null() -> Self {
 		Self {
 			low: BitData::new(0),
 			high: BitData::new(0),
 		}
+	}
+
+	fn set_offset(&mut self, offset: usize) -> &mut Self {
+		let l = (offset & 0x0000ffff) >> 0;
+		let h = (offset & 0xffff0000) >> 16;
+
+		self.low
+			.erase_bits(&Self::OFFSET_LOW)
+			.shift_add_bits(&Self::OFFSET_LOW, l);
+
+		self.high
+			.erase_bits(&Self::OFFSET_HIGH)
+			.shift_add_bits(&Self::OFFSET_HIGH, h);
+
+		self
+	}
+
+	fn set_selector(&mut self, sel: usize) -> &mut Self {
+		self.low
+			.erase_bits(&Self::SELECTOR)
+			.shift_add_bits(&Self::SELECTOR, sel);
+
+		self
 	}
 
 	fn set_base(&mut self, base: usize) -> &mut Self {
@@ -327,7 +384,7 @@ pub fn init() {
 	let cpu_stack = CPU_STACK.get_mut_irq_save();
 
 	CPU_TASK_STATE.init(TaskState::new(
-		(&*cpu_stack) as *const InterruptFrame as usize,
+		(&*cpu_stack) as *const u8 as usize + PAGE_SIZE,
 	));
 
 	CPU_GDT.init(GDT::new(

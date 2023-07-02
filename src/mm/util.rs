@@ -27,7 +27,10 @@ pub const fn rank_to_size(rank: usize) -> usize {
 }
 
 pub const fn size_to_rank(size: usize) -> usize {
-	(size >> PAGE_SHIFT).ilog2() as usize
+	match size {
+		0 => 0,
+		x => 32 - ((x - 1) >> PAGE_SHIFT).leading_zeros() as usize,
+	}
 }
 
 #[inline]
@@ -138,6 +141,20 @@ mod test {
 			let ret = bit_scan_reverse(0x0101);
 			assert_eq!(ret, 8);
 		}
+	}
+
+	#[ktest]
+	fn size_to_rank_basic() {
+		assert_eq!(size_to_rank(0), 0);
+		assert_eq!(size_to_rank(1), 0);
+		assert_eq!(size_to_rank(PAGE_SIZE), 0);
+		assert_eq!(size_to_rank(PAGE_SIZE + 1), 1);
+		assert_eq!(size_to_rank(PAGE_SIZE * 2), 1);
+		assert_eq!(size_to_rank(PAGE_SIZE * 2 + 1), 2);
+		assert_eq!(size_to_rank(PAGE_SIZE * 3), 2);
+		assert_eq!(size_to_rank(PAGE_SIZE * 4), 2);
+		assert_eq!(size_to_rank(PAGE_SIZE * 4 + 1), 3);
+		assert_eq!(size_to_rank(PAGE_SIZE * 5), 3);
 	}
 }
 
