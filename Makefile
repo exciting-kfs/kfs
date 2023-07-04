@@ -3,8 +3,10 @@
 OS := $(shell uname -s)
 ifeq ($(OS), Linux)
 UTIL := linux-gnu
+LDFLAG = -n --script=$(LINKER_SCRIPT) --gc-sections
 else
 UTIL := elf
+LDFLAG = -n --no-warn-rwx-segments --no-warn-execstack --script=$(LINKER_SCRIPT) --gc-sections
 endif
 
 # === User settings / toolchain ===
@@ -31,8 +33,6 @@ GRUB2_MKRESCUE=$(I386_GRUB2_PREFIX)/bin/grub-mkrescue
 GRUB2_I386_LIB=$(I386_GRUB2_PREFIX)/lib/grub/i386-pc
 
 # === Targets ===
-
-LDFLAG = -n --script=$(LINKER_SCRIPT) --gc-sections
 
 ifeq ($(RELESE_MODE),y)
 TARGET_ROOT := target/i686-unknown-none-elf/release
