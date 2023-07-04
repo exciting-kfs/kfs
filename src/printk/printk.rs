@@ -30,25 +30,15 @@ macro_rules! pr_warn {
 macro_rules! pr_info {
 	($($args:tt)*) => {
 		#[cfg(any(log_level = "info", log_level = "debug"))]
-		$crate::printk::__printk(
-			$crate::fmt_with!(
-				WITH(ln)
-				FMT($($args)*)
-			)
-		).unwrap()
+		$crate::printkln!($($args)*)
 	};
 }
 
 #[macro_export]
 macro_rules! pr_debug {
 	($($args:tt)*) => {
-		#[cfg(log_level = "debug")]
-		$crate::printk::__printk(
-			$crate::fmt_with!(
-				WITH(ln)
-				FMT($($args)*)
-			)
-		).unwrap()
+		#[cfg(all(log_level = "debug"))]
+		$crate::printkln!($($args)*);
 	};
 }
 

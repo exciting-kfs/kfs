@@ -20,7 +20,6 @@ impl<T> LazyInit<T> {
 		if let None = self.value {
 			self.value = Some((self.init)())
 		}
-
 		self.value.as_mut().unwrap()
 	}
 }

@@ -56,6 +56,9 @@ pub fn context(attr: TokenStream, input: TokenStream) -> TokenStream {
 	let ret = inner.sig.output.clone();
 	let abi = inner.sig.abi.clone();
 	let unsafety = inner.sig.unsafety.clone();
+	let asyncness = inner.sig.asyncness.clone();
+	let constness = inner.sig.constness.clone();
+	let generics = inner.sig.generics.clone();
 
 	// add prefix '__inner_' and restrict visibility of inner function.
 	let inner_name = format!("__inner_{}", inner.sig.ident.to_string());
@@ -80,19 +83,19 @@ pub fn context(attr: TokenStream, input: TokenStream) -> TokenStream {
 		"hw_irq" => quote!(InContext::HwIrq),
 		"kernel" => quote!(InContext::Kernel),
 		"irq_disabled" => quote!(InContext::IrqDisabled),
+		"preempt_disabled" => quote!(InContext::PreemptDisabled),
 		_ => panic!("kfs_macro: context: invalid context"),
 	};
 
 	let no_mangle = match attr.as_str() {
 		"nmi" | "hw_irq" => quote!(#[no_mangle]),
-		"kernel" => quote!(),
-		"irq_disabled" => quote!(),
+		"kernel" | "irq_disabled" | "preempt_disabled" => quote!(),
 		_ => panic!("kfs_macro: context: invalid context"),
 	};
 
 	let new_func = quote! {
 		#no_mangle
-		#vis #unsafety #abi fn #ident(#param) #ret {
+		#vis #constness #asyncness #unsafety #abi fn #ident #generics (#param) #ret {
 			use crate::process::context::InContext;
 			#[inline(always)]
 			#inner

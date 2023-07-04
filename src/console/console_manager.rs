@@ -64,7 +64,6 @@ impl ConsoleManager {
 				return;
 			}
 		}
-
 		self.cons[self.foreground].update(ev.key);
 	}
 
@@ -87,5 +86,14 @@ impl ConsoleManager {
 
 	pub fn flush_foreground(&mut self) {
 		self.cons[self.foreground].flush();
+	}
+}
+
+pub fn console_manager_tasklet(key_event: &mut KeyEvent) {
+	unsafe {
+		let cm = CONSOLE_MANAGER.get();
+		cm.update(*key_event);
+		cm.draw();
+		cm.flush_all();
 	}
 }

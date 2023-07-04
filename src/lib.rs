@@ -37,7 +37,6 @@ use input::{key_event::Code, keyboard::KEYBOARD};
 use process::{
 	kthread::{kthread_create, kthread_exec},
 	task::{CURRENT, TASK_QUEUE},
-	user_space::exec_user_space,
 };
 use test::{exit_qemu_with, TEST_ARRAY};
 
@@ -162,8 +161,8 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 
 	match cfg!(ktest) {
 		true => run_test(),
-		// false => run_process(),
-		false => unsafe { exec_user_space() },
+		false => run_process(),
+		// false => unsafe { exec_user_space() },
 		// false => run_io(),
 	};
 }

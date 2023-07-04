@@ -14,17 +14,21 @@ pub fn available() -> bool {
 	test_status_now(Status::OBF)
 }
 
-pub fn get_raw_scancode() -> Option<u8> {
+pub fn poll_raw_scancode() -> Option<u8> {
 	if available() {
-		Some(KEYBOARD_PORT.read_byte())
+		Some(get_raw_scancode())
 	} else {
 		None
 	}
 }
 
+pub fn get_raw_scancode() -> u8 {
+	KEYBOARD_PORT.read_byte()
+}
+
 pub fn wait_raw_scancode() -> u8 {
 	loop {
-		match get_raw_scancode() {
+		match poll_raw_scancode() {
 			Some(c) => return c,
 			None => continue,
 		}
@@ -33,7 +37,7 @@ pub fn wait_raw_scancode() -> u8 {
 
 fn ignore_scancodes(seq: &[u8]) {
 	for byte in seq {
-		let code = get_raw_scancode().expect("buffer excedeed before end of scancodes.");
+		let code = poll_raw_scancode().expect("buffer excedeed before end of scancodes.");
 
 		if *byte != code {
 			panic!("scancode mismatch. expected={byte}, got={code}");
@@ -74,18 +78,21 @@ pub fn wait_key_event() -> KeyEvent {
 ///
 /// if there is no available event, then returns None.
 pub fn get_key_event() -> Option<KeyEvent> {
-	let mut raw_scancode = get_raw_scancode()?;
+	let raw_scancode = poll_raw_scancode()?;
+	Some(into_key_event(raw_scancode))
+}
 
+/// Change raw_scancode into KeyEvent
+pub fn into_key_event(mut raw_scancode: u8) -> KeyEvent {
 	let page = match raw_scancode {
-		PAUSE => return Some(get_pause_keyevent()),
+		PAUSE => return get_pause_keyevent(),
 		CODE_PAGE2 => {
-			raw_scancode = get_raw_scancode().expect("buffer excedeed before end of scancodes.");
+			raw_scancode = poll_raw_scancode().expect("buffer excedeed before end of scancodes.");
 			1
 		}
 		_ => 0,
 	};
-
-	Some(scancode_to_keyevent(page, raw_scancode))
+	scancode_to_keyevent(page, raw_scancode)
 }
 
 /// PS/2 SCAN CODE SET 1 to `Key` translate table.
