@@ -8,9 +8,6 @@ pub mod privilege_level;
 
 use core::arch::asm;
 
-pub use apic::local_id as lapic_id;
-pub use apic::LAPIC_PBASE;
-pub use apic::MSR_APIC_BASE;
 pub use interrupt_frame::InterruptFrame;
 
 pub fn irq_enable() {

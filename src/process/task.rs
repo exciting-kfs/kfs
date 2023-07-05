@@ -4,7 +4,7 @@ use core::{alloc::AllocError, mem::size_of};
 use alloc::{collections::LinkedList, sync::Arc};
 
 use crate::mm::alloc::{page::alloc_pages, Zone};
-use crate::mm::page::arch::{CURRENT_PD, PD};
+use crate::mm::page::{CURRENT_PD, PD};
 
 use crate::mm::util::*;
 use crate::sync::locked::Locked;

@@ -148,7 +148,6 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 
 		// after enabling collections.
 		acpi::init();
-		mm::page::mmio_init();
 	}
 
 	interrupt::apic::init();
@@ -157,13 +156,10 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 
 	unsafe { x86::init() };
 
-	// unsafe { exec_user_space() };
-
 	match cfg!(ktest) {
 		true => run_test(),
-		false => run_process(),
+		// false => run_process(),
+		false => unsafe { exec_user_space() },
+		// false => run_io(),
 	};
-
-	// run_process();
-	// run_io();
 }

@@ -14,6 +14,12 @@ pub struct PT {
 }
 
 impl PT {
+	pub const fn new() -> Self {
+		Self {
+			entries: [PTE::empty(); 1024],
+		}
+	}
+
 	pub fn new_from_4m(pde_4m: PDE) -> Result<&'static mut Self, AllocError> {
 		let addr = pde_4m.addr();
 		let flag = pde_4m.flag();
@@ -53,11 +59,17 @@ pub struct PTE {
 }
 
 impl PTE {
-	const ADDR_MASK: u32 = 0b11111111_11111111_11110000_00000000;
+	const ADDR_MASK: u32 = 0xffff_f000;
 
 	pub fn new(addr: usize, flags: PageFlag) -> Self {
 		Self {
 			data: PageFlag::from_bits_retain(addr as u32 & Self::ADDR_MASK) | flags,
+		}
+	}
+
+	pub const fn empty() -> Self {
+		Self {
+			data: PageFlag::empty(),
 		}
 	}
 
