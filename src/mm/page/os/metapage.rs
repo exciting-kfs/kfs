@@ -29,7 +29,7 @@ impl MetaPage {
 		ptr.write(MetaPage {
 			prev: NonNull::new_unchecked(ptr),
 			next: NonNull::new_unchecked(ptr),
-			data: MetaData::new_unmapped(),
+			data: MetaData::new(),
 			_pin: PhantomPinned,
 		})
 	}
@@ -133,17 +133,6 @@ impl MetaPage {
 
 	pub fn rank(&self) -> usize {
 		self.data.get_flag(MetaData::RANK)
-	}
-
-	pub fn mapped_addr(&self) -> Option<usize> {
-		match self.data.mapped_addr() {
-			0 => None,
-			x => Some(x),
-		}
-	}
-
-	pub fn remap(&mut self, new_addr: usize) {
-		self.data.remap(new_addr);
 	}
 
 	pub fn next(&self) -> NonNull<MetaPage> {

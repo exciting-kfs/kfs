@@ -1,5 +1,29 @@
 use core::cmp::Ordering;
 
+use crate::mm::constant::{KMAP_OFFSET, VMALLOC_OFFSET, VM_OFFSET};
+
+pub enum AddressSpace {
+	User,
+	Kernel,
+	Vmalloc,
+	Kmap,
+	HighIO,
+}
+
+impl AddressSpace {
+	pub fn identify(vaddr: usize) -> Self {
+		if vaddr < VM_OFFSET {
+			AddressSpace::User
+		} else if vaddr < VMALLOC_OFFSET {
+			AddressSpace::Kernel
+		} else if vaddr < KMAP_OFFSET {
+			AddressSpace::Kmap
+		} else {
+			AddressSpace::HighIO
+		}
+	}
+}
+
 /// Represent `count` of continuous pages.
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub struct Page {

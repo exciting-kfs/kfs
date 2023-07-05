@@ -6,8 +6,13 @@ pub const PT_ENTRIES: usize = 1024;
 pub const PD_ENTRIES: usize = 1024;
 pub const PT_COVER_SIZE: usize = PT_ENTRIES * PAGE_SIZE;
 
+// Virtual address space
+// OFFSET 0         3072MB          3972MB           4072MB      4076MB          4096MB
+//        [ USER(3GB) | KERNEL(896MB) | VMALLOC(104MB) | KMAP(4MB) | HIGH_IO(20MB) ]
 pub const VM_OFFSET: usize = 0xc000_0000;
 pub const VMALLOC_OFFSET: usize = 0xf800_0000;
+pub const KMAP_OFFSET: usize = 0xfe800000;
+pub const HIGH_IO_OFFSET: usize = 0xfec00000;
 
 /// 0x1_0000_0000 / PAGE_SIZE
 pub const LAST_PFN: usize = (0x8000_0000 / PAGE_SIZE) + (0x8000_0000 / PAGE_SIZE);

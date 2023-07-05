@@ -1,1 +1,5 @@
-pub use crate::interrupt::lapic_id as smp_id;
+use crate::interrupt::apic::local::LOCAL_APIC;
+
+pub fn smp_id() -> usize {
+	LOCAL_APIC.id()
+}

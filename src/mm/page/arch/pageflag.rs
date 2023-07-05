@@ -11,6 +11,7 @@ bitflags! {
 		const PCD = 16;
 		const Accessed = 32;
 		const Dirty = 64;
+		const PAT = 128;
 		const Global = 256;
 	}
 }

@@ -7,7 +7,7 @@ use crate::{
 	mm::{
 		alloc::{page, Zone},
 		constant::PAGE_SIZE,
-		page::{map_mmio, PageFlag},
+		page::{map_page, PageFlag},
 		util::{size_to_rank, virt_to_phys},
 	},
 	process::context::{context_switch, InContext},
@@ -32,14 +32,14 @@ pub unsafe fn copy_to_user(from: *const u8, mut ptr: NonNull<[u8]>, size: usize)
 		let dst = raw_ptr.add(x * PAGE_SIZE);
 		let src = from.add(x * PAGE_SIZE);
 
-		map_mmio(
+		map_page(
 			TEMP_SPACE_BEGIN,
 			virt_to_phys(dst as usize),
 			PageFlag::Present | PageFlag::Write,
 		)
 		.unwrap();
 
-		map_mmio(
+		map_page(
 			USER_SPACE_BEGIN + x * PAGE_SIZE,
 			virt_to_phys(dst as usize),
 			PageFlag::Present | PageFlag::Write | PageFlag::User,

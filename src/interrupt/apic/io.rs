@@ -1,128 +1,286 @@
-use alloc::vec::Vec;
+use core::ptr::{addr_of_mut, NonNull};
 
-use crate::{acpi::IOAPIC_INFO, mm::util::phys_to_virt, sync::locked::Locked};
+use crate::acpi::IOAPIC_INFO;
+use crate::mm::constant::HIGH_IO_OFFSET;
+use crate::sync::singleton::Singleton;
+use crate::util::bitrange::{BitData, BitRange};
 
-pub const REDIR_TABLE_COUNT: usize = 24;
+pub const KEYBOARD_IRQ: usize = 1;
+pub const SERIAL_PORT1: usize = 3;
+pub const SERIAL_PORT2: usize = 4;
 
-static mut IOAPIC_ACCESS_REGISTERS: Vec<Locked<AccessRegister>> = Vec::new();
+pub static IO_APIC: Singleton<IOAPIC> = Singleton::uninit();
 
-struct AccessRegister {
-	base_addr: usize,
+#[derive(Debug)]
+pub enum IOAPICError {
+	UnknownLayout,
+	InvalidBaseAddr,
 }
 
-impl AccessRegister {
-	const SELECT: usize = 0x00;
-	const WINDOW: usize = 0x10;
-
-	const fn new(base_addr: usize) -> Self {
-		Self { base_addr }
+pub fn init() -> Result<(), IOAPICError> {
+	// assume there is only one I/O APIC.
+	if IOAPIC_INFO.io_apics.len() != 1 {
+		return Err(IOAPICError::UnknownLayout);
 	}
 
-	fn read(&self, kind: RegKind) -> Vec<usize> {
-		match kind {
-			x @ (RegKind::ID | RegKind::VERSION | RegKind::ArbitrationID) => {
-				self.read_register(x.identify(), 1)
-			}
-			x => self.read_register(x.identify(), 2),
+	let mmio_base = IOAPIC_INFO.io_apics[0].address as usize;
+
+	// MMIO address for I/O APIC must be reside in HIGH_IO
+	if mmio_base < HIGH_IO_OFFSET {
+		return Err(IOAPICError::InvalidBaseAddr);
+	}
+
+	unsafe {
+		IO_APIC.write(IOAPIC::new(NonNull::new_unchecked(
+			mmio_base as *mut DirectRegister,
+		)))
+	};
+
+	let mut apic = IO_APIC.lock();
+
+	let mut keyboard_redir = apic.read_redir(KEYBOARD_IRQ).expect("IRQ number too high.");
+
+	keyboard_redir
+		.set_vector(0x21)
+		.set_delivery_mode(DeliveryMode::Fixed)
+		.set_dest_mode(DestMode::Physical)
+		.set_trigger_mode(TriggerMode::Edge)
+		.set_mask(true) // FIXME: unmask this.
+		.set_destination(0);
+
+	apic.write_redir(KEYBOARD_IRQ, keyboard_redir)
+		.expect("IRQ number too high.");
+
+	Ok(())
+}
+
+pub struct IOAPIC {
+	direct_reg: NonNull<DirectRegister>,
+}
+
+impl IOAPIC {
+	const ID_INDEX: usize = 0x0;
+	const VERSION_INDEX: usize = 0x1;
+	const REDIR_TABLE_BASE_INDEX: usize = 0x10;
+	const REDIR_TABLE_COUNT: usize = 24;
+
+	fn new(direct_reg: NonNull<DirectRegister>) -> Self {
+		Self { direct_reg }
+	}
+
+	fn reg_ptr(&self) -> *mut DirectRegister {
+		self.direct_reg.as_ptr()
+	}
+
+	unsafe fn select_indirect_reg(&mut self, index: usize) {
+		addr_of_mut!((*self.reg_ptr()).index).write_volatile(index as u8);
+	}
+
+	unsafe fn read_indirect_reg(&mut self, index: usize) -> u32 {
+		self.select_indirect_reg(index);
+		addr_of_mut!((*self.reg_ptr()).data).read_volatile()
+	}
+
+	unsafe fn write_indirect_reg(&mut self, index: usize, data: u32) {
+		self.select_indirect_reg(index);
+		addr_of_mut!((*self.reg_ptr()).data).write_volatile(data);
+	}
+
+	fn redir_table_index(index: usize) -> (usize, usize) {
+		let low_idx = Self::REDIR_TABLE_BASE_INDEX + index;
+
+		(low_idx, low_idx + 1)
+	}
+
+	pub fn end_of_interrupt(&mut self) {
+		unsafe { addr_of_mut!((*self.reg_ptr()).eoi).write_volatile(0) };
+	}
+
+	// TODO: use BitData
+	pub fn id(&mut self) -> u32 {
+		unsafe { self.read_indirect_reg(Self::ID_INDEX) }
+	}
+
+	// TODO: use BitData
+	pub fn version(&mut self) -> u32 {
+		unsafe { self.read_indirect_reg(Self::VERSION_INDEX) }
+	}
+
+	pub fn write_redir(&mut self, irq_number: usize, entry: RedirectionTable) -> Result<(), ()> {
+		if irq_number >= Self::REDIR_TABLE_COUNT {
+			return Err(());
 		}
+
+		let (low_idx, high_idx) = Self::redir_table_index(irq_number);
+
+		unsafe {
+			self.write_indirect_reg(low_idx, entry.low.get_raw_bits() as u32);
+			self.write_indirect_reg(high_idx, entry.high.get_raw_bits() as u32);
+		};
+
+		Ok(())
 	}
 
-	fn write(&self, kind: RegKind, value: Vec<usize>) {
-		match kind {
-			x @ (RegKind::ID | RegKind::RedirectionTable(_)) => {
-				self.write_register(x.identify(), value)
-			}
-			_ => panic!("write operation unavailable."),
+	pub fn read_redir(&mut self, irq_number: usize) -> Result<RedirectionTable, ()> {
+		if irq_number >= Self::REDIR_TABLE_COUNT {
+			return Err(());
 		}
-	}
 
-	fn read_register(&self, reg_id: usize, count: usize) -> Vec<usize> {
-		(0..count)
-			.map(|i| {
-				self.select_register(reg_id + i);
-				self.read_window()
-			})
-			.collect()
-	}
+		let (low_idx, high_idx) = Self::redir_table_index(irq_number);
 
-	fn write_register(&self, reg_id: usize, value: Vec<usize>) {
-		value.iter().enumerate().for_each(|(i, v)| {
-			self.select_register(reg_id + i);
-			self.write_window(*v);
+		let low;
+		let high;
+		unsafe {
+			low = self.read_indirect_reg(low_idx);
+			high = self.read_indirect_reg(high_idx);
+		};
+
+		Ok(RedirectionTable {
+			low: BitData::new(low as usize),
+			high: BitData::new(high as usize),
 		})
 	}
-
-	fn select_register(&self, reg_id: usize) {
-		let addr = self.base_addr + Self::SELECT;
-		let ptr = addr as *mut u8;
-		unsafe { ptr.write(reg_id as u8) };
-	}
-
-	fn read_window(&self) -> usize {
-		let addr = self.base_addr + Self::WINDOW;
-		let ptr = addr as *mut usize;
-		unsafe { ptr.read() }
-	}
-
-	fn write_window(&self, value: usize) {
-		let addr = self.base_addr + Self::WINDOW;
-		let ptr = addr as *mut usize;
-		unsafe { ptr.write(value) };
-	}
 }
 
-#[derive(Clone)]
-pub enum RegKind {
-	ID,
-	VERSION,
-	ArbitrationID,
-	RedirectionTable(u8),
+#[repr(packed)]
+struct DirectRegister {
+	// offset = 0
+	index: u8,
+	_pad1: [u8; 15],
+
+	// offset = 0x10
+	data: u32,
+	_pad2: [u8; 44],
+
+	// offset = 0x40
+	eoi: u32,
 }
 
-impl RegKind {
-	fn identify(&self) -> usize {
-		match self.clone() {
-			Self::ID => 0x00,
-			Self::VERSION => 0x01,
-			Self::ArbitrationID => 0x02,
-			Self::RedirectionTable(x) => {
-				if x >= REDIR_TABLE_COUNT as u8 {
-					panic!("invalid RedirectionTable index");
-				}
-				(x as usize) * 2 + 0x10
-			}
-		}
-	}
+pub struct RedirectionTable {
+	low: BitData,
+	high: BitData,
 }
 
-pub fn init() {
-	for io_apic in IOAPIC_INFO.io_apics.iter() {
-		unsafe {
-			let base_addr = phys_to_virt(io_apic.address as usize);
-			IOAPIC_ACCESS_REGISTERS.push(Locked::new(AccessRegister::new(base_addr)));
+impl RedirectionTable {
+	// for self.low
+	const VECTOR: BitRange = BitRange::new(0, 8);
+	const DELIVERY_MODE: BitRange = BitRange::new(8, 11);
+	const DEST_MODE: BitRange = BitRange::new(11, 12);
+	const DELIVERY_STATUS: BitRange = BitRange::new(12, 13);
+	const POLARITY: BitRange = BitRange::new(13, 14);
+	const REMOTE_IRR: BitRange = BitRange::new(14, 15);
+	const TRIGGER_MODE: BitRange = BitRange::new(15, 16);
+	const MASK: BitRange = BitRange::new(16, 17);
+	const RESERVED_LOW: BitRange = BitRange::new(17, 32);
+
+	// for self.high
+	const RESERVED_HIGH: BitRange = BitRange::new(0, 16);
+	const EXTENDED_DEST_ID: BitRange = BitRange::new(16, 24);
+	const DESTINATION: BitRange = BitRange::new(24, 32);
+
+	pub fn new(low: usize, high: usize) -> Self {
+		Self {
+			low: BitData::new(low),
+			high: BitData::new(high),
 		}
 	}
 
-	// setting keyboard interrupt vector.
+	pub fn set_vector(&mut self, vector: usize) -> &mut Self {
+		self.low
+			.erase_bits(&Self::VECTOR)
+			.shift_add_bits(&Self::VECTOR, vector);
 
-	// FIXME: uncomment here
-	// let mut v = read(0, RegKind::RedirectionTable(1));
-	// v[0] = 0x21;
-	// write(0, RegKind::RedirectionTable(1), v)
+		self
+	}
+
+	pub fn set_delivery_mode(&mut self, mode: DeliveryMode) -> &mut Self {
+		self.low
+			.erase_bits(&Self::DELIVERY_MODE)
+			.shift_add_bits(&Self::DELIVERY_MODE, mode as usize);
+
+		self
+	}
+
+	pub fn set_dest_mode(&mut self, mode: DestMode) -> &mut Self {
+		self.low
+			.erase_bits(&Self::DEST_MODE)
+			.shift_add_bits(&Self::DEST_MODE, mode as usize);
+
+		self
+	}
+
+	pub fn get_delivery_status(&self) -> DeliveryStatus {
+		match self.low.get_bits(&Self::DELIVERY_STATUS) {
+			0 => DeliveryStatus::Idle,
+			1 => DeliveryStatus::Pending,
+			_ => panic!("unknown delivery status"),
+		}
+	}
+
+	pub fn set_polarity(&mut self, polarity: Polarity) -> &mut Self {
+		self.low
+			.erase_bits(&Self::POLARITY)
+			.shift_add_bits(&Self::POLARITY, polarity as usize);
+
+		self
+	}
+
+	// TODO: pub fn (get/set)_remote_irr
+
+	pub fn set_trigger_mode(&mut self, mode: TriggerMode) -> &mut Self {
+		self.low
+			.erase_bits(&Self::TRIGGER_MODE)
+			.shift_add_bits(&Self::TRIGGER_MODE, mode as usize);
+
+		self
+	}
+
+	pub fn set_mask(&mut self, mask: bool) -> &mut Self {
+		self.low
+			.erase_bits(&Self::MASK)
+			.shift_add_bits(&Self::MASK, mask as usize);
+
+		self
+	}
+
+	pub fn get_extended_dest_id(&self) -> usize {
+		self.high.shift_get_bits(&Self::EXTENDED_DEST_ID)
+	}
+
+	pub fn set_destination(&mut self, dest: usize) -> &mut Self {
+		self.high
+			.erase_bits(&Self::DESTINATION)
+			.shift_add_bits(&Self::DESTINATION, dest);
+
+		self
+	}
 }
 
-pub fn read(ioapic_id: usize, kind: RegKind) -> Vec<usize> {
-	unsafe { IOAPIC_ACCESS_REGISTERS[ioapic_id].lock().read(kind) }
+pub enum TriggerMode {
+	Edge = 0,
+	Level = 1,
 }
 
-pub fn write(ioapic_id: usize, kind: RegKind, value: Vec<usize>) {
-	unsafe { IOAPIC_ACCESS_REGISTERS[ioapic_id].lock().write(kind, value) }
+pub enum Polarity {
+	ActiveHigh = 0,
+	ActiveLow = 1,
 }
 
-pub fn pbase(ioapic_id: usize) -> usize {
-	IOAPIC_INFO.io_apics[ioapic_id].address as usize
+pub enum DeliveryStatus {
+	Idle = 0,
+	Pending = 1,
 }
 
-pub fn vbase(ioapic_id: usize) -> usize {
-	unsafe { IOAPIC_ACCESS_REGISTERS[ioapic_id].lock().base_addr }
+pub enum DestMode {
+	Physical = 0,
+	Logical = 1,
+}
+
+pub enum DeliveryMode {
+	Fixed = 0b000,
+	LowerstPriority = 0b001,
+	SMI = 0b010,
+	NMI = 0b100,
+	INIT = 0b101,
+	ExtINT = 0b111,
 }

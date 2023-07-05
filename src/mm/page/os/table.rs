@@ -4,7 +4,7 @@ use core::ptr::NonNull;
 use core::slice::{self, from_raw_parts_mut};
 
 use crate::boot::{self, BootAlloc};
-use crate::mm::{self, util::*};
+use crate::mm::util::*;
 use crate::sync::singleton::Singleton;
 
 use super::metapage::MetaPage;
@@ -24,12 +24,8 @@ pub unsafe fn init(table: NonNull<[MetaPage]>) {
 	let base_ptr = table.as_ptr() as *mut MetaPage;
 	let count = table.len();
 
-	for (pfn, entry) in (0..count).map(|x| (x, base_ptr.add(x))) {
+	for entry in (0..count).map(|x| base_ptr.add(x)) {
 		MetaPage::construct_at(entry);
-		let vaddr = phys_to_virt(pfn_to_addr(pfn));
-		if let Some(paddr) = mm::page::to_phys(vaddr) {
-			entry.as_mut().unwrap().remap(paddr);
-		}
 	}
 
 	META_PAGE_TABLE.write(from_raw_parts_mut(base_ptr, count));

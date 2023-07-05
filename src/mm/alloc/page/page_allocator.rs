@@ -11,7 +11,7 @@ use core::alloc::AllocError;
 use core::ptr::{addr_of_mut, NonNull};
 
 /// PageAlloc Holds 2 different buddy allocator.
-/// - high, vmalloc: allocate from ZONE_HIGH (not mapped)
+/// - high: allocate from ZONE_HIGH (not mapped)
 /// - normal: allocate from ZONE_NORMAL (linear mapped)
 pub struct PageAlloc {
 	high: BuddyAlloc,

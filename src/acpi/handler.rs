@@ -6,7 +6,7 @@ use alloc::collections::BTreeMap;
 use crate::{
 	mm::{
 		constant::{PAGE_MASK, PAGE_SIZE},
-		page::{map_mmio, unmap_mmio, PageFlag},
+		page::{map_page, unmap_page, PageFlag},
 		util::{phys_to_virt, virt_to_phys},
 	},
 	sync::singleton::Singleton,
@@ -20,7 +20,7 @@ fn acpi_map(vaddr: usize, paddr: usize, flags: PageFlag) {
 		.entry(vaddr)
 		.and_modify(|curr| *curr += 1)
 		.or_insert_with(|| {
-			map_mmio(vaddr, paddr, flags).expect("mapping_apic_table");
+			map_page(vaddr, paddr, flags).expect("mapping_apic_table");
 			1
 		});
 }
@@ -34,7 +34,7 @@ fn acpi_unmap(vaddr: usize) {
 			if v > 1 {
 				ref_count.insert(vaddr, v - 1);
 			} else {
-				unmap_mmio(vaddr).expect("unmapping_apic_table");
+				unmap_page(vaddr).expect("unmapping_apic_table");
 			}
 		}
 	}
@@ -50,6 +50,7 @@ impl AcpiHandler for AcpiH {
 		size: usize,
 	) -> acpi::PhysicalMapping<Self, T> {
 		let vaddr = phys_to_virt(physical_address);
+		// pr_info!();
 		let virtual_address = NonNull::new_unchecked(vaddr as *mut T);
 
 		let vaddr_end = vaddr + size;
