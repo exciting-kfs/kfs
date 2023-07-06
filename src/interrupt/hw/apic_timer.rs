@@ -1,14 +1,13 @@
 use crate::{
 	interrupt::{apic::end_of_interrupt, InterruptFrame},
 	process::{
-		context::{context_switch, switch_stack, InContext},
+		context::switch_stack,
 		task::{CURRENT, TASK_QUEUE},
 	},
 };
-use kfs_macro::context;
 
-#[context(irq_disabled)] // TODO is it fine?
-pub unsafe extern "C" fn handle_timer_impl(_frame: &InterruptFrame) {
+#[no_mangle]
+pub unsafe extern "C" fn handle_timer_impl(_frame: InterruptFrame) {
 	end_of_interrupt();
 
 	let task_q = unsafe { TASK_QUEUE.lock_manual() };
