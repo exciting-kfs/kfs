@@ -8,7 +8,6 @@ use kfs_macro::context;
 
 use crate::{
 	mm::constant::PAGE_SIZE,
-	process::context::{context_switch, InContext},
 	sync::cpu_local::CpuLocal,
 	util::bitrange::{BitData, BitRange},
 };

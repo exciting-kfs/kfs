@@ -1,6 +1,3 @@
-// use kfs_macro::context;
-// use crate::process::context::{context_switch, InContext};
-
 use crate::interrupt::InterruptFrame;
 use crate::{pr_err, pr_info, register};
 

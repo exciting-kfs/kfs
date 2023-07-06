@@ -93,11 +93,12 @@ pub fn context(attr: TokenStream, input: TokenStream) -> TokenStream {
 	let new_func = quote! {
 		#no_mangle
 		#vis #unsafety #abi fn #ident(#param) #ret {
+			use crate::process::context::InContext;
 			#inner
 
-			let backup = context_switch(#to_context);
+			let backup = crate::process::context::context_switch(#to_context);
 			let ret = #call_inner(#inner_param);
-			context_switch(backup);
+			crate::process::context::context_switch(backup);
 			ret
 		}
 	};
