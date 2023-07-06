@@ -1,14 +1,6 @@
-use core::{
-	cell::UnsafeCell,
-	mem::MaybeUninit,
-	ops::{Deref, DerefMut},
-};
+use core::{cell::UnsafeCell, mem::MaybeUninit};
 
-use crate::{
-	config::NR_CPUS,
-	interrupt::{irq_stack_restore, irq_stack_save},
-	smp::smp_id,
-};
+use crate::{config::NR_CPUS, smp::smp_id};
 
 pub struct CpuLocal<T> {
 	data: UnsafeCell<MaybeUninit<[T; NR_CPUS]>>,
@@ -23,16 +15,20 @@ impl<T> CpuLocal<T> {
 		}
 	}
 
+	pub const fn new(value: T) -> Self
+	where
+		T: Copy,
+	{
+		Self {
+			data: UnsafeCell::new(MaybeUninit::new([value; NR_CPUS])),
+		}
+	}
+
 	pub fn init(&self, value: T) {
 		unsafe { self.data.get().cast::<T>().add(smp_id()).write(value) };
 	}
 
-	/// safety: `LocalValue::new()` disables IRQ
-	pub fn get_mut_irq_save(&self) -> LocalValue<'_, T> {
-		LocalValue::new(unsafe { self.get_mut() })
-	}
-
-	/// precondition: IRQ must be disabled.
+	/// precondition: context(irq_disabled).
 	pub unsafe fn get_mut(&self) -> &mut T {
 		let arr = self.arr_mut();
 
@@ -47,36 +43,6 @@ impl<T> CpuLocal<T> {
 
 	fn arr_mut<'l>(&self) -> &'l mut [T; NR_CPUS] {
 		unsafe { self.data.get().as_mut::<'l>().unwrap().assume_init_mut() }
-	}
-}
-
-pub struct LocalValue<'l, T> {
-	value: &'l mut T,
-}
-
-impl<'l, T> LocalValue<'l, T> {
-	fn new(value: &'l mut T) -> Self {
-		irq_stack_save();
-		LocalValue { value }
-	}
-}
-
-impl<'l, T> Deref for LocalValue<'l, T> {
-	type Target = T;
-	fn deref(&self) -> &Self::Target {
-		self.value
-	}
-}
-
-impl<'l, T> DerefMut for LocalValue<'l, T> {
-	fn deref_mut(&mut self) -> &mut Self::Target {
-		self.value
-	}
-}
-
-impl<'l, T> Drop for LocalValue<'l, T> {
-	fn drop(&mut self) {
-		irq_stack_restore();
 	}
 }
 

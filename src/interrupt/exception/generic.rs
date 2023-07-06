@@ -34,3 +34,11 @@ pub extern "C" fn handle_general_protection_impl(frame: InterruptFrame) {
 
 	loop {}
 }
+
+#[no_mangle]
+pub extern "C" fn handle_double_fault_impl(frame: InterruptFrame) {
+	pr_err!("Exception(abort): DOUBLE FAULT");
+	pr_info!("{}", frame);
+
+	loop {}
+}

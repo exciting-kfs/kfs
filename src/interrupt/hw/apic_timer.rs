@@ -7,7 +7,7 @@ use crate::{
 };
 
 #[no_mangle]
-pub unsafe extern "C" fn handle_timer_impl(_frame: &InterruptFrame) {
+pub unsafe extern "C" fn handle_timer_impl(_frame: InterruptFrame) {
 	end_of_interrupt();
 
 	let task_q = unsafe { TASK_QUEUE.lock_manual() };

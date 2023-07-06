@@ -1,3 +1,14 @@
+# === OS ===
+
+OS := $(shell uname -s)
+ifeq ($(OS), Linux)
+UTIL := linux-gnu
+LDFLAG = -n --script=$(LINKER_SCRIPT) --gc-sections
+else
+UTIL := elf
+LDFLAG = -n --no-warn-rwx-segments --no-warn-execstack --script=$(LINKER_SCRIPT) --gc-sections
+endif
+
 # === User settings / toolchain ===
 
 RELEASE_MODE := n
@@ -6,13 +17,13 @@ TEST_CASE := all
 
 I386_GRUB2_PREFIX := $(I386_GRUB2_PREFIX)
 
-OBJCOPY := i686-elf-objcopy
+OBJCOPY := i686-$(UTIL)-objcopy
 
-OBJDUMP := i686-elf-objdump
+OBJDUMP := i686-$(UTIL)-objdump
 OBJDUMP_FLAG := --demangle                                  \
                 --disassembler-options=intel,intel-mnemonic \
 
-LD := i686-elf-ld
+LD := i686-$(UTIL)-ld
 
 PAGER := vim -
 
@@ -22,8 +33,6 @@ GRUB2_MKRESCUE=$(I386_GRUB2_PREFIX)/bin/grub-mkrescue
 GRUB2_I386_LIB=$(I386_GRUB2_PREFIX)/lib/grub/i386-pc
 
 # === Targets ===
-
-LDFLAG = -n --no-warn-rwx-segments --no-warn-execstack --script=$(LINKER_SCRIPT) --gc-sections
 
 ifeq ($(RELESE_MODE),y)
 TARGET_ROOT := target/i686-unknown-none-elf/release

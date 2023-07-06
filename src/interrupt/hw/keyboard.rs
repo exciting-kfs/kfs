@@ -1,9 +1,15 @@
-use crate::{interrupt::InterruptFrame, pr_info, pr_warn};
+use crate::{
+	interrupt::{apic::end_of_interrupt, InterruptFrame},
+	io::pmio::Port,
+	pr_info, pr_warn,
+};
 
 #[no_mangle]
-pub extern "C" fn handle_keyboard_impl(frame: InterruptFrame) {
+pub extern "C" fn handle_keyboard_impl(_frame: InterruptFrame) {
 	pr_warn!("keyboard");
-	pr_info!("{}", frame);
+	let c = Port::new(0x60).read_byte();
 
-	loop {}
+	pr_info!("read from keyboard: {}", c);
+
+	end_of_interrupt();
 }
