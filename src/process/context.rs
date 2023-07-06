@@ -11,7 +11,7 @@ extern "C" {
 	pub fn switch_stack(prev_stack: *mut *mut usize, next_stack: *mut *mut usize);
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum InContext {
 	/// `NMI` and `CpuException`
 	///
@@ -20,7 +20,14 @@ pub enum InContext {
 	/// - Singleton (x)
 	/// - reentrance (x)
 	NMI,
-	/// `Hw irq` and `CpuLocal`
+	/// `Hw irq`
+	///
+	/// - irq disabled
+	/// - CpuLocal (o)
+	/// - Singleton (o)
+	/// - reentrance (x)
+	HwIrq,
+	/// `irq disabled`
 	///
 	/// - irq disabled
 	/// - CpuLocal (o)
@@ -35,9 +42,14 @@ pub enum InContext {
 
 impl InContext {
 	fn switch(&mut self, to: InContext) -> InContext {
+		if *self == to {
+			return to;
+		}
+
 		match to {
-			Self::NMI | Self::IrqDisabled => irq_disable(),
+			Self::IrqDisabled => irq_disable(),
 			Self::Kernel => irq_enable(),
+			Self::NMI | Self::HwIrq => {}
 		}
 
 		pr_debug!(

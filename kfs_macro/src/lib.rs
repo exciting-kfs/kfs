@@ -74,15 +74,24 @@ pub fn context(attr: TokenStream, input: TokenStream) -> TokenStream {
 		})
 	});
 
-	let to_context = match attr.to_string().as_str() {
+	let attr = attr.to_string();
+	let to_context = match attr.as_str() {
 		"nmi" => quote!(InContext::NMI),
+		"hw_irq" => quote!(InContext::HwIrq),
 		"kernel" => quote!(InContext::Kernel),
 		"irq_disabled" => quote!(InContext::IrqDisabled),
 		_ => panic!("kfs_macro: context: invalid context"),
 	};
 
+	let no_mangle = match attr.as_str() {
+		"nmi" | "hw_irq" => quote!(#[no_mangle]),
+		"kernel" => quote!(),
+		"irq_disabled" => quote!(),
+		_ => panic!("kfs_macro: context: invalid context"),
+	};
+
 	let new_func = quote! {
-		#[no_mangle]
+		#no_mangle
 		#vis #unsafety #abi fn #ident(#param) #ret {
 			#inner
 
