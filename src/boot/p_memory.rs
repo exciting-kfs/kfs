@@ -2,6 +2,7 @@ use core::{
 	cmp::max,
 	mem::{align_of, size_of},
 	ptr::NonNull,
+	slice::from_raw_parts,
 };
 
 use multiboot2::{BootInformation, MemoryMapTag};
@@ -34,7 +35,7 @@ impl BootAlloc {
 		Self { offset: 0 }
 	}
 
-	pub fn alloc_n<T>(&mut self, n: usize) -> NonNull<T> {
+	pub fn alloc_n<T>(&mut self, n: usize) -> NonNull<[T]> {
 		// MAX supported alignment is `PAGE_SIZE`
 		let align = next_align(self.offset, align_of::<T>()) - self.offset;
 		let size = size_of::<T>() * n;
@@ -55,7 +56,7 @@ impl BootAlloc {
 		self.offset = new_offset;
 
 		// safety: virtual address starts from `VM_OFFSET` which not contains null.
-		unsafe { NonNull::new_unchecked(phys_to_virt(alloc_begin) as *mut T) }
+		unsafe { NonNull::from(from_raw_parts(phys_to_virt(alloc_begin) as *mut T, n)) }
 	}
 
 	pub fn deinit(self) {

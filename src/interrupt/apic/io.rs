@@ -45,7 +45,7 @@ pub fn init() -> Result<(), IOAPICError> {
 		.set_delivery_mode(DeliveryMode::Fixed)
 		.set_dest_mode(DestMode::Physical)
 		.set_trigger_mode(TriggerMode::Edge)
-		.set_mask(true) // FIXME: unmask this.
+		.set_mask(false) // FIXME: unmask this.
 		.set_destination(0);
 
 	apic.write_redir(KEYBOARD_IRQ, keyboard_redir)
@@ -87,7 +87,7 @@ impl IOAPIC {
 	}
 
 	fn redir_table_index(index: usize) -> (usize, usize) {
-		let low_idx = Self::REDIR_TABLE_BASE_INDEX + index;
+		let low_idx = Self::REDIR_TABLE_BASE_INDEX + index * 2;
 
 		(low_idx, low_idx + 1)
 	}

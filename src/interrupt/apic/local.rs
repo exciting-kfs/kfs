@@ -15,6 +15,7 @@ use crate::util::{
 };
 
 use super::MSR_APIC_BASE;
+use macros::lapic_register;
 
 pub static LOCAL_APIC: LocalAPIC = LocalAPIC::uninit();
 
@@ -38,27 +39,27 @@ impl LocalAPIC {
 	}
 
 	pub fn id(&self) -> usize {
-		let raw_id = unsafe { addr_of_mut!((*self.reg_ptr()).id).read_volatile() } as usize;
+		let raw_id = unsafe { lapic_register!(id).read_volatile() } as usize;
 
 		raw_id >> 24
 	}
 
 	// TODO: separate VERSION / LVT entries
 	pub fn version(&self) -> usize {
-		unsafe { addr_of_mut!((*self.reg_ptr()).version).read_volatile() as usize }
+		unsafe { lapic_register!(version).read_volatile() as usize }
 	}
 
 	pub fn read_timer(&self) -> Timer {
-		unsafe { addr_of_mut!((*self.reg_ptr()).timer).read_volatile() }
+		unsafe { lapic_register!(timer).read_volatile() }
 	}
 
 	pub fn write_timer(&self, timer: Timer) {
-		unsafe { addr_of_mut!((*self.reg_ptr()).timer).write_volatile(timer) };
+		unsafe { lapic_register!(timer).write_volatile(timer) };
 	}
 
 	pub fn set_timer_divider(&self, divider: TimerDivider) {
 		unsafe {
-			let divider_ptr = addr_of_mut!((*self.reg_ptr()).divide_configuration);
+			let divider_ptr = lapic_register!(divide_configuration);
 			let original = divider_ptr.read_volatile();
 
 			divider_ptr.write_volatile(original | divider as u32);
@@ -66,16 +67,28 @@ impl LocalAPIC {
 	}
 
 	pub fn write_timer_initial_count(&self, count: usize) {
-		unsafe { addr_of_mut!((*self.reg_ptr()).initial_count).write_volatile(count as u32) };
+		unsafe { lapic_register!(initial_count).write_volatile(count as u32) };
 	}
 
 	pub fn read_timer_current_count(&self) -> usize {
-		unsafe { addr_of_mut!((*self.reg_ptr()).current_count).read_volatile() as usize }
+		unsafe { lapic_register!(current_count).read_volatile() as usize }
 	}
 
 	pub fn end_of_interrupt(&self) {
-		unsafe { addr_of_mut!((*self.reg_ptr()).end_of_interrupt).write_volatile(0) }
+		unsafe { lapic_register!(end_of_interrupt).write_volatile(0) }
+		// unsafe { addr_of_mut!((*self.reg_ptr()).end_of_interrupt).write_volatile(0) }
 	}
+}
+
+#[macro_use]
+mod macros {
+	macro_rules! lapic_register {
+		($id: ident) => {
+			addr_of_mut!((*LOCAL_APIC.reg_ptr()).$id)
+		};
+	}
+
+	pub(super) use lapic_register;
 }
 
 // safety: Local APIC always located at Per-CPU I/O memory.
@@ -83,99 +96,99 @@ unsafe impl Sync for LocalAPIC {}
 
 #[repr(packed)]
 struct Register {
-	_reserved1: [u8; 32],
+	_pad1: [u8; 32],
 	id: u32,
-	_reserved2: [u8; 12],
+	_pad2: [u8; 12],
 	version: u32,
-	_reserved3: [u8; 76],
+	_pad3: [u8; 76],
 	task_priority: u32,
-	_reserved4: [u8; 12],
+	_pad4: [u8; 12],
 	arbitration_priority: u32,
-	_reserved5: [u8; 12],
+	_pad5: [u8; 12],
 	processor_priority: u32,
-	_reserved6: [u8; 12],
+	_pad6: [u8; 12],
 	end_of_interrupt: u32,
-	_reserved7: [u8; 12],
+	_pad7: [u8; 12],
 	remote_read: u32,
-	_reserved8: [u8; 12],
+	_pad8: [u8; 12],
 	logical_destination: u32,
-	_reserved9: [u8; 12],
+	_pad9: [u8; 12],
 	destination_format: u32,
-	_reserved10: [u8; 12],
+	_pad10: [u8; 12],
 	spurious_interrupt_vector: u32,
-	_reserved11: [u8; 12],
+	_pad11: [u8; 12],
 	in_service0: u32,
-	_reserved12: [u8; 12],
+	_pad12: [u8; 12],
 	in_service1: u32,
-	_reserved13: [u8; 12],
+	_pad13: [u8; 12],
 	in_service2: u32,
-	_reserved14: [u8; 12],
+	_pad14: [u8; 12],
 	in_service3: u32,
-	_reserved15: [u8; 12],
+	_pad15: [u8; 12],
 	in_service4: u32,
-	_reserved16: [u8; 12],
+	_pad16: [u8; 12],
 	in_service5: u32,
-	_reserved17: [u8; 12],
+	_pad17: [u8; 12],
 	in_service6: u32,
-	_reserved18: [u8; 12],
+	_pad18: [u8; 12],
 	in_service7: u32,
-	_reserved19: [u8; 12],
+	_pad19: [u8; 12],
 	trigger_mode0: u32,
-	_reserved20: [u8; 12],
+	_pad20: [u8; 12],
 	trigger_mode1: u32,
-	_reserved21: [u8; 12],
+	_pad21: [u8; 12],
 	trigger_mode2: u32,
-	_reserved22: [u8; 12],
+	_pad22: [u8; 12],
 	trigger_mode3: u32,
-	_reserved23: [u8; 12],
+	_pad23: [u8; 12],
 	trigger_mode4: u32,
-	_reserved24: [u8; 12],
+	_pad24: [u8; 12],
 	trigger_mode5: u32,
-	_reserved25: [u8; 12],
+	_pad25: [u8; 12],
 	trigger_mode6: u32,
-	_reserved26: [u8; 12],
+	_pad26: [u8; 12],
 	trigger_mode7: u32,
-	_reserved27: [u8; 12],
+	_pad27: [u8; 12],
 	interrupt_request0: u32,
-	_reserved28: [u8; 12],
+	_pad28: [u8; 12],
 	interrupt_request1: u32,
-	_reserved29: [u8; 12],
+	_pad29: [u8; 12],
 	interrupt_request2: u32,
-	_reserved30: [u8; 12],
+	_pad30: [u8; 12],
 	interrupt_request3: u32,
-	_reserved31: [u8; 12],
+	_pad31: [u8; 12],
 	interrupt_request4: u32,
-	_reserved32: [u8; 12],
+	_pad32: [u8; 12],
 	interrupt_request5: u32,
-	_reserved33: [u8; 12],
+	_pad33: [u8; 12],
 	interrupt_request6: u32,
-	_reserved34: [u8; 12],
+	_pad34: [u8; 12],
 	interrupt_request7: u32,
-	_reserved35: [u8; 12],
+	_pad35: [u8; 12],
 	error_status: u32,
-	_reserved36: [u8; 108],
+	_pad36: [u8; 108],
 	corrected_machine_check_interrupt: u32,
-	_reserved37: [u8; 12],
+	_pad37: [u8; 12],
 	interrupt_command0: u32,
-	_reserved38: [u8; 12],
+	_pad38: [u8; 12],
 	interrupt_command1: u32,
-	_reserved39: [u8; 12],
+	_pad39: [u8; 12],
 	timer: Timer,
-	_reserved40: [u8; 12],
+	_pad40: [u8; 12],
 	thermal_sensor: u32,
-	_reserved41: [u8; 12],
+	_pad41: [u8; 12],
 	performance_monitoring_counters: u32,
-	_reserved42: [u8; 12],
+	_pad42: [u8; 12],
 	lint0: u32,
-	_reserved43: [u8; 12],
+	_pad43: [u8; 12],
 	lint1: u32,
-	_reserved44: [u8; 12],
+	_pad44: [u8; 12],
 	error: u32,
-	_reserved45: [u8; 12],
+	_pad45: [u8; 12],
 	initial_count: u32,
-	_reserved46: [u8; 12],
+	_pad46: [u8; 12],
 	current_count: u32,
-	_reserved47: [u8; 76],
+	_pad47: [u8; 76],
 	// offset must be 0x3e0
 	divide_configuration: u32,
 }
