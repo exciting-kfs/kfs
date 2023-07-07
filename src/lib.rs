@@ -127,6 +127,15 @@ extern "C" fn repeat_x(x: usize) -> ! {
 	}
 }
 
+unsafe fn kernel_boot_alloc(bi_header: usize, magic: u32) {
+	let mut bootalloc = boot::init(bi_header, magic).expect("boot information");
+
+	let meta_page_table = mm::page::alloc_meta_page_table(&mut bootalloc);
+	mm::page::init(meta_page_table);
+
+	bootalloc.deinit();
+}
+
 #[no_mangle]
 pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	driver::vga::text_vga::init();
@@ -134,21 +143,16 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 
 	// caution: order sensitive.
 	unsafe {
-		let mut bootalloc = boot::init(bi_header, magic).expect("boot information");
-
-		let meta_page_table = mm::page::alloc_meta_page_table(&mut bootalloc);
-		mm::page::init(meta_page_table);
-
-		bootalloc.deinit();
-
-		mm::alloc::page::init();
-		mm::alloc::phys::init();
-		mm::alloc::virt::init();
-		interrupt::idt::init();
-
-		// after enabling collections.
-		acpi::init();
+		kernel_boot_alloc(bi_header, magic);
 	}
+
+	mm::alloc::page::init();
+	mm::alloc::phys::init();
+	mm::alloc::virt::init();
+	interrupt::idt::init();
+
+	// after enabling collections.
+	acpi::init();
 
 	interrupt::apic::init();
 

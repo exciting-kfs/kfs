@@ -37,5 +37,5 @@ pub unsafe fn init() {
 
 	invalidate_all_tlb();
 
-	CURRENT_PD.write(PD::new(NonNull::from(&mut GLOBAL_PD_VIRT)));
+	CURRENT_PD.write(PD::new(NonNull::from(&mut GLOBAL_PD_VIRT))); // TODO Arc?
 }
