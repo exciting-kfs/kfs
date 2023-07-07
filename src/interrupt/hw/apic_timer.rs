@@ -6,7 +6,9 @@ use crate::{
 	},
 };
 
-#[no_mangle]
+use kfs_macro::context;
+
+#[context(hw_irq)]
 pub unsafe extern "C" fn handle_timer_impl(_frame: InterruptFrame) {
 	end_of_interrupt();
 
