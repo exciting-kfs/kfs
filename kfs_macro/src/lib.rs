@@ -94,6 +94,7 @@ pub fn context(attr: TokenStream, input: TokenStream) -> TokenStream {
 		#no_mangle
 		#vis #unsafety #abi fn #ident(#param) #ret {
 			use crate::process::context::InContext;
+			#[inline(always)]
 			#inner
 
 			let backup = crate::process::context::context_switch(#to_context);

@@ -156,7 +156,7 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 
 	match cfg!(ktest) {
 		true => run_test(),
-		false => unsafe { exec_user_space() },
+		false => run_process(),
 	};
 
 	// run_process();

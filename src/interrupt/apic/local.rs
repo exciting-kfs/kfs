@@ -196,7 +196,7 @@ pub fn init() {
 	v |= 0x22; // set vector number.
 	Register::LvtTimer.write(v);
 	// FIXME: Temporarly disabled
-	// set_timer_frequency();
+	set_timer_frequency();
 }
 
 fn set_timer_frequency() {
