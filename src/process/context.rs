@@ -1,7 +1,7 @@
 use crate::{
 	interrupt::{irq_disable, irq_enable},
 	pr_debug,
-	smp::smp_id, // unused warning.. why?
+	smp::smp_id,
 	sync::cpu_local::CpuLocal,
 };
 
