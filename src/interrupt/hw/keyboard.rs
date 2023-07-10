@@ -24,9 +24,9 @@ pub extern "C" fn handle_keyboard_impl(_frame: InterruptFrame) {
 	}
 	input::keyboard::change_state(event);
 
+	LOCAL_APIC.end_of_interrupt();
+
 	let tasklet = Tasklet::new(console_manager_tasklet, Box::new(event));
 	schedule_tasklet(tasklet);
 	do_tasklet_timeout();
-
-	LOCAL_APIC.end_of_interrupt();
 }
