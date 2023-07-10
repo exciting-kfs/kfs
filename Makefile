@@ -13,7 +13,7 @@ endif
 
 RELEASE_MODE := n
 DEBUG_WITH_VSCODE := y
-TEST_CASE := tasklet
+TEST_CASE := all
 
 I386_GRUB2_PREFIX := $(I386_GRUB2_PREFIX)
 
