@@ -1,15 +1,13 @@
 use crate::{
 	interrupt::{apic::local::LOCAL_APIC, InterruptFrame},
 	process::{
-		context::{cpu_context, switch_stack},
+		context::{cpu_context, switch_stack, context_switch, InContext},
 		task::{CURRENT, TASK_QUEUE},
 	},
 	sync::cpu_local::CpuLocal,
 };
 
-use kfs_macro::context;
-
-#[context(hw_irq)]
+#[no_mangle]
 pub unsafe extern "C" fn handle_timer_impl(_frame: InterruptFrame) {
 	*JIFFIES.get_mut() += 1;
 	LOCAL_APIC.end_of_interrupt();
@@ -18,6 +16,7 @@ pub unsafe extern "C" fn handle_timer_impl(_frame: InterruptFrame) {
 		return;
 	}
 
+	let backup = context_switch(InContext::HwIrq);
 	let task_q = unsafe { TASK_QUEUE.lock_manual() };
 
 	// safety: this function always called through interrupt gate.
@@ -38,6 +37,7 @@ pub unsafe extern "C" fn handle_timer_impl(_frame: InterruptFrame) {
 	switch_stack(prev_stack, next_stack);
 
 	unsafe { TASK_QUEUE.unlock_manual() }
+	context_switch(backup);
 }
 
 static JIFFIES: CpuLocal<usize> = CpuLocal::new(0);
