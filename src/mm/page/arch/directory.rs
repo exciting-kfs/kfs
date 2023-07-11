@@ -11,7 +11,7 @@ extern "C" {
 	pub static mut GLOBAL_PD_VIRT: [PDE; 1024];
 }
 
-pub static CURRENT_PD: Singleton<PD> = Singleton::uninit();
+pub static KERNEL_PD: Singleton<PD> = Singleton::uninit();
 
 pub struct PD {
 	inner: NonNull<[PDE; 1024]>,

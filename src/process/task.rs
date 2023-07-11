@@ -4,7 +4,7 @@ use core::{alloc::AllocError, mem::size_of};
 use alloc::{collections::LinkedList, sync::Arc};
 
 use crate::mm::alloc::{page::alloc_pages, Zone};
-use crate::mm::page::{CURRENT_PD, PD};
+use crate::mm::page::{KERNEL_PD, PD};
 
 use crate::mm::util::*;
 use crate::sync::locked::Locked;
@@ -31,7 +31,7 @@ pub struct Task {
 
 impl Task {
 	pub fn alloc_new() -> Result<Arc<Locked<Self>>, AllocError> {
-		let pd = CURRENT_PD.lock().clone()?;
+		let pd = KERNEL_PD.lock().clone()?;
 		let kstack = Stack::alloc()?;
 
 		Ok(Arc::new(Locked::new(Task {

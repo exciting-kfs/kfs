@@ -1,6 +1,6 @@
 use super::directory::GLOBAL_PD_VIRT;
 use super::{util::invalidate_all_tlb, PageFlag, PDE};
-use super::{CURRENT_PD, PD};
+use super::{KERNEL_PD, PD};
 
 use crate::boot::MEM_INFO;
 use crate::mm::{constant::*, util::*};
@@ -37,5 +37,5 @@ pub unsafe fn init() {
 
 	invalidate_all_tlb();
 
-	CURRENT_PD.write(PD::new(NonNull::from(&mut GLOBAL_PD_VIRT))); // TODO Arc?
+	KERNEL_PD.write(PD::new(NonNull::from(&mut GLOBAL_PD_VIRT))); // TODO Arc?
 }
