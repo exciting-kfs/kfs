@@ -30,15 +30,14 @@ mod x86;
 
 use core::{arch::asm, panic::PanicInfo};
 
-use alloc::collections::LinkedList;
 use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
 use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use input::{key_event::Code, keyboard::KEYBOARD};
-use process::{
-	kthread::{kthread_create, kthread_exec},
-	task::{CURRENT, TASK_QUEUE},
-};
+use interrupt::irq_enable;
+use process::{kthread::kthread_create, task::TASK_QUEUE};
 use test::{exit_qemu_with, TEST_ARRAY};
+
+use crate::{interrupt::irq_disable, process::task::yield_now};
 
 /// very simple panic handler.
 /// that just print panic infomation and fall into infinity loop.
@@ -104,26 +103,35 @@ fn run_io() -> ! {
 	}
 }
 
+fn idle() -> ! {
+	loop {
+		irq_disable();
+		yield_now();
+		irq_enable();
+	}
+}
+
 fn run_process() -> ! {
 	let a = kthread_create(repeat_x as usize, 1111).expect("OOM");
 	let b = kthread_create(repeat_x as usize, 2222).expect("OOM");
 	let c = kthread_create(repeat_x as usize, 3333).expect("OOM");
 
-	unsafe { TASK_QUEUE.write(LinkedList::new()) };
+	TASK_QUEUE.lock().push_back(a);
 	TASK_QUEUE.lock().push_back(b);
 	TASK_QUEUE.lock().push_back(c);
 
-	TASK_QUEUE.lock().push_back(a.clone());
-	CURRENT.init(a);
-
-	unsafe { kthread_exec(*CURRENT.get_mut().get_manual().esp_mut()) };
+	idle();
 }
 
-extern "C" fn repeat_x(x: usize) -> ! {
-	loop {
-		pr_info!("FROM X={}", x);
+extern "C" fn repeat_x(x: usize) -> usize {
+	for i in 0..10 {
+		pr_info!("FROM X={}: {}", x, i);
 		unsafe { asm!("hlt") }
 	}
+
+	pr_info!("TASK FINISHED X={}", x);
+
+	return 0;
 }
 
 unsafe fn kernel_boot_alloc(bi_header: usize, magic: u32) {
@@ -156,9 +164,11 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	interrupt::apic::io::init().unwrap();
 	interrupt::idt::init();
 
+	unsafe { x86::init() };
+
 	driver::ps2::init().expect("failed to init PS/2");
 
-	unsafe { x86::init() };
+	process::init();
 
 	match cfg!(ktest) {
 		true => run_test(),

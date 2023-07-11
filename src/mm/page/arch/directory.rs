@@ -13,6 +13,7 @@ extern "C" {
 
 pub static KERNEL_PD: Singleton<PD> = Singleton::uninit();
 
+#[repr(transparent)]
 pub struct PD {
 	inner: NonNull<[PDE; 1024]>,
 }
