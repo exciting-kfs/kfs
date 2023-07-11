@@ -1,5 +1,5 @@
 use super::constant::*;
-use core::alloc::Layout;
+use core::{alloc::Layout, arch::asm};
 
 #[inline]
 pub const fn addr_to_pfn(addr: usize) -> usize {
@@ -86,6 +86,11 @@ pub const fn align_of_rank(rank: usize) -> usize {
 #[inline]
 pub const fn size_of_rank(rank: usize) -> usize {
 	1 << PAGE_SHIFT << rank
+}
+
+#[inline]
+pub fn invlpg(vaddr: usize) {
+	unsafe { asm!("invlpg [{vaddr}]", vaddr = in(reg) vaddr, options(nostack, preserves_flags)) };
 }
 
 /// It is wrapper function for `bsf` x86 instruction.

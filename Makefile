@@ -93,7 +93,7 @@ re : clean
 
 .PHONY : run
 run : rescue
-	@scripts/qemu.sh $(RESCUE_IMG) stdio
+	@scripts/qemu.sh $(RESCUE_IMG) stdio -monitor pty
 
 .PHONY : debug
 debug : RUSTC_FLAG += --cfg ktest

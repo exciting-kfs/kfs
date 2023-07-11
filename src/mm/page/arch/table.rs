@@ -7,6 +7,8 @@ use crate::mm::constant::*;
 
 use super::{PageFlag, PDE};
 
+pub static mut KMAP_PT: PT = PT::new();
+
 #[derive(Clone)]
 #[repr(transparent)]
 pub struct PT {

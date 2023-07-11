@@ -1,6 +1,7 @@
 use super::directory::GLOBAL_PD_VIRT;
+use super::table::KMAP_PT;
 use super::{util::invalidate_all_tlb, PageFlag, PDE};
-use super::{CURRENT_PD, PD};
+use super::{KERNEL_PD, PD};
 
 use crate::boot::MEM_INFO;
 use crate::mm::{constant::*, util::*};
@@ -31,11 +32,18 @@ unsafe fn map_high_io_memory() {
 	}
 }
 
+unsafe fn map_kmap_memory() {
+	GLOBAL_PD_VIRT[KMAP_OFFSET / PT_COVER_SIZE] = PDE::new(
+		virt_to_phys(&KMAP_PT as *const _ as usize),
+		PageFlag::empty() | PageFlag::Global,
+	);
+}
+
 pub unsafe fn init() {
 	map_kernel_memory();
 	map_high_io_memory();
 
 	invalidate_all_tlb();
 
-	CURRENT_PD.write(PD::new(NonNull::from(&mut GLOBAL_PD_VIRT))); // TODO Arc?
+	KERNEL_PD.write(PD::new(NonNull::from(&mut GLOBAL_PD_VIRT)));
 }
