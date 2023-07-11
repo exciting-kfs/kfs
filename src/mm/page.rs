@@ -9,6 +9,8 @@ pub use os::{
 	alloc_meta_page_table, index_to_meta, meta_to_index, meta_to_ptr, ptr_to_meta, MetaPage,
 };
 
+use super::util::invlpg;
+
 pub fn to_phys(vaddr: usize) -> Option<usize> {
 	arch::KERNEL_PD.lock().lookup(vaddr)
 }
@@ -18,7 +20,10 @@ pub fn map_page(vaddr: usize, paddr: usize, flags: PageFlag) -> Result<(), Alloc
 }
 
 pub fn unmap_page(vaddr: usize) -> Result<(), ()> {
-	KERNEL_PD.lock().unmap_page(vaddr) // InvalidAddress
+	KERNEL_PD.lock().unmap_page(vaddr)?;
+	invlpg(vaddr);
+
+	Ok(())
 }
 
 pub unsafe fn init(table: NonNull<[MetaPage]>) {

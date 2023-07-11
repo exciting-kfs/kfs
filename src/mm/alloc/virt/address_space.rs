@@ -1,6 +1,6 @@
 use core::cmp::Ordering;
 
-use crate::mm::constant::{KMAP_OFFSET, VMALLOC_OFFSET, VM_OFFSET};
+use crate::mm::constant::*;
 
 pub enum AddressSpace {
 	User,
@@ -17,6 +17,8 @@ impl AddressSpace {
 		} else if vaddr < VMALLOC_OFFSET {
 			AddressSpace::Kernel
 		} else if vaddr < KMAP_OFFSET {
+			AddressSpace::Vmalloc
+		} else if vaddr < HIGH_IO_OFFSET {
 			AddressSpace::Kmap
 		} else {
 			AddressSpace::HighIO
