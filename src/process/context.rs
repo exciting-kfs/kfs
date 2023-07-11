@@ -18,29 +18,42 @@ pub enum InContext {
 	/// - irq disabled
 	/// - CpuLocal (?)
 	/// - Singleton (x)
-	/// - reentrance (x)
+	/// - reentrance needed (x)
 	NMI,
 	/// `Hw irq`
 	///
 	/// - irq disabled
 	/// - CpuLocal (o)
 	/// - Singleton (o)
-	/// - reentrance (x)
+	/// - reentrance needed (x)
 	HwIrq,
 	/// `irq disabled`
 	///
 	/// - irq disabled
 	/// - CpuLocal (o)
 	/// - Singleton (o)
-	/// - reentrance (x)
+	/// - reentrance needed (x)
 	IrqDisabled,
+	/// `preempt disabled`
+	///
+	/// - irq enabled
+	/// - CpuLocal (x)
+	/// - Singleton (x)
+	/// - reentrance needed (?)
+	PreemptDisabled,
 	/// `Kernel`
 	///
 	/// - irq enabled
+	/// - CpuLocal (x)
+	/// - Singleton (x)
 	Kernel,
 }
 
 impl InContext {
+	/// # CAUTION
+	///
+	/// If you want to switch from cpu local and singleton enabled context to disabled context,
+	/// you must drop resources related with them before context switching.
 	fn switch(&mut self, to: InContext) -> InContext {
 		if *self == to {
 			return to;
@@ -48,7 +61,7 @@ impl InContext {
 
 		match to {
 			Self::IrqDisabled => irq_disable(),
-			Self::Kernel => irq_enable(),
+			Self::Kernel | Self::PreemptDisabled => irq_enable(),
 			Self::NMI | Self::HwIrq => {}
 		}
 

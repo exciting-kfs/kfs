@@ -27,12 +27,8 @@ impl Keyboard {
 	pub fn get_keyboard_event(&mut self) -> Option<KeyEvent> {
 		let event = get_key_event()?;
 
-		self.change_key_state(event);
-
-		Some(KeyEvent {
-			state: event.state,
-			key: event.key,
-		})
+		self.change_state(event);
+		Some(event)
 	}
 
 	/// wait until key is pressed, then return received event.
@@ -89,7 +85,7 @@ impl Keyboard {
 		self.state[arr] ^= 1 << bit;
 	}
 
-	pub fn change_key_state(&mut self, event: KeyEvent) {
+	fn change_state(&mut self, event: KeyEvent) {
 		let code = event.key;
 
 		// pause doesn't have press / release state.
@@ -109,4 +105,8 @@ impl Keyboard {
 			}
 		}
 	}
+}
+
+pub fn change_state(event: KeyEvent) {
+	unsafe { KEYBOARD.change_state(event) }
 }

@@ -35,7 +35,7 @@ impl<T> CpuLocal<T> {
 		&mut arr[smp_id()]
 	}
 
-	pub fn replace(&self, src: T) -> T {
+	pub unsafe fn replace(&self, src: T) -> T {
 		let arr = self.arr_mut();
 		let dest = &mut arr[smp_id()];
 		core::mem::replace(dest, src)

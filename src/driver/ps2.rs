@@ -15,7 +15,7 @@ pub fn init() -> Result<(), ()> {
 
 	// drain all key event.
 	while keyboard::available() {
-		keyboard::get_raw_scancode();
+		keyboard::poll_raw_scancode();
 	}
 
 	set_config();
