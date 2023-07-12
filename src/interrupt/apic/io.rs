@@ -1,6 +1,7 @@
 use core::ptr::{addr_of_mut, NonNull};
 
 use crate::acpi::IOAPIC_INFO;
+use crate::io::pmio::Port;
 use crate::mm::constant::HIGH_IO_OFFSET;
 use crate::sync::singleton::Singleton;
 use crate::util::bitrange::{BitData, BitRange};
@@ -45,13 +46,45 @@ pub fn init() -> Result<(), IOAPICError> {
 		.set_delivery_mode(DeliveryMode::Fixed)
 		.set_dest_mode(DestMode::Physical)
 		.set_trigger_mode(TriggerMode::Edge)
-		.set_mask(false) // FIXME: unmask this.
+		.set_mask(false)
 		.set_destination(0);
 
 	apic.write_redir(KEYBOARD_IRQ, keyboard_redir)
 		.expect("IRQ number too high.");
 
+	remap_irq();
+	disable_8259_pic();
+
 	Ok(())
+}
+
+// TODO wait? study... keyboard interrupt handling
+fn disable_8259_pic() {
+	let pic_master_data: Port = Port::new(0x21);
+	let pic_slave_data: Port = Port::new(0xa1);
+
+	pic_master_data.write_byte(0xff);
+	pic_slave_data.write_byte(0xff);
+}
+
+// TODO wait? study... keyboard interrupt handling
+fn remap_irq() {
+	let pic_master_command: Port = Port::new(0x20);
+	let pic_slave_command: Port = Port::new(0xa0);
+	let pic_master_data: Port = Port::new(0x21);
+	let pic_slave_data: Port = Port::new(0xa1);
+
+	pic_master_command.write_byte(0x11);
+	pic_slave_command.write_byte(0x11);
+
+	pic_master_data.write_byte(0x20);
+	pic_slave_data.write_byte(0x28);
+
+	pic_master_data.write_byte(0x4);
+	pic_slave_data.write_byte(0x2);
+
+	pic_master_data.write_byte(0x1);
+	pic_slave_data.write_byte(0x1);
 }
 
 pub struct IOAPIC {

@@ -27,7 +27,7 @@ impl AddressSpace {
 }
 
 /// Represent `count` of continuous pages.
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct Page {
 	pub pfn: usize,
 	pub count: usize,
@@ -52,7 +52,7 @@ impl Page {
 }
 
 /// Page but ordered by PFN.
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct OrdByPfn(pub Page);
 
 impl From<Page> for OrdByPfn {
@@ -80,7 +80,7 @@ impl Ord for OrdByPfn {
 }
 
 /// Page but ordered by count(size).
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub struct OrdByCount(pub Page);
 
 impl From<Page> for OrdByCount {

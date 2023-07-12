@@ -3,7 +3,6 @@ use core::{
 	ptr::{addr_of_mut, NonNull},
 };
 
-use crate::config::TIMER_FREQUENCY_HZ;
 use crate::mm::{
 	alloc::virt::AddressSpace,
 	constant::{MB, PAGE_MASK},
@@ -13,8 +12,8 @@ use crate::util::{
 	arch::cpuid::CPUID,
 	bitrange::{BitData, BitRange},
 };
+use crate::{config::TIMER_FREQUENCY_HZ, util::arch::msr::Msr};
 
-use super::MSR_APIC_BASE;
 use macros::lapic_register;
 
 pub static LOCAL_APIC: LocalAPIC = LocalAPIC::uninit();
@@ -266,7 +265,13 @@ pub enum LocalAPICError {
 	InvalidBaseAddr,
 }
 
+const MSR_APIC_BASE: Msr = Msr::new(0x1b);
+
 pub fn init() -> Result<(), LocalAPICError> {
+	if CPUID::run(1, 0).edx & 0x100 != 0x100 {
+		panic!("apic unsupported.");
+	}
+
 	let base = MSR_APIC_BASE.read().low & PAGE_MASK;
 
 	// base must be in HighIO region

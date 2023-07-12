@@ -146,14 +146,15 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	}
 
 	mm::alloc::page::init();
+
+	interrupt::apic::local::init().unwrap();
+
 	mm::alloc::phys::init();
 	mm::alloc::virt::init();
-	interrupt::idt::init();
 
-	// after enabling collections.
 	acpi::init();
-
-	interrupt::apic::init();
+	interrupt::apic::io::init().unwrap();
+	interrupt::idt::init();
 
 	driver::ps2::init().expect("failed to init PS/2");
 

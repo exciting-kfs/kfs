@@ -4,7 +4,7 @@ use core::ops::{
 	Range,
 };
 
-use crate::mm::util::*;
+use crate::{mm::util::*, pr_warn};
 
 use super::{OrdByCount, OrdByPfn, Page};
 
@@ -16,6 +16,11 @@ pub struct AddressTree {
 }
 
 impl AddressTree {
+	pub fn show(&self) {
+		pr_warn!("BY COUNT: {:#x?}", self.by_count);
+		pr_warn!("BY   PFN: {:#x?}", self.by_pfn);
+	}
+
 	pub fn new(area: Range<usize>) -> Self {
 		let mut by_count = BTreeSet::new();
 		let mut by_pfn = BTreeSet::new();

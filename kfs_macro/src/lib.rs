@@ -47,35 +47,42 @@ pub fn ktest(attr: TokenStream, input: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn context(attr: TokenStream, input: TokenStream) -> TokenStream {
-	let mut inner = parse_macro_input!(input as ItemFn);
+	let mut func_impl = parse_macro_input!(input as ItemFn);
 
-	// backup some stuff about inner function for making outer function.
-	let ident = inner.sig.ident.clone();
-	let vis = inner.vis.clone();
-	let param = inner.sig.inputs.clone();
-	let ret = inner.sig.output.clone();
-	let abi = inner.sig.abi.clone();
-	let unsafety = inner.sig.unsafety.clone();
-	let asyncness = inner.sig.asyncness.clone();
-	let constness = inner.sig.constness.clone();
-	let generics = inner.sig.generics.clone();
+	// backup some stuff about func_impl for making outer function.
+	let ident = func_impl.sig.ident.clone();
+	let vis = func_impl.vis.clone();
+	let param = func_impl.sig.inputs.clone();
+	let ret = func_impl.sig.output.clone();
+	let abi = func_impl.sig.abi.clone();
+	let unsafety = func_impl.sig.unsafety.clone();
+	let asyncness = func_impl.sig.asyncness.clone();
+	let constness = func_impl.sig.constness.clone();
+	let generics = func_impl.sig.generics.clone();
 
-	// add prefix '__inner_' and restrict visibility of inner function.
-	let inner_name = format!("__inner_{}", inner.sig.ident.to_string());
-	inner.sig.ident = format_ident!("{}", inner_name);
-	inner.vis = Visibility::Inherited; // private
-	let call_inner = inner.sig.ident.clone();
 
-	let mut inner_param = quote!();
-	inner.sig.inputs.clone().into_iter().for_each(|arg| {
-		inner_param.extend(match arg {
-			FnArg::Receiver(_) => panic!("kfs_macro: context: not supported"),
+	let mut call_param = quote!();
+	func_impl.sig.inputs.clone().into_iter().for_each(|arg| {
+		call_param.extend(match arg {
+			FnArg::Receiver(_) => quote!(),
 			FnArg::Typed(pat_type) => {
 				let pat = pat_type.pat;
 				quote!(#pat,)
 			}
 		})
 	});
+
+	// edit name and restrict visibility.
+	let impl_name = format!("__inner_{}_impl", func_impl.sig.ident.to_string());
+	func_impl.sig.ident = format_ident!("{}", impl_name);
+	func_impl.vis = Visibility::Inherited; // private
+	let call_impl = func_impl.sig.ident.clone();
+	let call_impl = func_impl.sig.inputs.first().and_then(
+		|s| match s {
+			FnArg::Receiver(r) => Some(r),
+			_ => None
+		}).map_or(quote!(#call_impl), |_| quote!(self.#call_impl));
+
 
 	let attr = attr.to_string();
 	let to_context = match attr.as_str() {
@@ -94,14 +101,14 @@ pub fn context(attr: TokenStream, input: TokenStream) -> TokenStream {
 	};
 
 	let new_func = quote! {
+		#[inline(always)]
+		#func_impl
+
 		#no_mangle
 		#vis #constness #asyncness #unsafety #abi fn #ident #generics (#param) #ret {
 			use crate::process::context::InContext;
-			#[inline(always)]
-			#inner
-
 			let backup = crate::process::context::context_switch(#to_context);
-			let ret = #call_inner(#inner_param);
+			let ret = #call_impl(#call_param);
 			crate::process::context::context_switch(backup);
 			ret
 		}

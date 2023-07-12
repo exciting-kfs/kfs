@@ -4,6 +4,8 @@ use core::{
 	ops::{Deref, DerefMut},
 };
 
+use kfs_macro::context;
+
 use super::lock::{spinlock::SpinLock, TryLockFail};
 
 #[derive(Debug)]
@@ -31,11 +33,11 @@ impl<T> Singleton<T> {
 	}
 
 	pub unsafe fn as_mut_ptr(&self) -> *mut T {
-		self.value.get().as_mut().unwrap().as_mut_ptr()
+		self.value.get().cast()
 	}
 
-	pub unsafe fn write(&self, value: T) -> &mut T {
-		self.value.get().as_mut().unwrap().write(value)
+	pub unsafe fn write(&self, value: T) {
+		self.as_mut_ptr().write(value);
 	}
 
 	pub fn lock(&self) -> SingletonGuard<'_, T> {
@@ -56,6 +58,14 @@ impl<T> Singleton<T> {
 
 	pub unsafe fn unlock_manual(&self) {
 		self.inner.unlock();
+	}
+
+	#[context(irq_disabled)]
+	pub fn replace(&self, src: T) -> T {
+		self.inner.lock();
+		let ret = unsafe { core::ptr::replace(self.as_mut_ptr(), src) };
+		self.inner.unlock();
+		ret
 	}
 }
 
