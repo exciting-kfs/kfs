@@ -9,7 +9,6 @@ pub mod tasklet;
 
 use core::arch::asm;
 
-pub use apic::MSR_APIC_BASE;
 pub use hw::apic_timer::jiffies;
 pub use interrupt_frame::InterruptFrame;
 
