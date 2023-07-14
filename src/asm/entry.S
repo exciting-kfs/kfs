@@ -7,8 +7,10 @@ extern kernel_entry
 extern load_flat_gdt
 
 section .stack nobits write
-global kernel_stack_bottom
+global kernel_stack_top
+kernel_stack_top:
     resb STACK_SIZE
+global kernel_stack_bottom
 kernel_stack_bottom:
 
 section .text

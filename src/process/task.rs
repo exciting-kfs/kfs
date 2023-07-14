@@ -12,9 +12,13 @@ use crate::sync::{cpu_local::CpuLocal, singleton::Singleton};
 
 use crate::config::KSTACK_RANK;
 
-pub static CURRENT: CpuLocal<Arc<Locked<Task>>> = CpuLocal::uninit();
-pub static TASK_QUEUE: Singleton<LinkedList<Arc<Locked<Task>>>> = Singleton::uninit();
+use super::context::{cpu_context, switch_stack, InContext};
 
+pub static CURRENT: CpuLocal<Arc<Task>> = CpuLocal::uninit();
+pub static TASK_QUEUE: Singleton<LinkedList<Arc<Task>>> = Singleton::new(LinkedList::new());
+
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum State {
 	Ready,
 	Running,
@@ -22,38 +26,32 @@ pub enum State {
 	Exited,
 }
 
+#[repr(C)]
 pub struct Task {
-	pub state: State,
 	pub kstack: Stack,
-	pub pid: usize,
+	pub state: Locked<State>,
 	pub page_dir: PD,
 }
 
 impl Task {
-	pub fn alloc_new() -> Result<Arc<Locked<Self>>, AllocError> {
+	pub fn alloc_new(kstack: Stack) -> Result<Arc<Self>, AllocError> {
 		let pd = KERNEL_PD.lock().clone()?;
-		let kstack = Stack::alloc()?;
 
-		Ok(Arc::new(Locked::new(Task {
-			state: State::Ready,
+		Ok(Arc::new(Task {
+			state: Locked::new(State::Ready),
 			kstack,
-			pid: 0,
 			page_dir: pd,
-		})))
-	}
-
-	pub fn esp_mut(&mut self) -> *mut *mut usize {
-		self.kstack.esp_mut()
+		}))
 	}
 }
-
 const KSTACK_SIZE: usize = rank_to_size(KSTACK_RANK);
 type StackStorage = [u8; KSTACK_SIZE];
 
 #[repr(C)]
 pub struct Stack {
+	pub esp: *mut usize,
 	storage: NonNull<StackStorage>,
-	esp: *mut usize,
+	is_storage_external: bool,
 }
 
 impl Stack {
@@ -62,11 +60,19 @@ impl Stack {
 
 		let esp = (storage.as_ptr() as usize + size_of::<StackStorage>()) as *mut usize;
 
-		Ok(Self { storage, esp })
+		Ok(Self {
+			storage,
+			esp,
+			is_storage_external: false,
+		})
 	}
 
-	pub fn esp_mut(&mut self) -> *mut *mut usize {
-		&mut self.esp
+	pub unsafe fn from_raw(top: *mut StackStorage) -> Self {
+		Self {
+			esp: 0 as *mut usize,
+			storage: NonNull::new_unchecked(top),
+			is_storage_external: true,
+		}
 	}
 
 	fn is_esp_in_bound(&self, esp: *const usize) -> bool {
@@ -90,4 +96,34 @@ impl Stack {
 			Err(())
 		}
 	}
+
+	pub fn base(&self) -> usize {
+		self.storage.as_ptr() as usize + KSTACK_SIZE
+	}
+}
+
+pub fn yield_now() {
+	if let InContext::PreemptDisabled = cpu_context() {
+		return;
+	}
+
+	let next = {
+		let mut task_q = TASK_QUEUE.lock();
+
+		match task_q.pop_front() {
+			Some(x) => x,
+			None => return,
+		}
+	};
+
+	// safety: this function always called through interrupt gate.
+	// so IRQ is disabled.
+	let curr = unsafe { CURRENT.get_mut() }.clone();
+
+	let curr_task = Arc::into_raw(curr);
+	let next_task = Arc::into_raw(next);
+
+	// context_switch(backup);
+	// TODO: check this
+	unsafe { switch_stack(curr_task, next_task) };
 }

@@ -1,6 +1,8 @@
 %include "segment.S"
 %include "common.S"
 
+extern switch_task_finish
+
 ; INTERRUPT_HANDLER(name: ident, callback: ident, has_error_code: bool)
 ; define new interrupt handler.
 ; 
@@ -70,6 +72,9 @@ return_from_interrupt:
 
     iret
 
+; Calling convention: gcc fastcall
+;  - arg1: ecx
+;  - arg2: edx
 global switch_stack
 switch_stack:
     ; save callee-saved registers
@@ -78,29 +83,12 @@ switch_stack:
     push edi
     push ebx
 
-    mov esi, [esp + 24] ; next_stack
-    mov edi, [esp + 20] ; prev_stack
-
-    ; do stack switching with atomic operations.
-    lfence
-    xchg [edi], esp
-    xchg esp, [esi]
-    sfence
+    mov [ecx], esp
+    mov esp, [edx]
 
     pop ebx
     pop edi
     pop esi
     pop ebp
 
-    ret
-
-global kthread_exec
-kthread_exec:
-    mov esp, [esp + 4]
-    add esp, 16
-    ret
-
-global user_process_exec
-user_process_exec:
-    mov esp, [esp + 4]
-    jmp return_from_interrupt
+    jmp switch_task_finish

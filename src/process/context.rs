@@ -1,14 +1,40 @@
+use core::mem;
+
+use alloc::sync::Arc;
+
+use super::task::{State, Task, CURRENT, TASK_QUEUE};
 use crate::{
 	interrupt::{irq_disable, irq_enable},
 	pr_debug,
 	smp::smp_id,
 	sync::cpu_local::CpuLocal,
+	x86::CPU_TASK_STATE,
 };
 
-extern "C" {
-	/// switch stack via exchange ESP
-	/// see asm/interrupt.S
-	pub fn switch_stack(prev_stack: *mut *mut usize, next_stack: *mut *mut usize);
+extern "fastcall" {
+	/// switch stack and call switch_task_finish
+	///
+	/// defined at asm/interrupt.S
+	#[allow(improper_ctypes)]
+	pub fn switch_stack(curr: *const Task, next: *const Task);
+}
+
+#[no_mangle]
+pub unsafe extern "fastcall" fn switch_task_finish(curr: *const Task, next: *const Task) {
+	let curr = Arc::from_raw(curr);
+	let next = Arc::from_raw(next);
+
+	let _ = mem::replace(CURRENT.get_mut(), next);
+
+	CPU_TASK_STATE
+		.get_mut()
+		.change_kernel_stack(CURRENT.get_mut().kstack.base());
+
+	if *curr.state.lock() != State::Exited {
+		TASK_QUEUE.lock().push_back(curr);
+	}
+
+	context_switch(InContext::Kernel);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -72,7 +98,7 @@ impl InContext {
 			to
 		);
 
-		core::mem::replace(self, to)
+		mem::replace(self, to)
 	}
 }
 

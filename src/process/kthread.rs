@@ -1,24 +1,14 @@
 use alloc::sync::Arc;
 use core::alloc::AllocError;
 
-use super::{
-	context::{context_switch, InContext},
-	task::{Task, TASK_QUEUE},
-};
-use crate::sync::locked::Locked;
+use crate::process::task::{yield_now, CURRENT};
 
-extern "C" {
-	/// Immediately execute new task created by `kthread_create`
-	/// see asm/interrupt.S
-	pub fn kthread_exec(esp: *mut usize) -> !;
-}
+use super::task::{Stack, State, Task};
 
 /// Cleanup IRQ mask and locks after new kernel thread started.
-unsafe extern "C" fn kthread_exec_cleanup(callback: extern "C" fn(usize) -> !, arg: usize) {
-	unsafe { TASK_QUEUE.unlock_manual() };
-	context_switch(InContext::Kernel);
-
-	callback(arg);
+unsafe extern "C" fn kthread_entry(callback: extern "C" fn(usize) -> usize, arg: usize) {
+	let ret = callback(arg);
+	sys_exit(ret);
 }
 
 /// create new kernel thread.
@@ -30,25 +20,32 @@ unsafe extern "C" fn kthread_exec_cleanup(callback: extern "C" fn(usize) -> !, a
 /// |  4 | EDI (0)                     |
 /// |  8 | ESI (0)                     |
 /// | 12 | EBP (0)                     |
-/// | 16 | EIP1 (kthread_exec_cleanup) |
+/// | 16 | EIP1 (kthread_entry)        |
 /// | 20 | EIP  for EIP1 (0)           |
 /// | 24 | ARG1 for EIP1               |
 /// | 28 | ARG2 for EIP1               |
-pub fn kthread_create(main: usize, arg: usize) -> Result<Arc<Locked<Task>>, AllocError> {
-	let new_task = Task::alloc_new()?;
+pub fn kthread_create(main: usize, arg: usize) -> Result<Arc<Task>, AllocError> {
+	let mut stack = Stack::alloc()?;
 
-	{
-		let mut task = new_task.lock();
+	stack.push(arg).unwrap();
+	stack.push(main).unwrap();
+	stack.push(0).unwrap();
+	stack.push(kthread_entry as usize).unwrap();
+	stack.push(0).unwrap();
+	stack.push(0).unwrap();
+	stack.push(0).unwrap();
+	stack.push(0).unwrap();
 
-		task.kstack.push(arg).unwrap();
-		task.kstack.push(main).unwrap();
-		task.kstack.push(0).unwrap();
-		task.kstack.push(kthread_exec_cleanup as usize).unwrap();
-		task.kstack.push(0).unwrap();
-		task.kstack.push(0).unwrap();
-		task.kstack.push(0).unwrap();
-		task.kstack.push(0).unwrap();
-	}
+	let task = Task::alloc_new(stack)?;
 
-	Ok(new_task)
+	Ok(task)
+}
+
+pub fn sys_exit(_status: usize) {
+	let current = unsafe { CURRENT.get_mut() };
+
+	*current.state.lock() = State::Exited;
+	yield_now();
+
+	// unreachable!();
 }

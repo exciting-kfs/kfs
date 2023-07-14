@@ -7,13 +7,11 @@ use core::{
 use kfs_macro::context;
 
 use crate::{
-	mm::constant::PAGE_SIZE,
 	sync::cpu_local::CpuLocal,
 	util::bitrange::{BitData, BitRange},
 };
 
 pub static CPU_TASK_STATE: CpuLocal<TaskState> = CpuLocal::uninit();
-pub static CPU_STACK: CpuLocal<[u8; PAGE_SIZE]> = CpuLocal::uninit();
 pub static CPU_GDT: CpuLocal<GDT> = CpuLocal::uninit();
 
 pub const DPL_USER: usize = 0b11;
@@ -52,14 +50,17 @@ pub struct TaskState {
 }
 
 impl TaskState {
-	pub fn new(cpu_stack: usize) -> Self {
+	pub fn new() -> Self {
 		let mut ts = Self::default();
 
 		ts.ss0 = GDT::KERNEL_DATA;
-		ts.esp0 = cpu_stack;
 		ts.io_map = 0x68;
 
 		ts
+	}
+
+	pub fn change_kernel_stack(&mut self, sp: usize) {
+		self.esp0 = sp;
 	}
 }
 
@@ -384,11 +385,7 @@ impl Display for SystemDesc {
 
 #[context(irq_disabled)]
 pub unsafe fn init() {
-	let cpu_stack = CPU_STACK.get_mut();
-
-	CPU_TASK_STATE.init(TaskState::new(
-		(&*cpu_stack) as *const u8 as usize + PAGE_SIZE,
-	));
+	CPU_TASK_STATE.init(TaskState::new());
 
 	CPU_GDT.init(GDT::new(
 		(&*CPU_TASK_STATE.get_mut()) as *const TaskState as usize,
