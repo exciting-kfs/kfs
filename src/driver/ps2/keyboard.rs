@@ -1,6 +1,7 @@
 use super::control::{test_status_now, Status};
 use crate::input::key_event::{Code, KeyEvent, KeyState};
 use crate::io::pmio::Port;
+use crate::sync::singleton::Singleton;
 
 pub(super) static KEYBOARD_PORT: Port = Port::new(0x60);
 
@@ -46,7 +47,7 @@ fn ignore_scancodes(seq: &[u8]) {
 }
 
 fn get_pause_keyevent() -> KeyEvent {
-	ignore_scancodes(&[0x1D]);
+	ignore_scancodes(&[0x1D, 0x45, 0xE1, 0x9D, 0xC5]);
 
 	KeyEvent {
 		state: KeyState::Pressed,
@@ -78,22 +79,82 @@ pub fn wait_key_event() -> KeyEvent {
 ///
 /// if there is no available event, then returns None.
 pub fn get_key_event() -> Option<KeyEvent> {
-	let raw_scancode = poll_raw_scancode()?;
-	Some(into_key_event(raw_scancode))
-}
-
-/// Change raw_scancode into KeyEvent
-pub fn into_key_event(mut raw_scancode: u8) -> KeyEvent {
+	let mut raw_scancode = poll_raw_scancode()?;
 	let page = match raw_scancode {
-		PAUSE => return get_pause_keyevent(),
+		PAUSE => return Some(get_pause_keyevent()),
 		CODE_PAGE2 => {
 			raw_scancode = poll_raw_scancode().expect("buffer excedeed before end of scancodes.");
 			1
 		}
 		_ => 0,
 	};
-	scancode_to_keyevent(page, raw_scancode)
+	Some(scancode_to_keyevent(page, raw_scancode))
 }
+
+/// Change raw_scancode into KeyEvent
+pub fn into_key_event(raw_scancode: u8) -> Option<KeyEvent> {
+	let mut kb = PS2_KEYBOARD.lock();
+	kb.update(raw_scancode);
+	kb.get_key_event()
+}
+
+struct Keyboard {
+	state: State,
+	code: u8,
+	count: u8,
+}
+
+#[repr(u8)]
+#[derive(Debug, PartialEq, Clone, Copy)]
+enum State {
+	Page0,
+	Page1,
+	Pause,
+}
+
+impl Keyboard {
+	fn update(&mut self, raw_scancode: u8) {
+		match raw_scancode {
+			PAUSE => self.state = State::Pause,
+			CODE_PAGE2 => self.state = State::Page1,
+			_ => {}
+		}
+
+		self.code = raw_scancode;
+		self.count += 1;
+	}
+
+	fn get_key_event(&mut self) -> Option<KeyEvent> {
+		let state = self.state;
+		let count = self.count;
+		let code = self.code;
+
+		match (state, count) {
+			(State::Page0, 1) => Some(scancode_to_keyevent(0, code)),
+			(State::Page1, 2) => Some(scancode_to_keyevent(1, code)),
+			(State::Pause, 6) => Some(KeyEvent {
+				state: KeyState::Pressed,
+				key: Code::Pause,
+			}),
+			_ => None,
+		}
+		.map(|ev| {
+			self.reset();
+			ev
+		})
+	}
+
+	fn reset(&mut self) {
+		self.state = State::Page0;
+		self.count = 0;
+	}
+}
+
+static PS2_KEYBOARD: Singleton<Keyboard> = Singleton::new(Keyboard {
+	state: State::Page0,
+	code: 0,
+	count: 0,
+});
 
 /// PS/2 SCAN CODE SET 1 to `Key` translate table.
 ///

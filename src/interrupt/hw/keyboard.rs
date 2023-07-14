@@ -13,14 +13,16 @@ use crate::{
 pub extern "C" fn handle_keyboard_impl(_frame: InterruptFrame) {
 	pr_warn!("keyboard");
 	let code = get_raw_scancode();
-	let event = into_key_event(code as u8);
 
-	if event.key == Code::Backtick && event.pressed() {
-		panic!("BACKTICK PRESSED!!");
-	}
-	input::keyboard::change_state(event);
+	into_key_event(code as u8).map(|ev| {
+		if ev.key == Code::Backtick && ev.pressed() {
+			panic!("BACKTICK PRESSED!!");
+		}
+		input::keyboard::change_state(ev);
 
-	schedule_fast_work(console_manager_work, event);
-	wakeup_fast_woker();
+		schedule_fast_work(console_manager_work, ev);
+		wakeup_fast_woker();
+	});
+
 	LOCAL_APIC.end_of_interrupt();
 }

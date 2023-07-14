@@ -11,12 +11,14 @@ pub static mut KEYBOARD: Keyboard = Keyboard::new();
 
 #[derive(Default)]
 pub struct Keyboard {
-	state: [u32; 8], // 256bit (at least bigger then u8::MAX)
+	pressed_key: [u32; 8], // 256bit (at least bigger then u8::MAX)
 }
 
 impl Keyboard {
 	pub const fn new() -> Self {
-		Keyboard { state: [0; 8] } // false, false, false ...
+		Keyboard {
+			pressed_key: [0; 8],
+		} // false, false, false ...
 	}
 
 	/// 키보드에서 키 하나를 입력받고, 상태를 저장한 후, 받은 키를 반환한다.
@@ -44,7 +46,7 @@ impl Keyboard {
 	pub fn pressed(&self, code: Code) -> bool {
 		let (arr, bit) = Self::bit_index(code as u8);
 
-		(self.state[arr] & (1 << bit)) != 0
+		(self.pressed_key[arr] & (1 << bit)) != 0
 	}
 
 	pub fn shift_pressed(&self) -> bool {
@@ -70,19 +72,19 @@ impl Keyboard {
 	fn clear_state_at(&mut self, idx: u8) {
 		let (arr, bit) = Self::bit_index(idx);
 
-		self.state[arr] &= !(1 << bit);
+		self.pressed_key[arr] &= !(1 << bit);
 	}
 
 	fn set_state_at(&mut self, idx: u8) {
 		let (arr, bit) = Self::bit_index(idx);
 
-		self.state[arr] |= 1 << bit;
+		self.pressed_key[arr] |= 1 << bit;
 	}
 
 	fn toggle_state_at(&mut self, idx: u8) {
 		let (arr, bit) = Self::bit_index(idx);
 
-		self.state[arr] ^= 1 << bit;
+		self.pressed_key[arr] ^= 1 << bit;
 	}
 
 	fn change_state(&mut self, event: KeyEvent) {
