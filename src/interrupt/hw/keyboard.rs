@@ -1,16 +1,12 @@
-use alloc::boxed::Box;
 use kfs_macro::context;
 
 use crate::{
-	console::console_manager_tasklet,
+	console::console_manager_work,
 	driver::ps2::keyboard::{get_raw_scancode, into_key_event},
 	input::{self, key_event::Code},
-	interrupt::{
-		apic::local::LOCAL_APIC,
-		tasklet::{do_tasklet_timeout, schedule_tasklet, Tasklet},
-		InterruptFrame,
-	},
+	interrupt::{apic::local::LOCAL_APIC, InterruptFrame},
 	pr_warn,
+	scheduler::work::{schedule_fast_work, wakeup_fast_woker},
 };
 
 #[context(hw_irq)]
@@ -24,9 +20,7 @@ pub extern "C" fn handle_keyboard_impl(_frame: InterruptFrame) {
 	}
 	input::keyboard::change_state(event);
 
+	schedule_fast_work(console_manager_work, event);
+	wakeup_fast_woker();
 	LOCAL_APIC.end_of_interrupt();
-
-	let tasklet = Tasklet::new(console_manager_tasklet, Box::new(event));
-	schedule_tasklet(tasklet);
-	do_tasklet_timeout();
 }

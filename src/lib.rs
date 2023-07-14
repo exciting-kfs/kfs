@@ -21,6 +21,7 @@ mod io;
 mod mm;
 mod printk;
 mod process;
+mod scheduler;
 mod smp;
 mod subroutine;
 mod sync;
@@ -35,6 +36,7 @@ use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use input::{key_event::Code, keyboard::KEYBOARD};
 use interrupt::irq_enable;
 use process::{kthread::kthread_create, task::TASK_QUEUE};
+use scheduler::work::slow_worker;
 use test::{exit_qemu_with, TEST_ARRAY};
 
 use crate::{interrupt::irq_disable, process::task::yield_now};
@@ -115,10 +117,12 @@ fn run_process() -> ! {
 	let a = kthread_create(repeat_x as usize, 1111).expect("OOM");
 	let b = kthread_create(repeat_x as usize, 2222).expect("OOM");
 	let c = kthread_create(repeat_x as usize, 3333).expect("OOM");
+	let worker = kthread_create(slow_worker as usize, 0).expect("OOM");
 
 	TASK_QUEUE.lock().push_back(a);
 	TASK_QUEUE.lock().push_back(b);
 	TASK_QUEUE.lock().push_back(c);
+	TASK_QUEUE.lock().push_back(worker);
 
 	idle();
 }
@@ -153,20 +157,20 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 		kernel_boot_alloc(bi_header, magic);
 	}
 
-	mm::alloc::page::init();
-
 	interrupt::apic::local::init().unwrap();
+	interrupt::idt::init();
 
+	mm::alloc::page::init();
 	mm::alloc::phys::init();
 	mm::alloc::virt::init();
 
 	acpi::init();
 	interrupt::apic::io::init().unwrap();
-	interrupt::idt::init();
 
 	unsafe { x86::init() };
 
 	driver::ps2::init().expect("failed to init PS/2");
+	scheduler::work::init().expect("worker thread init");
 
 	process::init();
 

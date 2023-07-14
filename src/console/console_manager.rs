@@ -89,7 +89,7 @@ impl ConsoleManager {
 	}
 }
 
-pub fn console_manager_tasklet(key_event: &mut KeyEvent) {
+pub fn console_manager_work(key_event: &mut KeyEvent) {
 	unsafe {
 		let cm = CONSOLE_MANAGER.get();
 		cm.update(*key_event);

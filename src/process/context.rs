@@ -3,10 +3,10 @@ use core::mem;
 use alloc::sync::Arc;
 
 use super::task::{State, Task, CURRENT, TASK_QUEUE};
+use core::fmt::Display;
+
 use crate::{
 	interrupt::{irq_disable, irq_enable},
-	pr_debug,
-	smp::smp_id,
 	sync::cpu_local::CpuLocal,
 	x86::CPU_TASK_STATE,
 };
@@ -85,20 +85,31 @@ impl InContext {
 			return to;
 		}
 
+		// pr_debug!("[{}]: ctx: {} -> {}", smp_id(), self, to);
+
+		let ret = core::mem::replace(self, to);
+
 		match to {
 			Self::IrqDisabled => irq_disable(),
 			Self::Kernel | Self::PreemptDisabled => irq_enable(),
 			Self::NMI | Self::HwIrq => {}
 		}
 
-		pr_debug!(
-			"CPU[{}]: context switched: from {:?} to {:?} ",
-			smp_id(),
-			self,
-			to
-		);
+		ret
+	}
+}
 
-		mem::replace(self, to)
+impl Display for InContext {
+	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+		let c = match self {
+			Self::HwIrq => "H",
+			Self::NMI => "N",
+			Self::IrqDisabled => "I",
+			Self::PreemptDisabled => "P",
+			Self::Kernel => "K",
+		};
+
+		write!(f, "{}", c)
 	}
 }
 
