@@ -2,6 +2,7 @@ use core::ptr::NonNull;
 use core::{alloc::AllocError, mem::size_of};
 
 use alloc::{collections::LinkedList, sync::Arc};
+use kfs_macro::context;
 
 use crate::mm::alloc::{page::alloc_pages, Zone};
 use crate::mm::page::{KERNEL_PD, PD};
@@ -12,7 +13,7 @@ use crate::sync::{cpu_local::CpuLocal, singleton::Singleton};
 
 use crate::config::KSTACK_RANK;
 
-use super::context::{cpu_context, switch_stack, InContext};
+use super::context::switch_stack;
 
 pub static CURRENT: CpuLocal<Arc<Task>> = CpuLocal::uninit();
 pub static TASK_QUEUE: Singleton<LinkedList<Arc<Task>>> = Singleton::new(LinkedList::new());
@@ -102,11 +103,8 @@ impl Stack {
 	}
 }
 
+#[context(irq_disabled)]
 pub fn yield_now() {
-	if let InContext::PreemptDisabled = cpu_context() {
-		return;
-	}
-
 	let next = {
 		let mut task_q = TASK_QUEUE.lock();
 
@@ -123,7 +121,6 @@ pub fn yield_now() {
 	let curr_task = Arc::into_raw(curr);
 	let next_task = Arc::into_raw(next);
 
-	// context_switch(backup);
 	// TODO: check this
 	unsafe { switch_stack(curr_task, next_task) };
 }
