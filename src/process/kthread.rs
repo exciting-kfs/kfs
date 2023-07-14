@@ -3,10 +3,14 @@ use core::alloc::AllocError;
 
 use crate::process::task::{yield_now, CURRENT};
 
-use super::task::{Stack, State, Task};
+use super::{
+	context::{context_switch, InContext},
+	task::{Stack, State, Task},
+};
 
 /// Cleanup IRQ mask and locks after new kernel thread started.
 unsafe extern "C" fn kthread_entry(callback: extern "C" fn(usize) -> usize, arg: usize) {
+	context_switch(InContext::Kernel);
 	let ret = callback(arg);
 	sys_exit(ret);
 }

@@ -33,8 +33,6 @@ pub unsafe extern "fastcall" fn switch_task_finish(curr: *const Task, next: *con
 	if *curr.state.lock() != State::Exited {
 		TASK_QUEUE.lock().push_back(curr);
 	}
-
-	context_switch(InContext::Kernel);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
