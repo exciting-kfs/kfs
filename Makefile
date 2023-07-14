@@ -14,6 +14,7 @@ endif
 RELEASE_MODE := n
 DEBUG_WITH_VSCODE := y
 TEST_CASE := all
+# LOG_LEVEL := debug # ALL = debug > info > warn > error
 
 I386_GRUB2_PREFIX := $(I386_GRUB2_PREFIX)
 
@@ -28,6 +29,10 @@ LD := i686-$(UTIL)-ld
 ADDR2LINE := i686-$(UTIL)-addr2line
 
 PAGER := vim -
+
+# === compiler flag ===
+
+# RUSTC_FLAG += --cfg log_level='"$(LOG_LEVEL)"' 
 
 # === toolchain (inferred from above) ===
 
