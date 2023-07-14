@@ -3,10 +3,12 @@
 
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
+use kfs_macro::context;
 
 use crate::config::CONSOLE_COUNTS;
 use crate::console::console_manager::console::SyncConsole;
 use crate::console::CONSOLE_MANAGER;
+use crate::file::FileOps;
 use crate::input::key_event::*;
 use crate::input::keyboard::KEYBOARD;
 use crate::io::{BlkRead, BlkWrite, ChRead, ChWrite, NoSpace};
@@ -220,6 +222,19 @@ impl ChRead<u8> for TTY {
 
 impl BlkWrite for TTY {}
 impl BlkRead for TTY {}
+
+impl FileOps for Locked<TTY> {
+	#[context(irq_disabled)]
+	fn read(&self, buf: &mut [u8]) -> usize {
+		// dead lock
+		self.lock().read(buf)
+	}
+
+	#[context(irq_disabled)]
+	fn write(&self, buf: &[u8]) -> usize {
+		self.lock().write(buf)
+	}
+}
 
 pub type SyncTTY = Arc<Locked<TTY>>;
 

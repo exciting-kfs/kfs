@@ -1,10 +1,12 @@
 use core::alloc::AllocError;
+use core::array;
 use core::mem;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::{collections::LinkedList, sync::Arc};
 
 use crate::config::{USER_CODE_BASE, USTACK_BASE, USTACK_PAGES};
+use crate::file::File;
 use crate::interrupt::InterruptFrame;
 use crate::mm::user::memory::Memory;
 use crate::sync::locked::{Locked, LockedGuard};
@@ -23,12 +25,15 @@ pub enum State {
 	Exited,
 }
 
+const FDTABLE_SIZE: usize = 256;
+
 #[repr(C)]
 pub struct Task {
 	kstack: Stack,
 	state: Locked<State>,
 	memory: Option<Locked<Memory>>,
 	pid: usize,
+	pub fd_table: Locked<[Option<Arc<File>>; FDTABLE_SIZE]>,
 }
 
 static LAST_PID: AtomicUsize = AtomicUsize::new(1);
@@ -45,6 +50,7 @@ impl Task {
 			state: Locked::new(State::Running),
 			memory: Some(Locked::new(memory)),
 			pid,
+			fd_table: Locked::new(array::from_fn(|_| None)),
 		}))
 	}
 
@@ -56,6 +62,7 @@ impl Task {
 			state: Locked::new(State::Running),
 			memory: None,
 			pid: 0,
+			fd_table: Locked::new(array::from_fn(|_| None)),
 		}))
 	}
 
@@ -65,6 +72,7 @@ impl Task {
 			state: Locked::new(State::Running),
 			memory: None,
 			pid: 0,
+			fd_table: Locked::new(array::from_fn(|_| None)),
 		})
 	}
 
@@ -83,6 +91,7 @@ impl Task {
 			state: Locked::new(State::Running),
 			memory: Some(Locked::new(memory)),
 			pid,
+			fd_table: Locked::new(array::from_fn(|_| None)),
 		}))
 	}
 

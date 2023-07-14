@@ -33,11 +33,15 @@ mod user_bin;
 mod util;
 mod x86;
 
+use alloc::sync::Arc;
 use console::CONSOLE_MANAGER;
 use core::{arch::asm, panic::PanicInfo};
+use driver::tty;
+use file::File;
 use process::context::yield_now;
 use process::task::{Task, TASK_QUEUE};
 use scheduler::work::slow_worker;
+use syscall::{read::read, write::write};
 use test::{exit_qemu_with, TEST_ARRAY};
 
 use crate::config::CONSOLE_COUNTS;
@@ -83,20 +87,46 @@ fn run_test() -> ! {
 	exit_qemu_with(0);
 }
 
+fn shell(_: usize) -> usize {
+	let mut buf = [0; 100];
+	loop {
+		let len = read(0, buf.as_mut_ptr(), 3);
+		write(0, buf.as_ptr(), len);
+		halt();
+	}
+
+	// return 0;
+}
+
 fn idle() -> ! {
 	loop {
 		yield_now();
 	}
 }
 
+fn halt() {
+	unsafe { asm!("hlt") }
+}
+
+fn open_default_fd(task: &mut Arc<Task>) {
+	task.fd_table.lock()[0] = Some(Arc::new(File {
+		ops: tty::open(0).unwrap(),
+		open_flag: 0,
+	}));
+}
+
 fn run_process() -> ! {
 	let a = Task::new_kernel(show_page_stat as usize, 0).expect("OOM");
+	let a = Task::new_kernel(repeat_x as usize, 1111).expect("OOM");
 	let worker = Task::new_kernel(slow_worker as usize, 0).expect("OOM");
-
+	let mut shell = Task::new_kernel(shell as usize, 0).expect("OOM");
 	// use user_bin::INIT_CODE;
 	// let init = Task::new_user(INIT_CODE).expect("OOM");
 
+	open_default_fd(&mut shell);
+
 	TASK_QUEUE.lock().push_back(a);
+	TASK_QUEUE.lock().push_back(shell);
 	TASK_QUEUE.lock().push_back(worker);
 	// TASK_QUEUE.lock().push_back(init);
 
