@@ -84,19 +84,29 @@ impl UserAddressSpace {
 			.and_then(|x| x.checked_add(start))
 			.ok_or(AllocError)?;
 
-		if start < VALID_USER_AREA.start || VALID_USER_AREA.end <= end {
+		let r_area_idx = match self.areas.binary_search_by_key(&start, |area| area.start) {
+			Ok(_) => Err(AllocError),
+			Err(i) => Ok(i),
+		}?;
+
+		let l_area_end = if r_area_idx == 0 {
+			VALID_USER_AREA.start
+		} else {
+			self.areas[r_area_idx - 1].end
+		};
+
+		let r_area_start = if r_area_idx == self.areas.len() {
+			VALID_USER_AREA.end
+		} else {
+			self.areas[r_area_idx].start
+		};
+
+		if l_area_end <= start && end <= r_area_start {
+			self.areas.insert(r_area_idx, Area::new(start, end, flags));
+			return Ok(start);
+		} else {
 			return Err(AllocError);
 		}
-
-		let new_area = Area::new(start, end, flags);
-
-		let idx = self.areas.partition_point(|x| new_area.end <= x.start);
-
-		if idx == 0 || !self.areas[idx - 1].is_overlap(&new_area) {
-			self.areas.insert(idx, new_area)
-		}
-
-		Ok(start)
 	}
 
 	pub fn allocate_area(&mut self, count: usize, flags: AreaFlag) -> Result<usize, AllocError> {
@@ -226,5 +236,44 @@ mod test {
 		let area2 = us.allocate_area(1, AreaFlag::Readable).unwrap();
 		assert!(us.query_flag(area1, AreaFlag::Readable));
 		assert!(us.query_flag(area2, AreaFlag::Readable));
+	}
+
+	#[ktest(uvma)]
+	fn overlap() {
+		let mut us = UserAddressSpace::new();
+
+		us.allocate_fixed_area(0xb000_2000, 2, AreaFlag::Readable)
+			.unwrap();
+		us.allocate_fixed_area(0xb000_6000, 2, AreaFlag::Readable)
+			.unwrap();
+
+		let temp = us
+			.allocate_fixed_area(0xb000_0000, 2, AreaFlag::Readable)
+			.unwrap();
+		us.deallocate_area(temp);
+
+		us.allocate_fixed_area(0xb000_1000, 2, AreaFlag::Readable)
+			.unwrap_err();
+		us.allocate_fixed_area(0xb000_2000, 2, AreaFlag::Readable)
+			.unwrap_err();
+		us.allocate_fixed_area(0xb000_3000, 2, AreaFlag::Readable)
+			.unwrap_err();
+
+		let temp = us
+			.allocate_fixed_area(0xb000_4000, 2, AreaFlag::Readable)
+			.unwrap();
+		us.deallocate_area(temp);
+
+		us.allocate_fixed_area(0xb000_5000, 2, AreaFlag::Readable)
+			.unwrap_err();
+		us.allocate_fixed_area(0xb000_6000, 2, AreaFlag::Readable)
+			.unwrap_err();
+		us.allocate_fixed_area(0xb000_7000, 2, AreaFlag::Readable)
+			.unwrap_err();
+
+		let temp = us
+			.allocate_fixed_area(0xb000_8000, 2, AreaFlag::Readable)
+			.unwrap();
+		us.deallocate_area(temp);
 	}
 }
