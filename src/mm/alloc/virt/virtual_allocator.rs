@@ -4,15 +4,13 @@ use core::iter::repeat_with;
 use core::ops::Range;
 use core::ptr::NonNull;
 
-use core::slice::from_raw_parts;
-
 use crate::mm::alloc::{page, Zone};
-use crate::mm::page::{index_to_meta, PageFlag};
-use crate::mm::page::{map_page, meta_to_ptr, metapage_let, to_phys, unmap_page, MetaPage};
+use crate::mm::page::{index_to_meta, PageFlag, KERNEL_PD};
+use crate::mm::page::{meta_to_ptr, metapage_let, MetaPage};
 use crate::mm::util::virt_to_phys;
 use crate::mm::{constant::*, util::*};
-use crate::pr_err;
 use crate::sync::singleton::Singleton;
+use core::slice::from_raw_parts;
 
 use super::AddressTree;
 
@@ -36,7 +34,9 @@ impl VMemAlloc {
 	pub fn size(&self, ptr: NonNull<u8>) -> usize {
 		metapage_let![dummy];
 
-		let paddr = to_phys(ptr.as_ptr() as usize).unwrap();
+		let paddr = KERNEL_PD
+			.lookup(ptr.as_ptr() as usize)
+			.expect("BUG: not allocated with vmalloc");
 		let mut page = index_to_meta(addr_to_pfn(paddr));
 		unsafe { page.as_mut().push(NonNull::new_unchecked(dummy)) };
 
@@ -67,12 +67,11 @@ impl VMemAlloc {
 
 			head.push(index_to_meta(addr_to_pfn(paddr)));
 
-			map_page(
+			KERNEL_PD.map_kernel(
 				vaddr,
 				paddr,
 				PageFlag::Present | PageFlag::Global | PageFlag::Write,
-			)
-			.map_err(|_| VMallocError::OutOfMemory(base_address))?;
+			);
 		}
 
 		Ok(NonNull::from(unsafe {
@@ -89,7 +88,7 @@ impl VMemAlloc {
 			let page = meta_to_ptr(entry);
 			page::free_pages(page);
 			let addr = base_addr + i * PAGE_SIZE;
-			let _ = unmap_page(addr);
+			KERNEL_PD.unmap_kernel(addr);
 		}
 
 		ADDRESS_TREE.lock().dealloc(base_addr, pages);
@@ -114,16 +113,9 @@ unsafe impl Allocator for VMemAlloc {
 
 	unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
 		let virt_base_addr = ptr.as_ptr() as usize;
-		let phys_base_addr = match to_phys(virt_base_addr) {
-			Some(x) => x,
-			None => {
-				pr_err!(
-					"VirtualAllocator: Deallocation requested with not allocated pointer({:p})",
-					ptr,
-				);
-				return;
-			}
-		};
+		let phys_base_addr = KERNEL_PD
+			.lookup(virt_base_addr)
+			.expect("BUG: not allocated with vmalloc");
 
 		metapage_let![dummy];
 

@@ -1,7 +1,6 @@
-use super::directory::GLOBAL_PD_VIRT;
-use super::table::KMAP_PT;
+use super::directory::{GLOBAL_PD_VIRT, KMAP_PT, VMALLOC_PT};
 use super::{util::invalidate_all_tlb, PageFlag, PDE};
-use super::{KERNEL_PD, PD};
+use super::{KERNEL_PD, PT};
 
 use crate::boot::MEM_INFO;
 use crate::mm::{constant::*, util::*};
@@ -32,18 +31,42 @@ unsafe fn map_high_io_memory() {
 	}
 }
 
+unsafe fn map_vmalloc_memory() {
+	for (i, pfn) in (addr_to_pfn(VMALLOC_OFFSET)..addr_to_pfn(KMAP_OFFSET))
+		.step_by(PT_ENTRIES)
+		.enumerate()
+	{
+		let pt_phys = virt_to_phys(VMALLOC_PT.as_mut_ptr().cast::<PT>().add(i) as usize);
+		GLOBAL_PD_VIRT[pfn / PT_ENTRIES] = PDE::new(
+			pt_phys,
+			PageFlag::Global | PageFlag::Present | PageFlag::Write,
+		);
+	}
+}
+
 unsafe fn map_kmap_memory() {
-	GLOBAL_PD_VIRT[KMAP_OFFSET / PT_COVER_SIZE] = PDE::new(
-		virt_to_phys(&KMAP_PT as *const _ as usize),
-		PageFlag::empty() | PageFlag::Global,
-	);
+	for (i, pfn) in (addr_to_pfn(KMAP_OFFSET)..addr_to_pfn(HIGH_IO_OFFSET))
+		.step_by(PT_ENTRIES)
+		.enumerate()
+	{
+		let pt_phys = virt_to_phys(KMAP_PT.as_mut_ptr().cast::<PT>().add(i) as usize);
+		GLOBAL_PD_VIRT[pfn / PT_ENTRIES] = PDE::new(
+			pt_phys,
+			PageFlag::Global | PageFlag::Present | PageFlag::Write,
+		);
+	}
 }
 
 pub unsafe fn init() {
+	// fixed mapping
 	map_kernel_memory();
 	map_high_io_memory();
 
+	// arbitary mapping
+	map_vmalloc_memory();
+	map_kmap_memory();
+
 	invalidate_all_tlb();
 
-	KERNEL_PD.write(PD::new(NonNull::from(&mut GLOBAL_PD_VIRT)));
+	KERNEL_PD.init(NonNull::from(&mut GLOBAL_PD_VIRT));
 }

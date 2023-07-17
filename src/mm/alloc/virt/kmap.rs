@@ -4,50 +4,54 @@ use kfs_macro::context;
 
 use crate::mm::page::{PageFlag, KERNEL_PD};
 use crate::mm::{constant::*, util::*};
+use crate::sync::singleton::Singleton;
 
 use super::AddressSpace;
 
-static mut KMAP_BITMAP: [usize; 32] = [0; 32];
+static KMAP_BITMAP: Singleton<BitMap> = Singleton::new(BitMap::new());
 
-// safety: this function reads from `KMAP_BITMAP` which is not `sync`
-//			so caller must do proper synchronization beforehand.
-unsafe fn find_free_space() -> Option<usize> {
-	for (i, x) in KMAP_BITMAP.iter().enumerate() {
-		let x = *x;
-		if x != usize::MAX {
-			return Some(i * 32 + x.trailing_ones() as usize);
-		}
-	}
-
-	None
+struct BitMap {
+	inner: [usize; 32],
 }
 
-// safety: this function writes into `KMAP_BITMAP` which is not `sync`
-//			so caller must do proper synchronization beforehand.
-unsafe fn toggle_bitmap(idx: usize) {
-	let idx_h = idx / 32;
-	let idx_l = idx % 32;
+impl BitMap {
+	pub const fn new() -> Self {
+		BitMap { inner: [0; 32] }
+	}
 
-	KMAP_BITMAP[idx_h] ^= 1 << idx_l;
+	pub fn find_free_space(&self) -> Option<usize> {
+		for (i, x) in self.inner.iter().enumerate() {
+			let x = *x;
+			if x != usize::MAX {
+				return Some(i * 32 + x.trailing_ones() as usize);
+			}
+		}
+
+		None
+	}
+
+	fn toggle_bitmap(&mut self, idx: usize) {
+		let idx_h = idx / 32;
+		let idx_l = idx % 32;
+
+		self.inner[idx_h] ^= 1 << idx_l;
+	}
 }
 
 #[context(irq_disabled)]
 pub fn kmap(paddr: usize) -> Result<NonNull<u8>, AllocError> {
-	let mut pd = KERNEL_PD.lock();
+	let mut bitmap = KMAP_BITMAP.lock();
 
-	let idx;
-	// safety: KERNEL_PD.lock() was called above.
-	unsafe {
-		idx = find_free_space().ok_or(AllocError)?;
-		toggle_bitmap(idx);
-	};
+	let idx = bitmap.find_free_space().ok_or(AllocError)?;
+	bitmap.toggle_bitmap(idx);
 
 	let vaddr = KMAP_OFFSET + pfn_to_addr(idx);
-	pd.map_page(
+
+	KERNEL_PD.map_kernel(
 		vaddr,
 		paddr,
 		PageFlag::Present | PageFlag::Write | PageFlag::Global,
-	)?;
+	);
 
 	// sefety: vaddr is at least `KMAP_OFFSET` (which is not null)
 	Ok(unsafe { NonNull::new_unchecked(vaddr as *mut u8) })
@@ -60,13 +64,12 @@ pub fn kunmap(vaddr: usize) {
 		return;
 	}
 
-	let mut pd = KERNEL_PD.lock();
+	let mut bitmap = KMAP_BITMAP.lock();
 
 	let idx = addr_to_pfn(vaddr - KMAP_OFFSET);
-	unsafe { toggle_bitmap(idx) }
+	bitmap.toggle_bitmap(idx);
 
-	let _ = pd.unmap_page(vaddr);
-	invlpg(vaddr);
+	KERNEL_PD.unmap_kernel(vaddr);
 }
 
 mod test {

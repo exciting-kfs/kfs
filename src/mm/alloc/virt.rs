@@ -12,7 +12,7 @@ use address_space::*;
 use address_tree::*;
 use virtual_allocator::*;
 
-use crate::mm::page::{map_page, unmap_page, PageFlag};
+use crate::mm::page::{PageFlag, KERNEL_PD};
 use crate::mm::{constant::*, util::*};
 
 pub use address_space::AddressSpace;
@@ -37,7 +37,7 @@ pub fn io_allocate(paddr: usize, count: usize) -> Result<NonNull<[u8]>, AllocErr
 	let vaddr = ADDRESS_TREE.lock().alloc(count).ok_or_else(|| AllocError)?;
 
 	for (vaddr, paddr) in (0..count).map(|x| (vaddr + x * PAGE_SIZE, paddr + x * PAGE_SIZE)) {
-		map_page(
+		KERNEL_PD.map_kernel(
 			vaddr,
 			paddr,
 			PageFlag::Present
@@ -45,7 +45,7 @@ pub fn io_allocate(paddr: usize, count: usize) -> Result<NonNull<[u8]>, AllocErr
 				| PageFlag::Write
 				| PageFlag::PAT | PageFlag::PCD
 				| PageFlag::PWT,
-		)?;
+		);
 	}
 
 	unsafe {
@@ -60,6 +60,6 @@ pub fn io_deallocate(vaddr: usize, count: usize) {
 	ADDRESS_TREE.lock().dealloc(vaddr, count);
 
 	for vaddr in (0..count).map(|x| vaddr + x * PAGE_SIZE) {
-		let _ = unmap_page(vaddr);
+		KERNEL_PD.unmap_kernel(vaddr);
 	}
 }
