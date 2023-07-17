@@ -1,5 +1,6 @@
 # build targets
 /target
+/userspace/build
 rescue.iso
 
 # mac os finder cache

@@ -55,7 +55,8 @@ handle_interrupt:
     mov gs, ax
 
     call [esp + 44] ; call real handler function
-return_from_interrupt:
+global return_from_fork
+return_from_fork:
     pop ebp
     pop edi
     pop esi

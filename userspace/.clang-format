@@ -1,0 +1,13 @@
+---
+BasedOnStyle: LLVM
+AllowShortBlocksOnASingleLine: 'false'
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: None
+AllowShortLoopsOnASingleLine: 'false'
+ColumnLimit: '100'
+IndentWidth: '4'
+Language: Cpp
+
+...
+

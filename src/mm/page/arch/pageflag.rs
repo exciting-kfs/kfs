@@ -15,3 +15,10 @@ bitflags! {
 		const Global = 256;
 	}
 }
+
+impl PageFlag {
+	pub const USER_RDWR: Self = Self::Present.union(Self::User).union(Self::Write);
+	pub const USER_RDONLY: Self = Self::Present.union(Self::User);
+	pub const KERNEL_RDWR: Self = Self::Present.union(Self::Global).union(Self::Write);
+	pub const KERNEL_RDONLY: Self = Self::Present.union(Self::Global);
+}

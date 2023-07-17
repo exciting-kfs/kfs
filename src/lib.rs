@@ -26,19 +26,17 @@ mod smp;
 mod subroutine;
 mod sync;
 mod test;
+mod user_bin;
 mod util;
 mod x86;
 
-use core::{arch::asm, panic::PanicInfo};
-
 use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
-use driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
-use input::{key_event::Code, keyboard::KEYBOARD};
-use process::{kthread::kthread_create, task::TASK_QUEUE};
+use core::{arch::asm, panic::PanicInfo};
+use process::context::yield_now;
+use process::task::{Task, TASK_QUEUE};
 use scheduler::work::slow_worker;
 use test::{exit_qemu_with, TEST_ARRAY};
-
-use crate::process::task::yield_now;
+use user_bin::INIT_CODE;
 
 /// very simple panic handler.
 /// that just print panic infomation and fall into infinity loop.
@@ -77,33 +75,6 @@ fn run_test() -> ! {
 	exit_qemu_with(0);
 }
 
-fn run_io() -> ! {
-	let cyan = VGAChar::styled(VGAAttr::new(false, Color::Cyan, false, Color::Cyan), b' ');
-	let magenta = VGAChar::styled(
-		VGAAttr::new(false, Color::Magenta, false, Color::Magenta),
-		b' ',
-	);
-
-	loop {
-		if let Some(event) = unsafe { KEYBOARD.get_keyboard_event() } {
-			if event.key == Code::Backtick && event.pressed() {
-				pr_warn!("BACKTICK PRESSED!!");
-				panic!("panic!!");
-			}
-			text_vga::putc(24, 79, cyan);
-			unsafe {
-				CONSOLE_MANAGER.get().update(event);
-				CONSOLE_MANAGER.get().draw();
-			};
-		} else {
-			unsafe {
-				CONSOLE_MANAGER.get().flush_all();
-			}
-		}
-		text_vga::putc(24, 79, magenta);
-	}
-}
-
 fn idle() -> ! {
 	loop {
 		yield_now();
@@ -111,15 +82,17 @@ fn idle() -> ! {
 }
 
 fn run_process() -> ! {
-	let a = kthread_create(repeat_x as usize, 1111).expect("OOM");
-	let b = kthread_create(repeat_x as usize, 2222).expect("OOM");
-	let c = kthread_create(repeat_x as usize, 3333).expect("OOM");
-	let worker = kthread_create(slow_worker as usize, 0).expect("OOM");
+	let a = Task::new_kernel(repeat_x as usize, 1111).expect("OOM");
+	let b = Task::new_kernel(repeat_x as usize, 2222).expect("OOM");
+	let c = Task::new_kernel(repeat_x as usize, 3333).expect("OOM");
+	let worker = Task::new_kernel(slow_worker as usize, 0).expect("OOM");
+	let init = Task::new_user(INIT_CODE).expect("OOM");
 
 	TASK_QUEUE.lock().push_back(a);
 	TASK_QUEUE.lock().push_back(b);
 	TASK_QUEUE.lock().push_back(c);
 	TASK_QUEUE.lock().push_back(worker);
+	TASK_QUEUE.lock().push_back(init);
 
 	idle();
 }
@@ -129,13 +102,6 @@ extern "C" fn repeat_x(x: usize) -> ! {
 		pr_info!("FROM X={}", x);
 		unsafe { asm!("hlt") }
 	}
-
-	// for i in 0..10 {
-	// 	pr_info!("FROM X={}: {}", x, i);
-	// 	unsafe { asm!("hlt") }
-	// }
-	// pr_info!("TASK FINISHED X={}", x);
-	// return 0;
 }
 
 unsafe fn kernel_boot_alloc(bi_header: usize, magic: u32) {
@@ -177,7 +143,5 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	match cfg!(ktest) {
 		true => run_test(),
 		false => run_process(),
-		// false => unsafe { exec_user_space() },
-		// false => run_io(),
 	};
 }

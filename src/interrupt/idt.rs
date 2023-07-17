@@ -1,14 +1,8 @@
 use core::{arch::asm, mem::size_of};
 
-use crate::{
-	interrupt::exception::CpuException,
-	pr_info,
-	sync::singleton::Singleton,
-	x86::{DPL_USER, GDT},
-};
-
-use super::InterruptFrame;
-use crate::x86::SystemDesc;
+use crate::interrupt::exception::CpuException;
+use crate::sync::singleton::Singleton;
+use crate::x86::{SystemDesc, DPL_USER, GDT};
 
 const IDTE_COUNT: usize = 256;
 
@@ -75,11 +69,6 @@ extern "C" {
 	fn handle_general_protection();
 	fn handle_page_fault();
 	fn handle_double_fault();
-}
-
-#[no_mangle]
-pub extern "C" fn handle_syscall_impl(frame: InterruptFrame) {
-	pr_info!("SYSCALL NO: {}, ARG1: {}", frame.eax, frame.ebx);
 }
 
 pub fn init() {

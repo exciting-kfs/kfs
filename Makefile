@@ -75,6 +75,13 @@ LINKER_SCRIPT := linker-script/kernel.ld
 
 DOC := $(shell dirname $(TARGET_ROOT))/doc/kernel/index.html
 
+# === user space targets
+
+USERSPACE_SRC_ROOT := userspace
+USERSPACE_BUILD_ROOT := $(USERSPACE_SRC_ROOT)/build
+
+FORKBOMB := $(USERSPACE_BUILD_ROOT)/forkbomb.bin
+
 # === Phony recipes ===
 
 .PHONY : all
@@ -91,6 +98,7 @@ clean :
 	@echo '[-] cleanup...'
 	@cargo clean -v
 	@rm -f .sw*
+	@rm -rf $(USERSPACE_BUILD_ROOT)
 
 .PHONY : re
 re : clean
@@ -104,10 +112,10 @@ run : rescue
 ifeq ($(DEBUG_WITH_VSCODE),y)
 debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
 	@scripts/vsc-debug.py $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN) &
-	@scripts/qemu.sh $(RESCUE_IMG) stdio -s -S -display none 
+	@scripts/qemu.sh $(RESCUE_IMG) stdio -s -S -monitor pty -display none 
 else
 debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
-	@scripts/qemu.sh $(RESCUE_IMG) stdio -s -S & rust-lldb   \
+	@scripts/qemu.sh $(RESCUE_IMG) stdio -s -S -monitor pty & rust-lldb   \
 		--one-line "target create --symfile $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN)"   \
 		--one-line "gdb-remote localhost:1234"                                      \
 		--source scripts/debug.lldb
@@ -127,24 +135,24 @@ PAGER := | $(PAGER)
 endif
 
 .PHONY : dump-header
-dump-header : $(KERNEL_BIN)
+dump-header :
 	@$(OBJDUMP) $(OBJDUMP_FLAG) --all-headers $(KERNEL_BIN) $(PAGER)
 
 .PHONY : dump-text
-dump-text : $(KERNEL_BIN)
+dump-text :
 	@$(OBJDUMP) $(OBJDUMP_FLAG) --disassemble $(KERNEL_BIN) $(PAGER)
 
 .PHONY : size
-size : $(KERNEL_BIN)
+size :
 	@ls -lh $<
 
 .PHONY : lookup-addr
-lookup-addr : $(KERNEL_DEBUG_SYMBOL)
+lookup-addr :
 ifndef ADDR
 	@echo "Usage: make ADDR=\`address\` lookup-addr"
 	@exit 2
 else
-	@$(ADDR2LINE) -e $< $(ADDR) 
+	@$(ADDR2LINE) -e $(KERNEL_DEBUG_SYMBOL) $(ADDR) 
 endif
 
 .PHONY : test
@@ -156,7 +164,7 @@ test : rescue
 # === Main recipes ===
 
 .PHONY : $(LIB_KERNEL)
-$(LIB_KERNEL) :
+$(LIB_KERNEL) : userspace_bin
 	@cargo rustc $(CARGO_FLAG) -- $(RUSTC_FLAG)
 
 # TODO: better dependency tracking.
@@ -185,3 +193,10 @@ $(RESCUE_IMG) : $(KERNEL_BIN) $(shell find $(RESUCE_SRC_ROOT) -type f)
 	@cp -r $(RESUCE_SRC_ROOT) $(TARGET_ROOT)
 	@cp $(KERNEL_BIN) $(RESCUE_TARGET_ROOT)/boot
 	@$(GRUB2_MKRESCUE) -d $(GRUB2_I386_LIB) $(RESCUE_TARGET_ROOT) -o $@ 2>/dev/null >/dev/null
+
+.PHONY : userspace_bin
+userspace_bin : $(FORKBOMB)
+
+.PHONY : $(FORKBOMB)
+$(FORKBOMB) : 
+	$(MAKE) -C $(USERSPACE_SRC_ROOT)

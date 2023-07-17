@@ -31,7 +31,7 @@ pub struct InterruptFrame {
 }
 
 impl InterruptFrame {
-	pub fn is_from_user(&self) -> bool {
+	pub fn is_user(&self) -> bool {
 		(self.cs & 0x0000ffff) == 24
 	}
 }
