@@ -47,7 +47,17 @@ pub fn ktest(attr: TokenStream, input: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn context(attr: TokenStream, input: TokenStream) -> TokenStream {
-	let mut func_impl = parse_macro_input!(input as ItemFn);
+	let func_impl = parse_macro_input!(input as ItemFn);
+	let ident = func_impl.sig.ident.clone();
+	let vis = func_impl.vis.clone();
+	let param = func_impl.sig.inputs.clone();
+	let ret = func_impl.sig.output.clone();
+	let abi = func_impl.sig.abi.clone();
+	let unsafety = func_impl.sig.unsafety.clone();
+	let asyncness = func_impl.sig.asyncness.clone();
+	let constness = func_impl.sig.constness.clone();
+	let generics = func_impl.sig.generics.clone();
+	let block = func_impl.block.clone();
 
 	let attr = attr.to_string();
 	let no_mangle = match attr.as_str() {
@@ -65,32 +75,14 @@ pub fn context(attr: TokenStream, input: TokenStream) -> TokenStream {
 		_ => panic!("kfs_macro: context: invalid context"),
 	};
 
-	let stmt_vec = vec![
-		TokenStream::from(quote!(
-			use crate::process::context::InContext;
-		)),
-		TokenStream::from(quote!(
-			let backup = crate::process::context::context_switch_auto(#to_context);
-		)),
-	];
-
-	let mut stmt_vec = stmt_vec
-		.into_iter()
-		.map(|s| syn::parse::<Stmt>(s).unwrap())
-		.collect::<Vec<Stmt>>();
-
-	func_impl
-		.block
-		.as_mut()
-		.stmts
-		.clone()
-		.into_iter()
-		.for_each(|s| stmt_vec.push(s));
-	func_impl.block.as_mut().stmts = stmt_vec;
-
 	let new_func = quote! {
 		#no_mangle
-		#func_impl
+		#vis #constness #asyncness #unsafety #abi fn #ident #generics (#param) #ret {
+			use crate::process::context::InContext;
+			let backup = crate::process::context::context_switch_auto(#to_context);
+			let ret = #block;
+			ret
+		}
 	};
 
 	TokenStream::from(new_func)
