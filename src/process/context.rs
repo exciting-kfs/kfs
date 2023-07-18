@@ -147,3 +147,15 @@ pub fn context_switch(to: InContext) -> InContext {
 pub fn cpu_context() -> InContext {
 	unsafe { *IN_CONTEXT.get_mut() }
 }
+
+pub struct AutoContext(InContext);
+
+impl Drop for AutoContext {
+	fn drop(&mut self) {
+		unsafe { IN_CONTEXT.get_mut().switch(self.0) };
+	}
+}
+
+pub fn context_switch_auto(to: InContext) -> AutoContext {
+	AutoContext(unsafe { IN_CONTEXT.get_mut().switch(to) })
+}
