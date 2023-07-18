@@ -27,7 +27,7 @@ impl Memory {
 		};
 
 		memory.reserve_stack(stack_base, nr_stack_pages)?;
-		memory.copy_data_at(code_base, code).expect("CDATA");
+		memory.copy_data_at(code_base, code)?;
 
 		Ok(memory)
 	}

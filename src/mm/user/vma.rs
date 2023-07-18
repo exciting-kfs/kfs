@@ -3,7 +3,7 @@ use core::{alloc::AllocError, cmp::Ordering, ops::Range};
 use alloc::vec::Vec;
 use bitflags::bitflags;
 
-use crate::{mm::constant::*, pr_info};
+use crate::mm::constant::*;
 
 bitflags! {
 	#[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
@@ -81,7 +81,6 @@ impl UserAddressSpace {
 		count: usize,
 		flags: AreaFlag,
 	) -> Result<usize, AllocError> {
-		pr_info!("S: {:#010x}, C: {}", start, count);
 		let end = count
 			.checked_mul(PAGE_SIZE)
 			.and_then(|x| x.checked_add(start))
