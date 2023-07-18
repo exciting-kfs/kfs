@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, FnArg, ItemFn, ReturnType, Visibility};
+use syn::{parse_macro_input, ItemFn, ReturnType, Stmt};
 
 #[proc_macro_attribute]
 pub fn ktest(attr: TokenStream, input: TokenStream) -> TokenStream {
@@ -49,42 +49,13 @@ pub fn ktest(attr: TokenStream, input: TokenStream) -> TokenStream {
 pub fn context(attr: TokenStream, input: TokenStream) -> TokenStream {
 	let mut func_impl = parse_macro_input!(input as ItemFn);
 
-	// backup some stuff about func_impl for making outer function.
-	let ident = func_impl.sig.ident.clone();
-	let vis = func_impl.vis.clone();
-	let param = func_impl.sig.inputs.clone();
-	let ret = func_impl.sig.output.clone();
-	let abi = func_impl.sig.abi.clone();
-	let unsafety = func_impl.sig.unsafety.clone();
-	let asyncness = func_impl.sig.asyncness.clone();
-	let constness = func_impl.sig.constness.clone();
-	let generics = func_impl.sig.generics.clone();
-
-
-	let mut call_param = quote!();
-	func_impl.sig.inputs.clone().into_iter().for_each(|arg| {
-		call_param.extend(match arg {
-			FnArg::Receiver(_) => quote!(),
-			FnArg::Typed(pat_type) => {
-				let pat = pat_type.pat;
-				quote!(#pat,)
-			}
-		})
-	});
-
-	// edit name and restrict visibility.
-	let impl_name = format!("__inner_{}_impl", func_impl.sig.ident.to_string());
-	func_impl.sig.ident = format_ident!("{}", impl_name);
-	func_impl.vis = Visibility::Inherited; // private
-	let call_impl = func_impl.sig.ident.clone();
-	let call_impl = func_impl.sig.inputs.first().and_then(
-		|s| match s {
-			FnArg::Receiver(r) => Some(r),
-			_ => None
-		}).map_or(quote!(#call_impl), |_| quote!(self.#call_impl));
-
-
 	let attr = attr.to_string();
+	let no_mangle = match attr.as_str() {
+		"nmi" | "hw_irq" => quote!(#[no_mangle]),
+		"kernel" | "irq_disabled" | "preempt_disabled" => quote!(),
+		_ => panic!("kfs_macro: context: invalid context"),
+	};
+
 	let to_context = match attr.as_str() {
 		"nmi" => quote!(InContext::NMI),
 		"hw_irq" => quote!(InContext::HwIrq),
@@ -94,24 +65,33 @@ pub fn context(attr: TokenStream, input: TokenStream) -> TokenStream {
 		_ => panic!("kfs_macro: context: invalid context"),
 	};
 
-	let no_mangle = match attr.as_str() {
-		"nmi" | "hw_irq" => quote!(#[no_mangle]),
-		"kernel" | "irq_disabled" | "preempt_disabled" => quote!(),
-		_ => panic!("kfs_macro: context: invalid context"),
-	};
+	let stmt_vec = vec![
+		TokenStream::from(quote!(
+			use crate::process::context::InContext;
+		)),
+		TokenStream::from(quote!(
+			let backup = crate::process::context::context_switch_auto(#to_context);
+		)),
+	];
+
+	let mut stmt_vec = stmt_vec
+		.into_iter()
+		.map(|s| syn::parse::<Stmt>(s).unwrap())
+		.collect::<Vec<Stmt>>();
+
+	func_impl
+		.block
+		.as_mut()
+		.stmts
+		.clone()
+		.into_iter()
+		.for_each(|s| stmt_vec.push(s));
+	func_impl.block.as_mut().stmts = stmt_vec;
 
 	let new_func = quote! {
-		#[inline(always)]
-		#func_impl
-
 		#no_mangle
-		#vis #constness #asyncness #unsafety #abi fn #ident #generics (#param) #ret {
-			use crate::process::context::InContext;
-			let backup = crate::process::context::context_switch(#to_context);
-			let ret = #call_impl(#call_param);
-			crate::process::context::context_switch(backup);
-			ret
-		}
+		#func_impl
 	};
+
 	TokenStream::from(new_func)
 }
