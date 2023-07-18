@@ -98,6 +98,12 @@ pub enum InContext {
 	/// - CpuLocal (x)
 	/// - Singleton (x)
 	Kernel,
+	/// `User`
+	///
+	/// - irq enabled
+	/// - CpuLocal (x)
+	/// - Singleton (x)
+	User,
 }
 
 impl InContext {
@@ -118,7 +124,7 @@ impl InContext {
 
 		match to {
 			Self::IrqDisabled => irq_disable(),
-			Self::Kernel | Self::PreemptDisabled => irq_enable(),
+			Self::Kernel | Self::PreemptDisabled | Self::User => irq_enable(),
 			Self::NMI | Self::HwIrq => {}
 		}
 
@@ -134,6 +140,7 @@ impl Display for InContext {
 			Self::IrqDisabled => "I",
 			Self::PreemptDisabled => "P",
 			Self::Kernel => "K",
+			Self::User => "U",
 		};
 
 		write!(f, "{}", c)

@@ -10,7 +10,7 @@ use crate::mm::util::*;
 use crate::x86::{get_eflags, DPL_USER, GDT};
 
 use super::kthread::kthread_entry;
-use super::task::return_from_fork;
+use super::task::{return_from_fork, return_from_interrupt};
 
 const KSTACK_SIZE: usize = rank_to_size(KSTACK_RANK);
 type StackStorage = [u8; KSTACK_SIZE];
@@ -74,6 +74,7 @@ impl Stack {
 		stack.push(0).unwrap();
 
 		// kernel context frame
+		stack.push(return_from_interrupt as usize).unwrap();
 		stack.push(return_from_fork as usize).unwrap();
 		stack.push(0).unwrap();
 		stack.push(0).unwrap();
@@ -90,6 +91,7 @@ impl Stack {
 		unsafe { new.as_interrupt_frame().copy_from_nonoverlapping(frame, 1) };
 		unsafe { new.set_user_return_value(0) };
 
+		new.push(return_from_interrupt as usize).unwrap();
 		new.push(return_from_fork as usize).unwrap();
 		new.push(0).unwrap();
 		new.push(0).unwrap();

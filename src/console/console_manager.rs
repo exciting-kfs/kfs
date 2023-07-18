@@ -14,7 +14,7 @@ use self::console::{Console, SyncConsole};
 use super::ascii;
 
 use crate::config::CONSOLE_COUNTS;
-use crate::driver::tty::{SyncTTY, TTY};
+use crate::driver::tty::{SyncTTY, TTYFlag, TTY};
 use crate::driver::vga::text_vga::WINDOW_SIZE;
 use crate::input::key_event::{Code, KeyEvent, KeyKind};
 use crate::io::ChWrite;
@@ -48,7 +48,10 @@ impl ConsoleManager {
 		}
 
 		for i in 0..CONSOLE_COUNTS {
-			ttys.push(Arc::new(Locked::new(TTY::new(cons[i].clone(), true, true))));
+			ttys.push(Arc::new(Locked::new(TTY::new(
+				cons[i].clone(),
+				TTYFlag::SANE,
+			))));
 		}
 
 		ConsoleManager {
@@ -58,6 +61,7 @@ impl ConsoleManager {
 		}
 	}
 
+	// #[context(irq_disabled)]
 	pub fn update(&self, code: Code) {
 		let foreground = *self.foreground.lock();
 		let _ = self.ttys[foreground].lock().write_one(code);

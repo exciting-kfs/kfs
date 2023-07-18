@@ -1,18 +1,9 @@
-use core::{arch::asm, slice::from_raw_parts_mut};
+use core::slice::from_raw_parts_mut;
 
 use alloc::sync::Arc;
 use kfs_macro::context;
 
-use crate::{file::File, process::task::CURRENT, register};
-
-use super::errno::Errno;
-
-pub fn read(fd: isize, buf: *mut u8, len: isize) -> isize {
-	unsafe {
-		asm!("int 0x80", in("eax") 0x0, in("ebx") fd, in("ecx") buf, in("edx") len, options(nostack))
-	};
-	register!("eax") as isize
-}
+use crate::{file::File, interrupt::syscall::errno::Errno, process::task::CURRENT};
 
 #[context(irq_disabled)]
 pub(super) fn get_file(fd: isize) -> Result<Arc<File>, Errno> {
@@ -27,9 +18,8 @@ pub(super) fn get_file(fd: isize) -> Result<Arc<File>, Errno> {
 	Ok(ret.clone())
 }
 
-// TODO copy to user.
+// TODO copy to user..?
 pub fn sys_read(fd: isize, buf: *mut u8, len: isize) -> Result<usize, Errno> {
-	#[context(irq_disabled)]
 	fn read(file: &mut Arc<File>, buf: &mut [u8]) -> usize {
 		file.ops.read(buf)
 	}

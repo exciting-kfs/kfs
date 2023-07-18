@@ -12,15 +12,17 @@ use core::arch::asm;
 pub use hw::apic_timer::jiffies;
 pub use interrupt_frame::InterruptFrame;
 
+#[inline(always)]
 pub fn irq_enable() {
 	unsafe { asm!("sti") };
 }
 
+#[inline(always)]
 pub fn irq_disable() {
 	unsafe { asm!("cli") };
 }
 
-fn get_interrupt_flag() -> bool {
+pub fn get_interrupt_flag() -> bool {
 	let flag_mask = 1 << 9;
 	let mut eflags: usize;
 	unsafe {

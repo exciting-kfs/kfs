@@ -233,6 +233,7 @@ impl Console {
 	/// print normal ascii character.
 	fn handle_text(&mut self, ch: u8) {
 		if let Err(_) = self.cursor.check_rel(0, 1) {
+			self.handle_ctl(CR);
 			self.handle_ctl(LF);
 		}
 		self.put_char(ch);
@@ -243,24 +244,22 @@ impl Console {
 	fn handle_ctl(&mut self, ctl: u8) {
 		// TODO: HT VT
 		match ctl {
+			DEL => self.delete_char(),
 			BS => {
 				if let Ok(_) = self.cursor.check_rel(0, -1) {
 					self.cursor.move_rel_x(-1);
-					self.delete_char();
 				}
 			}
-			CR | LF => {
-				match self.cursor.check_rel(1, 0) {
-					Err(_) => self.line_feed(1),
-					Ok(_) => self.cursor.move_rel_y(1),
-				}
-				self.carriage_return();
-			}
+			LF => match self.cursor.check_rel(1, 0) {
+				Err(_) => self.line_feed(1),
+				Ok(_) => self.cursor.move_rel_y(1),
+			},
 			FF => {
 				let (y, _) = self.cursor.to_tuple();
 				self.line_feed(y);
 				self.cursor.move_abs(0, 0);
 			}
+			CR => self.carriage_return(),
 			_ => (),
 		}
 	}

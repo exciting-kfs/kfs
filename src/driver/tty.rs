@@ -3,8 +3,10 @@
 
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
+use bitflags::bitflags;
 use kfs_macro::context;
 
+use crate::collection::LineBuffer;
 use crate::config::CONSOLE_COUNTS;
 use crate::console::console_manager::console::SyncConsole;
 use crate::console::CONSOLE_MANAGER;
@@ -76,28 +78,49 @@ static CURSOR: [&[u8]; 8] = [
 	b"\x1b[H",	b"\x1b[F",
 ];
 
-fn convert(code: Code) -> Option<&'static [u8]> {
-	match code.identify() {
-		KeyKind::Alpha(code) => convert_alpha(code),
-		KeyKind::Symbol(code) => convert_symbol(code),
-		KeyKind::Function(code) => convert_function(code),
-		KeyKind::Keypad(code) => convert_keypad(code),
-		KeyKind::Cursor(code) => convert_cursor(code),
-		KeyKind::Control(code) => convert_control(code),
-		KeyKind::Modifier(..) => None,
-		KeyKind::Toggle(..) => None,
-	}
+use crate::console::ascii_constants::*;
+#[rustfmt::skip]
+static CONTROL: [u8; 33] = [
+	0x7f, 0x00, 0x01, 0x02,  ETX,  EOF, 0x05, 0x06, 0x07,
+	  BS,   HT,   LF,  VT,    FF,   CR, 0x0e, 0x0f,
+	0x10, 0x11, 0x12, 0x13, 0x14,  NAK, 0x16, 0x17,
+	0x18, 0x19, 0x1a,  ESC,   FS, 0x1d, 0x1e, 0x1f,
+];
+
+fn convert_function(code: FunctionCode) -> Option<&'static [u8]> {
+	Some(&FUNCTION[code.index() as usize])
+}
+
+fn convert_cursor(code: CursorCode) -> Option<&'static [u8]> {
+	Some(&CURSOR[code.index() as usize])
+}
+
+fn convert_keypad(code: KeypadCode) -> Option<&'static [u8]> {
+	let idx = code.index() as usize;
+	Some(&KEYPAD_PLAIN[idx..=idx])
+}
+
+fn control_convertable(c: u8) -> bool {
+	b'@' <= c && c <= b'_' || c == b'?'
 }
 
 fn convert_alpha(code: AlphaCode) -> Option<&'static [u8]> {
 	let kbd = unsafe { &KEYBOARD };
-	let table = match kbd.shift_pressed() ^ kbd.pressed(Code::Capslock) {
-		true => &ALPHA_UPPER,
-		false => &ALPHA_LOWER,
-	};
-
 	let idx = code.index() as usize;
-	Some(&table[idx..=idx])
+	let ascii = ALPHA_UPPER[idx];
+
+	if kbd.control_pressed() && control_convertable(ascii) {
+		let idx = ascii.wrapping_sub(b'@').wrapping_add(1) as usize;
+		Some(&CONTROL[idx..=idx])
+	} else {
+		let upper = kbd.shift_pressed() ^ kbd.pressed(Code::Capslock);
+		let table = match upper {
+			true => &ALPHA_UPPER,
+			false => &ALPHA_LOWER,
+		};
+
+		Some(&table[idx..=idx])
+	}
 }
 
 fn convert_symbol(code: SymbolCode) -> Option<&'static [u8]> {
@@ -108,50 +131,120 @@ fn convert_symbol(code: SymbolCode) -> Option<&'static [u8]> {
 	};
 
 	let idx = code.index() as usize;
-	Some(&table[idx..=idx])
-}
+	let ascii = table[idx];
 
-fn convert_function(code: FunctionCode) -> Option<&'static [u8]> {
-	Some(&FUNCTION[code.index() as usize])
-}
-
-fn convert_cursor(code: CursorCode) -> Option<&'static [u8]> {
-	Some(&CURSOR[code.index() as usize])
+	if kbd.control_pressed() && control_convertable(ascii) {
+		let idx = ascii.wrapping_sub(b'@').wrapping_add(1) as usize;
+		Some(&CONTROL[idx..=idx])
+	} else {
+		Some(&table[idx..=idx])
+	}
 }
 
 fn convert_control(code: ControlCode) -> Option<&'static [u8]> {
 	match code {
-		ControlCode::Backspace => Some(b"\x08"),
+		ControlCode::Backspace => Some(b"\x7f"),
 		ControlCode::Delete => Some(b"\x1b[3~"),
-		ControlCode::Tab => Some(b"\t"),
-		ControlCode::Enter => Some(b"\n"),
+		ControlCode::Tab => Some(b"\x09"),
+		ControlCode::Enter => Some(b"\x0d"),
 		ControlCode::Escape => Some(b"\x1b"),
 		_ => None,
 	}
 }
 
-fn convert_keypad(code: KeypadCode) -> Option<&'static [u8]> {
-	let idx = code.index() as usize;
-	Some(&KEYPAD_PLAIN[idx..=idx])
+pub struct TTY {
+	flag: TTYFlag,
+	control: ControlChars,
+	console: SyncConsole,
+	line_buffer: LineBuffer<4096>,
+	into_process: VecDeque<u8>,
 }
 
-pub struct TTY {
-	icanon: bool,
-	echo: bool,
-	console: SyncConsole,
-	line_buffer: VecDeque<u8>,
-	record: VecDeque<u8>,
+struct ControlChars {
+	sig_intr: u8,
+	sig_quit: u8,
+	icanon_kill: u8,
+	icanon_erase: u8,
+	eof: u8,
+}
+
+bitflags! {
+	#[repr(transparent)]
+	#[derive(Clone, Copy)]
+	pub struct TTYFlag: u32 {
+		const Echo = 1;
+		const EchoE = 2;
+		const EchoK = 4;
+		const EchoCtl = 8;
+		const Icanon = 16;
+		const Isig = 32;
+		const Icrnl = 64;
+		const Opost = 128;
+		const Onlcr = 256;
+	}
+}
+
+impl TTYFlag {
+	pub const RAW: Self = Self::Echo.union(Self::EchoCtl);
+	pub const SANE: Self = Self::RAW
+		.union(Self::EchoE)
+		.union(Self::EchoK)
+		.union(Self::Icanon)
+		.union(Self::Isig)
+		.union(Self::Icrnl)
+		.union(Self::Opost)
+		.union(Self::Onlcr);
 }
 
 impl TTY {
-	pub const fn new(console: SyncConsole, echo: bool, icanon: bool) -> Self {
+	pub const fn new(console: SyncConsole, flag: TTYFlag) -> Self {
 		Self {
-			icanon,
-			echo,
+			flag,
+			control: ControlChars {
+				sig_intr: ETX,     // '^C'
+				sig_quit: FS,      // '^\'
+				icanon_kill: 0x15, // '^U'
+				icanon_erase: DEL, // '^?'
+				eof: EOF,          // '^D'
+			},
 			console,
-			line_buffer: VecDeque::new(),
-			record: VecDeque::new(),
+			line_buffer: LineBuffer::new(),
+			into_process: VecDeque::new(),
 		}
+	}
+
+	fn input_convert<'a>(&self, data: Code, buf: &'a mut [u8]) -> Option<&'a [u8]> {
+		let iconv = input_convert_const(data)?;
+
+		for (i, c) in iconv.iter().enumerate() {
+			buf[i] = *c;
+		}
+
+		if self.flag.contains(TTYFlag::Icrnl) {
+			buf.iter_mut().filter(|b| **b == CR).for_each(|b| *b = LF);
+		}
+
+		Some(&buf[0..iconv.len()])
+	}
+
+	fn output_convert<'a>(&self, buf: &'a mut [u8], len: usize) -> &'a [u8] {
+		let mut cr_count = 0;
+
+		if self.flag.contains(TTYFlag::Opost | TTYFlag::Onlcr) {
+			for i in (0..len).rev() {
+				if buf[i] == LF {
+					unsafe {
+						let ptr = buf.as_mut_ptr();
+						let src = ptr.offset(i as isize);
+						let dst = src.offset(1);
+						core::ptr::copy(src, dst, len - i);
+					}
+					buf[i] = CR;
+					cr_count += 1;
+				}
+			}
+		}
+		&buf[0..(len + cr_count)]
 	}
 
 	/// echo back given characters.
@@ -166,40 +259,134 @@ impl TTY {
 	/// - 0  (NUL) => `^@`
 	/// - 1b (ESC) => `^[`
 	/// - 7f (DEL) => `^?`
-	fn do_echo(&mut self, mut c: u8) -> Result<(), NoSpace> {
+	fn do_echo(&mut self, buf: &[u8]) -> Result<(), NoSpace> {
 		let mut console = self.console.lock();
-		if !is_printable(c) {
-			console.write_one(b'^')?;
-			c = (b'@' + c) & !(1 << 7);
+		let c = buf[0];
+		let echo_ctl = self.flag.contains(TTYFlag::EchoCtl);
+		let echo_e = self.flag.contains(TTYFlag::EchoE | TTYFlag::Icanon);
+		let echo_k = self.flag.contains(TTYFlag::EchoK | TTYFlag::Icanon);
+		let icanon = self.flag.contains(TTYFlag::Icanon);
+
+		if let (DEL, true) = (c, echo_e) {
+			console.write(&CURSOR[2]);
+			console.write_one(c)?;
+			return Ok(());
 		}
-		console.write_one(c)
+
+		if let (NAK, true) = (c, echo_k) {
+			console.write(b"\x1b[2K");
+			console.write_one(CR)?;
+			return Ok(());
+		}
+
+		for c in buf.iter().map(|b| *b) {
+			if let (CR, true) | (LF, true) = (c, icanon) {
+				console.write_one(c)?;
+			} else {
+				match (is_control(c), echo_ctl) {
+					(true, true) => {
+						console.write_one(b'^')?;
+						console.write_one(c.wrapping_sub(b'@'))?;
+					}
+					_ => console.write_one(c)?,
+				}
+			}
+		}
+		Ok(())
+	}
+
+	// NAK, '^U'
+	// DEL, '^?'
+	// EOF, '^D'
+	fn do_icanon(&mut self, buf: &[u8], code: Code) {
+		let c = buf[0];
+		let mut console = self.console.lock();
+
+		match c {
+			DEL => self.line_buffer.backspace(),
+			NAK => self.line_buffer.clear(),
+			EOF => {}
+			ESC => {
+				let code = code.identify();
+				let echo_ctl = self.flag.contains(TTYFlag::EchoCtl);
+
+				match (code, echo_ctl) {
+					(KeyKind::Cursor(_), true) => {
+						buf.iter().for_each(|b| self.line_buffer.put_char(*b))
+					}
+					(KeyKind::Cursor(c), false) => {
+						console.write(&CURSOR[c.index() as usize]);
+					}
+					(_, _) => {}
+				}
+			}
+			LF => {
+				self.line_buffer.push(LF);
+				self.into_process.extend(self.line_buffer.as_slice());
+				self.line_buffer.clear();
+			}
+			_ => buf.iter().for_each(|b| self.line_buffer.put_char(*b)),
+		}
+	}
+
+	fn is_signal(&self, c: u8) -> bool {
+		self.flag.contains(TTYFlag::Isig)
+			&& (self.control.sig_intr == c || self.control.sig_quit == c)
+	}
+
+	fn send_signal(&self, c: u8) {
+		// TODO send signal
+		use crate::pr_debug;
+		pr_debug!("send signal: {}", c);
+	}
+}
+
+fn input_convert_const(code: Code) -> Option<&'static [u8]> {
+	match code.identify() {
+		KeyKind::Alpha(code) => convert_alpha(code),
+		KeyKind::Symbol(code) => convert_symbol(code),
+		KeyKind::Function(code) => convert_function(code),
+		KeyKind::Keypad(code) => convert_keypad(code),
+		KeyKind::Cursor(code) => convert_cursor(code),
+		KeyKind::Control(code) => convert_control(code),
+		KeyKind::Modifier(..) => None,
+		KeyKind::Toggle(..) => None,
 	}
 }
 
 /// from keyboard
 impl ChWrite<Code> for TTY {
-	// irq_disabled
-	fn write_one(&mut self, data: Code) -> Result<(), NoSpace> {
-		let buf = convert(data);
+	/// # Safety
+	///
+	/// - context: irq_disabled: memory allocation, console lock
+	fn write_one(&mut self, code: Code) -> Result<(), NoSpace> {
+		let mut buf = [0; 16];
+		let iter = self.input_convert(code, &mut buf);
 
-		if let None = buf {
+		if let None = iter {
 			return Ok(());
 		}
+		let iter = iter.unwrap();
 
-		for c in buf.unwrap().iter().map(|b| *b) {
-			if self.icanon {
-				self.line_buffer.push_back(c);
+		if self.is_signal(iter[0]) {
+			// Isig
+			self.send_signal(iter[0]);
+		} else {
+			// Icanon
+			if self.flag.contains(TTYFlag::Icanon) {
+				self.do_icanon(iter, code);
 			} else {
-				self.record.push_back(c); // TODO alloc Error
-			}
-
-			if self.echo {
-				self.do_echo(c)?
+				self.into_process.extend(iter);
 			}
 		}
 
-		if data == Code::Enter {
-			self.record.append(&mut self.line_buffer);
+		// Opost & Onlcr
+		let len = iter.len();
+		let iter = self.output_convert(&mut buf, len);
+
+		// Echo
+		if self.flag.contains(TTYFlag::Echo) {
+			self.do_echo(iter)?
 		}
 
 		Ok(())
@@ -208,15 +395,23 @@ impl ChWrite<Code> for TTY {
 
 /// from process
 impl ChWrite<u8> for TTY {
+	#[context(irq_disabled)]
 	fn write_one(&mut self, data: u8) -> Result<(), NoSpace> {
-		self.console.lock().write_one(data)
+		let mut buf = [data, 0];
+		let iter = self.output_convert(&mut buf, 1);
+
+		for c in iter.iter().map(|b| *b) {
+			self.console.lock().write_one(c)?
+		}
+		Ok(())
 	}
 }
 
 /// to process
 impl ChRead<u8> for TTY {
+	#[context(irq_disabled)]
 	fn read_one(&mut self) -> Option<u8> {
-		self.record.pop_front()
+		self.into_process.pop_front()
 	}
 }
 
@@ -226,7 +421,6 @@ impl BlkRead for TTY {}
 impl FileOps for Locked<TTY> {
 	#[context(irq_disabled)]
 	fn read(&self, buf: &mut [u8]) -> usize {
-		// dead lock
 		self.lock().read(buf)
 	}
 
@@ -248,4 +442,8 @@ pub fn open(id: usize) -> Option<SyncTTY> {
 
 fn is_printable(c: u8) -> bool {
 	b' ' <= c && c <= b'~'
+}
+
+fn is_control(c: u8) -> bool {
+	c < 0x20 || c == 0x7f
 }

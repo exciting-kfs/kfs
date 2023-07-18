@@ -15,7 +15,7 @@ impl<const CAP: usize> LineBuffer<CAP> {
 	}
 
 	pub fn full(&self) -> bool {
-		self.tail == CAP
+		self.tail >= CAP - 1
 	}
 
 	pub fn size(&self) -> usize {
@@ -78,6 +78,15 @@ impl<const CAP: usize> LineBuffer<CAP> {
 		self.shift_chars(self.tail as isize, self.cursor as isize);
 		self.buf[self.cursor] = c;
 		self.cursor += 1;
+		self.tail += 1;
+	}
+
+	pub fn push(&mut self, c: u8) {
+		if self.tail == CAP {
+			return;
+		}
+
+		self.buf[self.tail] = c;
 		self.tail += 1;
 	}
 

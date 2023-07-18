@@ -1,6 +1,6 @@
 use crate::{
 	collection,
-	console::{constants::*, Ascii, AsciiParser},
+	console::{ascii_constants::*, Ascii, AsciiParser},
 	io::{character::RW as ChRW, ChRead, ChWrite, NoSpace},
 };
 

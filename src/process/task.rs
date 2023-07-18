@@ -9,6 +9,7 @@ use crate::config::{USER_CODE_BASE, USTACK_BASE, USTACK_PAGES};
 use crate::file::File;
 use crate::interrupt::InterruptFrame;
 use crate::mm::user::memory::Memory;
+use crate::process::context::{context_switch, InContext};
 use crate::sync::locked::{Locked, LockedGuard};
 use crate::sync::{cpu_local::CpuLocal, singleton::Singleton};
 
@@ -117,5 +118,9 @@ impl Task {
 }
 
 extern "C" {
-	pub fn return_from_fork();
+	pub fn return_from_interrupt();
+}
+
+pub extern "C" fn return_from_fork() {
+	context_switch(InContext::User);
 }

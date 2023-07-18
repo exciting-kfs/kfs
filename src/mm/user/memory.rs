@@ -58,6 +58,10 @@ impl Memory {
 		self.page_dir.pick_up();
 	}
 
+	pub fn get_pd(&self) -> &PD {
+		&self.page_dir
+	}
+
 	fn copy_data_at(&mut self, addr: usize, data: &[u8]) -> Result<(), AllocError> {
 		self.vma.allocate_fixed_area(
 			addr,

@@ -113,25 +113,13 @@ use crate::subroutine::DMESG;
 use core::fmt::{Arguments, Result, Write};
 
 pub fn __printk(arg: Arguments) -> Result {
-	static mut ALREADY_PRINT: bool = false;
-
-	// prevent recursive `__printk` call.
-	if unsafe { ALREADY_PRINT } {
-		return Ok(());
-	}
-
 	let result;
-	// FIXME: unlock ALREADY_PRINT in panic!() path.
 	unsafe {
-		ALREADY_PRINT = true;
-
 		result = match cfg!(ktest) {
 			true => Ok(()),
-			false => DMESG.write_fmt(arg),
+			false => Ok(()), //DMESG.lock().write_fmt(arg),
 		}
 		.and_then(|_| serial::COM1.write_fmt(arg));
-
-		ALREADY_PRINT = false;
 	}
 
 	result

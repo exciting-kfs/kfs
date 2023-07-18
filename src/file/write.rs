@@ -1,23 +1,13 @@
-use core::{arch::asm, slice::from_raw_parts};
+use core::slice::from_raw_parts;
 
 use alloc::sync::Arc;
-use kfs_macro::context;
 
-use crate::{file::File, register};
+use crate::{file::File, interrupt::syscall::errno::Errno};
 
-use super::{errno::Errno, read::get_file};
-
-pub fn write(fd: isize, buf: *const u8, len: isize) -> isize {
-	unsafe {
-		asm!("int 0x80", in("eax") 0x01, in("ebx") fd, in("ecx") buf, in("edx") len, options(nostack))
-	};
-
-	register!("eax") as isize
-}
+use super::read::get_file;
 
 // TODO copy from user
 pub fn sys_write(fd: isize, buf: *const u8, len: isize) -> Result<usize, Errno> {
-	#[context(irq_disabled)]
 	fn write(file: &mut Arc<File>, buf: &[u8]) -> usize {
 		file.ops.write(buf)
 	}
