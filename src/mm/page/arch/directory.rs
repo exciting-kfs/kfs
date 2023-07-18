@@ -6,6 +6,7 @@ use crate::mm::{constant::*, util::*};
 use crate::sync::singleton::Singleton;
 
 use core::alloc::AllocError;
+use core::arch::asm;
 use core::cell::UnsafeCell;
 use core::ptr::{addr_of_mut, NonNull};
 
@@ -210,6 +211,12 @@ impl PD {
 		let pt_idx = (vaddr % PT_COVER_SIZE) / PAGE_SIZE;
 
 		(pd_idx, pt_idx)
+	}
+
+	pub fn pick_up(&self) {
+		let addr = virt_to_phys(self.inner() as *const _ as usize);
+
+		unsafe { asm!("mov cr3, {pd}", pd = in(reg) addr) };
 	}
 }
 

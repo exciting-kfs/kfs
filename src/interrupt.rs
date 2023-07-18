@@ -5,6 +5,7 @@ mod interrupt_frame;
 pub mod apic;
 pub mod idt;
 pub mod privilege_level;
+pub mod syscall;
 
 use core::arch::asm;
 

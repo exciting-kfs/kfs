@@ -1,19 +1,15 @@
-use core::ptr::NonNull;
-use core::{alloc::AllocError, mem::size_of};
+use core::alloc::AllocError;
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::{collections::LinkedList, sync::Arc};
-use kfs_macro::context;
 
-use crate::mm::alloc::{page::alloc_pages, Zone};
-use crate::mm::page::PD;
-
-use crate::mm::util::*;
-use crate::sync::locked::Locked;
+use crate::config::{USER_CODE_BASE, USTACK_BASE, USTACK_PAGES};
+use crate::interrupt::InterruptFrame;
+use crate::mm::user::memory::Memory;
+use crate::sync::locked::{Locked, LockedGuard};
 use crate::sync::{cpu_local::CpuLocal, singleton::Singleton};
 
-use crate::config::KSTACK_RANK;
-
-use super::context::switch_stack;
+use super::kstack::Stack;
 
 pub static CURRENT: CpuLocal<Arc<Task>> = CpuLocal::uninit();
 pub static TASK_QUEUE: Singleton<LinkedList<Arc<Task>>> = Singleton::new(LinkedList::new());
@@ -21,7 +17,6 @@ pub static TASK_QUEUE: Singleton<LinkedList<Arc<Task>>> = Singleton::new(LinkedL
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum State {
-	Ready,
 	Running,
 	Sleeping,
 	Exited,
@@ -29,98 +24,85 @@ pub enum State {
 
 #[repr(C)]
 pub struct Task {
-	pub kstack: Stack,
-	pub state: Locked<State>,
-	pub page_dir: PD,
+	kstack: Stack,
+	state: Locked<State>,
+	memory: Option<Locked<Memory>>,
+	pid: usize,
 }
+
+static LAST_PID: AtomicUsize = AtomicUsize::new(1);
 
 impl Task {
-	pub fn alloc_new(kstack: Stack) -> Result<Arc<Self>, AllocError> {
-		let pd = PD::new()?;
+	pub fn new_user(code: &[u8]) -> Result<Arc<Self>, AllocError> {
+		let pid = LAST_PID.fetch_add(1, Ordering::Relaxed);
+
+		let kstack = Stack::new_user(USER_CODE_BASE, USTACK_BASE)?;
+		let memory = Memory::new(USTACK_BASE, USTACK_PAGES, USER_CODE_BASE, code)?;
 
 		Ok(Arc::new(Task {
-			state: Locked::new(State::Ready),
 			kstack,
-			page_dir: pd,
+			state: Locked::new(State::Running),
+			memory: Some(Locked::new(memory)),
+			pid,
 		}))
 	}
-}
-const KSTACK_SIZE: usize = rank_to_size(KSTACK_RANK);
-type StackStorage = [u8; KSTACK_SIZE];
 
-#[repr(C)]
-pub struct Stack {
-	pub esp: *mut usize,
-	storage: NonNull<StackStorage>,
-	is_storage_external: bool,
-}
+	pub fn new_kernel(routine: usize, arg: usize) -> Result<Arc<Self>, AllocError> {
+		let kstack = Stack::new_kernel(routine, arg)?;
 
-impl Stack {
-	pub fn alloc() -> Result<Self, AllocError> {
-		let storage: NonNull<StackStorage> = alloc_pages(KSTACK_RANK, Zone::Normal)?.cast();
+		Ok(Arc::new(Task {
+			kstack,
+			state: Locked::new(State::Running),
+			memory: None,
+			pid: 0,
+		}))
+	}
 
-		let esp = (storage.as_ptr() as usize + size_of::<StackStorage>()) as *mut usize;
-
-		Ok(Self {
-			storage,
-			esp,
-			is_storage_external: false,
+	pub fn new_kernel_from_raw(kstack: Stack) -> Arc<Self> {
+		Arc::new(Task {
+			kstack,
+			state: Locked::new(State::Running),
+			memory: None,
+			pid: 0,
 		})
 	}
 
-	pub unsafe fn from_raw(top: *mut StackStorage) -> Self {
-		Self {
-			esp: 0 as *mut usize,
-			storage: NonNull::new_unchecked(top),
-			is_storage_external: true,
-		}
+	pub fn clone_for_fork(&self, frame: *mut InterruptFrame) -> Result<Arc<Self>, AllocError> {
+		let pid = LAST_PID.fetch_add(1, Ordering::Relaxed);
+		unsafe { (*frame).eax = pid };
+
+		let kstack = self.kstack.clone_for_fork(frame)?;
+		let memory = self.memory.as_ref().unwrap().lock().clone()?;
+
+		Ok(Arc::new(Task {
+			kstack,
+			state: Locked::new(State::Running),
+			memory: Some(Locked::new(memory)),
+			pid,
+		}))
 	}
 
-	fn is_esp_in_bound(&self, esp: *const usize) -> bool {
-		let distance = (esp as usize).checked_sub(self.storage.as_ptr() as usize);
-
-		match distance {
-			Some(x) => x < KSTACK_SIZE,
-			None => false,
-		}
+	pub fn get_pid(&self) -> usize {
+		self.pid
 	}
 
-	pub fn push(&mut self, value: usize) -> Result<(), ()> {
-		let new_esp = unsafe { self.esp.sub(1) };
-
-		if self.is_esp_in_bound(new_esp) {
-			unsafe { (new_esp).write(value) };
-			self.esp = new_esp;
-
-			Ok(())
-		} else {
-			Err(())
-		}
+	pub fn get_uid(&self) -> usize {
+		0
 	}
 
-	pub fn base(&self) -> usize {
-		self.storage.as_ptr() as usize + KSTACK_SIZE
+	pub fn lock_state(&self) -> LockedGuard<'_, State> {
+		self.state.lock()
+	}
+
+	pub fn lock_memory(&self) -> Option<LockedGuard<'_, Memory>> {
+		self.memory.as_ref().map(|x| x.lock())
+	}
+
+	pub fn kstack_base(&self) -> usize {
+		self.kstack.base()
 	}
 }
 
-#[context(irq_disabled)]
-pub fn yield_now() {
-	let next = {
-		let mut task_q = TASK_QUEUE.lock();
-
-		match task_q.pop_front() {
-			Some(x) => x,
-			None => return,
-		}
-	};
-
-	// safety: this function always called through interrupt gate.
-	// so IRQ is disabled.
-	let curr = unsafe { CURRENT.get_mut() }.clone();
-
-	let curr_task = Arc::into_raw(curr);
-	let next_task = Arc::into_raw(next);
-
-	// TODO: check this
-	unsafe { switch_stack(curr_task, next_task) };
+extern "C" {
+	pub fn return_from_fork();
 }

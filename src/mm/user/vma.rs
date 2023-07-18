@@ -3,7 +3,7 @@ use core::{alloc::AllocError, cmp::Ordering, ops::Range};
 use alloc::vec::Vec;
 use bitflags::bitflags;
 
-use super::constant::{PAGE_SIZE, PT_COVER_SIZE, VM_OFFSET};
+use crate::mm::constant::*;
 
 bitflags! {
 	#[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
@@ -15,6 +15,7 @@ bitflags! {
 
 /// user memroy area.
 /// area is half-opened [start, end)
+#[derive(Clone)]
 pub struct Area {
 	pub start: usize,
 	pub end: usize,
@@ -52,6 +53,7 @@ impl Area {
 
 const VALID_USER_AREA: Range<usize> = PT_COVER_SIZE..VM_OFFSET;
 
+#[derive(Clone)]
 pub struct UserAddressSpace {
 	areas: Vec<Area>,
 }
@@ -143,6 +145,10 @@ impl UserAddressSpace {
 			.ok()?;
 
 		Some(self.areas.remove(idx))
+	}
+
+	pub fn get_areas(&self) -> &Vec<Area> {
+		&self.areas
 	}
 }
 

@@ -1,6 +1,7 @@
 use core::mem;
 
 use alloc::sync::Arc;
+use kfs_macro::context;
 
 use super::task::{State, Task, CURRENT, TASK_QUEUE};
 use core::fmt::Display;
@@ -10,6 +11,28 @@ use crate::{
 	sync::cpu_local::CpuLocal,
 	x86::CPU_TASK_STATE,
 };
+
+/// yield control from current task to next task
+///  call flow: yield_now -> switch_stack -> switch_task_finish
+#[context(irq_disabled)]
+pub fn yield_now() {
+	let next = {
+		let mut task_q = TASK_QUEUE.lock();
+
+		match task_q.pop_front() {
+			Some(x) => x,
+			None => return,
+		}
+	};
+
+	// safety: IRQ is disabled.
+	let curr = unsafe { CURRENT.get_mut() }.clone();
+
+	let curr_task = Arc::into_raw(curr);
+	let next_task = Arc::into_raw(next);
+
+	unsafe { switch_stack(curr_task, next_task) };
+}
 
 extern "fastcall" {
 	/// switch stack and call switch_task_finish
@@ -24,15 +47,19 @@ pub unsafe extern "fastcall" fn switch_task_finish(curr: *const Task, next: *con
 	let curr = Arc::from_raw(curr);
 	let next = Arc::from_raw(next);
 
-	let _ = mem::replace(CURRENT.get_mut(), next);
-
 	CPU_TASK_STATE
 		.get_mut()
-		.change_kernel_stack(CURRENT.get_mut().kstack.base());
+		.change_kernel_stack(next.kstack_base());
 
-	if *curr.state.lock() != State::Exited {
+	if *curr.lock_state() != State::Exited {
 		TASK_QUEUE.lock().push_back(curr);
 	}
+
+	if let Some(ref m) = next.lock_memory() {
+		m.pick_up();
+	}
+
+	let _ = mem::replace(CURRENT.get_mut(), next);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

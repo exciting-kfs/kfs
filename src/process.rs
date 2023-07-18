@@ -1,16 +1,20 @@
-use crate::backtrace::kernel_stack_top;
-
-use self::task::{Stack, Task, CURRENT};
-
 pub mod context;
+pub mod exit;
+pub mod fork;
+pub mod kstack;
 pub mod kthread;
 pub mod task;
-pub mod user_space;
+
+use self::{
+	kstack::Stack,
+	task::{Task, CURRENT},
+};
+use crate::backtrace::kernel_stack_top;
 
 pub fn init() {
 	let kstack = unsafe { Stack::from_raw(kernel_stack_top as usize as *mut _) };
 
-	let idle_task = Task::alloc_new(kstack).unwrap();
+	let idle_task = Task::new_kernel_from_raw(kstack);
 
 	CURRENT.init(idle_task);
 }

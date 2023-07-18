@@ -383,6 +383,19 @@ impl Display for SystemDesc {
 	}
 }
 
+pub fn get_eflags() -> usize {
+	let eflags;
+
+	unsafe {
+		asm!(
+			"pushfd",
+			"pop {eflags}",
+			eflags = out(reg) eflags)
+	};
+
+	eflags
+}
+
 #[context(irq_disabled)]
 pub unsafe fn init() {
 	CPU_TASK_STATE.init(TaskState::new());

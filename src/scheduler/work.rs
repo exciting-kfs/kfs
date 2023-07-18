@@ -1,16 +1,13 @@
 use core::{alloc::AllocError, mem::MaybeUninit};
 
 use alloc::{boxed::Box, collections::LinkedList};
+
 use kfs_macro::context;
 
-use crate::{
-	mm::alloc::phys::Atomic,
-	process::{
-		kthread::kthread_create,
-		task::{yield_now, State},
-	},
-	sync::singleton::Singleton,
-};
+use crate::mm::alloc::phys::Atomic;
+use crate::process::context::yield_now;
+use crate::process::task::{State, Task};
+use crate::sync::singleton::Singleton;
 
 use super::{schedule_first, SyncTask};
 
@@ -81,19 +78,21 @@ pub fn slow_worker(_: usize) {
 
 pub fn wakeup_fast_woker() {
 	let task = unsafe { FAST_WORKER.assume_init_mut().clone() };
-	let mut state = task.state.lock();
 
-	// already enqueued or running.
-	if *state != State::Exited {
-		return;
+	{
+		let mut state = task.lock_state();
+		// already enqueued or running.
+		if *state != State::Exited {
+			return;
+		}
+		*state = State::Running;
 	}
-	*state = State::Ready;
-	drop(state);
+
 	schedule_first(task);
 }
 
 pub fn init() -> Result<(), AllocError> {
-	let worker = kthread_create(fast_worker as usize, 0)?;
+	let worker = Task::new_kernel(fast_worker as usize, 0)?;
 	unsafe { FAST_WORKER.write(worker) };
 	Ok(())
 }

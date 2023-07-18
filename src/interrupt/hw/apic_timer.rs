@@ -1,6 +1,5 @@
 use crate::interrupt::{apic::local::LOCAL_APIC, InterruptFrame};
-use crate::process::context::{cpu_context, InContext};
-use crate::process::task::yield_now;
+use crate::process::context::{cpu_context, yield_now, InContext};
 use crate::sync::cpu_local::CpuLocal;
 
 #[no_mangle]

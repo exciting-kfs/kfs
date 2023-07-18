@@ -16,6 +16,7 @@ use crate::mm::page::{PageFlag, KERNEL_PD};
 use crate::mm::{constant::*, util::*};
 
 pub use address_space::AddressSpace;
+pub use kmap::{kmap, kunmap};
 
 pub fn allocate(layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
 	VMALLOC.allocate(layout)
