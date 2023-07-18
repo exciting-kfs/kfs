@@ -1,56 +1,63 @@
-use super::{util::invalidate_all_tlb, PageFlag, PT, PTE};
+use super::{PageFlag, PT, PTE};
 use crate::mm::alloc::page::{alloc_pages, free_pages};
+use crate::mm::alloc::virt::AddressSpace;
 use crate::mm::alloc::Zone;
 use crate::mm::{constant::*, util::*};
 use crate::sync::singleton::Singleton;
+
 use core::alloc::AllocError;
-use core::ops::{Index, IndexMut};
+use core::cell::UnsafeCell;
 use core::ptr::{addr_of_mut, NonNull};
 
 extern "C" {
 	pub static mut GLOBAL_PD_VIRT: [PDE; 1024];
 }
 
-pub static KERNEL_PD: Singleton<PD> = Singleton::uninit();
+const NR_VMALLOC_PT: usize = (KMAP_OFFSET - VMALLOC_OFFSET) / PT_COVER_SIZE;
+pub static VMALLOC_PT: Singleton<[PT; NR_VMALLOC_PT]> = Singleton::new([PT::new(); NR_VMALLOC_PT]);
+
+const NR_KMAP_PT: usize = (HIGH_IO_OFFSET - KMAP_OFFSET) / PT_COVER_SIZE;
+pub static KMAP_PT: Singleton<[PT; NR_KMAP_PT]> = Singleton::new([PT::new(); NR_KMAP_PT]);
+
+pub static KERNEL_PD: PD = PD::uninit();
 
 #[repr(transparent)]
 pub struct PD {
-	inner: NonNull<[PDE; 1024]>,
+	inner: UnsafeCell<NonNull<[PDE; 1024]>>,
 }
 
+unsafe impl Sync for PD {}
+
 impl PD {
-	pub fn new(inner: NonNull<[PDE; 1024]>) -> PD {
-		PD { inner }
+	pub const fn uninit() -> PD {
+		PD {
+			inner: UnsafeCell::new(NonNull::dangling()),
+		}
+	}
+
+	pub fn init(&self, inner: NonNull<[PDE; 1024]>) {
+		unsafe { self.inner.get().write(inner) };
+	}
+
+	pub fn new() -> Result<Self, AllocError> {
+		unsafe {
+			let pd: NonNull<[PDE; 1024]> = alloc_pages(0, Zone::Normal)?.cast();
+
+			pd.as_ptr().copy_from_nonoverlapping(KERNEL_PD.inner(), 1);
+
+			Ok(Self {
+				inner: UnsafeCell::new(pd),
+			})
+		}
 	}
 
 	/// Safety: self.inner is allocated from `Self::new()` or from outside
 	fn inner_mut(&mut self) -> &mut [PDE; 1024] {
-		unsafe { self.inner.as_mut() }
+		unsafe { (*self.inner.get()).as_mut() }
 	}
 
 	fn inner(&self) -> &[PDE; 1024] {
-		unsafe { self.inner.as_ref() }
-	}
-
-	pub fn clone(&self) -> Result<Self, AllocError> {
-		unsafe {
-			let mut pd: NonNull<[PDE; 1024]> = alloc_pages(0, Zone::Normal)?.cast();
-
-			for i in 0..1024 {
-				let dst = addr_of_mut!(pd.as_mut()[i]);
-				let src = &self.inner()[i];
-
-				match src.clone() {
-					Ok(copied) => dst.write(copied),
-					Err(e) => {
-						Self::clone_fail_cleanup(pd, i);
-						return Err(e);
-					}
-				}
-			}
-
-			Ok(Self { inner: pd })
-		}
+		unsafe { (*self.inner.get()).as_ref() }
 	}
 
 	fn clone_fail_cleanup(mut pd: NonNull<[PDE; 1024]>, failed_index: usize) {
@@ -63,18 +70,59 @@ impl PD {
 		free_pages(pd.cast())
 	}
 
-	pub fn map_4m(&mut self, vaddr: usize, paddr: usize, flags: PageFlag) {
-		let (pd_idx, _) = Self::addr_to_index(vaddr);
+	fn map_kmap_area(&self, vaddr: usize, paddr: usize, flags: PageFlag) {
+		let (pd_idx, pt_idx) = Self::addr_to_index(vaddr - KMAP_OFFSET);
 
-		self.inner_mut()[pd_idx] = PDE::new_4m(paddr, flags);
+		KMAP_PT.lock()[pd_idx][pt_idx] = PTE::new(paddr, flags);
 	}
 
-	pub fn map_page(
+	fn map_vmalloc_area(&self, vaddr: usize, paddr: usize, flags: PageFlag) {
+		let (pd_idx, pt_idx) = Self::addr_to_index(vaddr - VMALLOC_OFFSET);
+
+		VMALLOC_PT.lock()[pd_idx][pt_idx] = PTE::new(paddr, flags);
+	}
+
+	fn unmap_kmap_area(&self, vaddr: usize) {
+		let (pd_idx, pt_idx) = Self::addr_to_index(vaddr - KMAP_OFFSET);
+
+		KMAP_PT.lock()[pd_idx][pt_idx] = PTE::new(0, PageFlag::Global);
+	}
+
+	fn unmap_vmalloc_area(&self, vaddr: usize) {
+		let (pd_idx, pt_idx) = Self::addr_to_index(vaddr - VMALLOC_OFFSET);
+
+		VMALLOC_PT.lock()[pd_idx][pt_idx] = PTE::new(0, PageFlag::Global);
+	}
+
+	pub fn map_kernel(&self, vaddr: usize, paddr: usize, flags: PageFlag) {
+		match AddressSpace::identify(vaddr) {
+			AddressSpace::Kmap => self.map_kmap_area(vaddr, paddr, flags),
+			AddressSpace::Vmalloc => self.map_vmalloc_area(vaddr, paddr, flags),
+			_ => return,
+		};
+		invlpg(vaddr);
+	}
+
+	pub fn unmap_kernel(&self, vaddr: usize) {
+		match AddressSpace::identify(vaddr) {
+			AddressSpace::Kmap => self.unmap_kmap_area(vaddr),
+			AddressSpace::Vmalloc => self.unmap_vmalloc_area(vaddr),
+			_ => return,
+		};
+		invlpg(vaddr);
+	}
+
+	pub fn map_user(
 		&mut self,
 		vaddr: usize,
 		paddr: usize,
 		flags: PageFlag,
 	) -> Result<(), AllocError> {
+		match AddressSpace::identify(vaddr) {
+			AddressSpace::User => (),
+			_ => return Ok(()),
+		};
+
 		let (pd_idx, pt_idx) = Self::addr_to_index(vaddr);
 
 		let pde = &mut self.inner_mut()[pd_idx];
@@ -94,32 +142,36 @@ impl PD {
 
 		pt[pt_idx] = PTE::new(paddr, flags);
 
-		// TODO: invalidate just single page
-		invalidate_all_tlb();
+		invlpg(vaddr);
 
 		Ok(())
 	}
 
-	pub fn unmap_page(&mut self, vaddr: usize) -> Result<(), ()> {
+	pub fn unmap_user(&mut self, vaddr: usize) {
+		match AddressSpace::identify(vaddr) {
+			AddressSpace::User => (),
+			_ => return,
+		};
+
 		let (pd_idx, pt_idx) = Self::addr_to_index(vaddr);
 
 		let pde = &mut self.inner_mut()[pd_idx];
 
-		if !pde.is_4m() {
-			let pt = unsafe { (phys_to_virt(pde.addr()) as *mut PT).as_mut().unwrap() };
-
-			let mut new_flag = pt[pt_idx].flag();
-			new_flag.remove(PageFlag::Present);
-
-			pt[pt_idx].set_flag(new_flag);
-
-			Ok(())
-		} else {
-			Err(())
+		if pde.is_4m() {
+			return;
 		}
+
+		let pt = unsafe { (phys_to_virt(pde.addr()) as *mut PT).as_mut().unwrap() };
+
+		let mut new_flag = pt[pt_idx].flag();
+		new_flag.remove(PageFlag::Present);
+
+		pt[pt_idx].set_flag(new_flag);
+
+		invlpg(vaddr);
 	}
 
-	pub fn lookup(&self, vaddr: usize) -> Option<usize> {
+	fn lookup_arbitary(&self, vaddr: usize) -> Option<usize> {
 		let (pd_idx, pt_idx) = Self::addr_to_index(vaddr);
 
 		let pde = &self.inner()[pd_idx];
@@ -137,25 +189,27 @@ impl PD {
 		}
 	}
 
+	pub fn lookup(&self, vaddr: usize) -> Option<usize> {
+		match AddressSpace::identify(vaddr) {
+			AddressSpace::Kernel => Some(virt_to_phys(vaddr)),
+			AddressSpace::HighIO => Some(vaddr),
+			AddressSpace::Kmap => {
+				let _lock = KMAP_PT.lock();
+				self.lookup_arbitary(vaddr)
+			}
+			AddressSpace::Vmalloc => {
+				let _lock = VMALLOC_PT.lock();
+				self.lookup_arbitary(vaddr)
+			}
+			AddressSpace::User => self.lookup_arbitary(vaddr),
+		}
+	}
+
 	fn addr_to_index(vaddr: usize) -> (usize, usize) {
 		let pd_idx = vaddr / PT_COVER_SIZE;
 		let pt_idx = (vaddr % PT_COVER_SIZE) / PAGE_SIZE;
 
 		(pd_idx, pt_idx)
-	}
-}
-
-impl Index<usize> for PD {
-	type Output = PDE;
-
-	fn index(&self, index: usize) -> &Self::Output {
-		&self.inner()[index]
-	}
-}
-
-impl IndexMut<usize> for PD {
-	fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-		&mut self.inner_mut()[index]
 	}
 }
 
@@ -170,7 +224,7 @@ impl PDE {
 	const ADDR_MASK_4M: u32 = 0b11111111_11000000_00000000_00000000;
 	const ADDR_MASK: u32 = 0b11111111_11111111_11110000_00000000;
 
-	pub fn clone(&self) -> Result<Self, AllocError> {
+	pub fn clone_deep(&self) -> Result<Self, AllocError> {
 		if self.is_4m() {
 			return Ok(Self { data: self.data });
 		}

@@ -7,10 +7,8 @@ use crate::mm::constant::*;
 
 use super::{PageFlag, PDE};
 
-pub static mut KMAP_PT: PT = PT::new();
-
-#[derive(Clone)]
-#[repr(transparent)]
+#[derive(Clone, Copy)]
+#[repr(align(4096))]
 pub struct PT {
 	entries: [PTE; 1024],
 }
@@ -54,7 +52,7 @@ impl DerefMut for PT {
 	}
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[repr(transparent)]
 pub struct PTE {
 	data: PageFlag,
