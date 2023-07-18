@@ -1,8 +1,16 @@
 //! Translate key code to ascii code
 //! and do basic line discipline.
 
+use alloc::collections::VecDeque;
+use alloc::sync::Arc;
+
+use crate::config::CONSOLE_COUNTS;
+use crate::console::console_manager::console::SyncConsole;
+use crate::console::CONSOLE_MANAGER;
 use crate::input::key_event::*;
 use crate::input::keyboard::KEYBOARD;
+use crate::io::{BlkRead, BlkWrite, ChRead, ChWrite, NoSpace};
+use crate::sync::locked::Locked;
 
 #[rustfmt::skip]
 static ALPHA_LOWER: [u8; 26] = [
@@ -128,24 +136,20 @@ fn convert_keypad(code: KeypadCode) -> Option<&'static [u8]> {
 pub struct TTY {
 	icanon: bool,
 	echo: bool,
-	buf: Option<&'static [u8]>,
-	cursor: usize,
-	caret: bool,
+	console: SyncConsole,
+	line_buffer: VecDeque<u8>,
+	record: VecDeque<u8>,
 }
 
 impl TTY {
-	pub const fn new(echo: bool) -> Self {
+	pub const fn new(console: SyncConsole, echo: bool, icanon: bool) -> Self {
 		Self {
-			icanon: false,
+			icanon,
 			echo,
-			buf: None,
-			cursor: 0,
-			caret: false,
+			console,
+			line_buffer: VecDeque::new(),
+			record: VecDeque::new(),
 		}
-	}
-
-	pub fn write(&mut self, code: Code) {
-		self.buf = convert(code);
 	}
 
 	/// echo back given characters.
@@ -160,52 +164,73 @@ impl TTY {
 	/// - 0  (NUL) => `^@`
 	/// - 1b (ESC) => `^[`
 	/// - 7f (DEL) => `^?`
-	pub fn read_echo(&mut self) -> Option<u8> {
-		if !self.echo {
-			return None;
+	fn do_echo(&mut self, mut c: u8) -> Result<(), NoSpace> {
+		let mut console = self.console.lock();
+		if !is_printable(c) {
+			console.write_one(b'^')?;
+			c = (b'@' + c) & !(1 << 7);
 		}
-
-		let buf = self.buf?;
-
-		if buf.len() <= self.cursor {
-			self.cursor = 0;
-			return None;
-		}
-
-		let c = buf[self.cursor];
-
-		if b' ' <= c && c <= b'~' {
-			self.cursor += 1;
-			return Some(c);
-		}
-
-		if !self.caret {
-			self.caret = true;
-			return Some(b'^');
-		} else {
-			self.cursor += 1;
-			self.caret = false;
-			return Some((b'@' + c) & !(1 << 7));
-		}
+		console.write_one(c)
 	}
+}
 
-	pub fn read_task(&mut self) -> Option<u8> {
-		let buf = self.buf?;
+/// from keyboard
+impl ChWrite<Code> for TTY {
+	// irq_disabled
+	fn write_one(&mut self, data: Code) -> Result<(), NoSpace> {
+		let buf = convert(data);
 
-		if buf.len() <= self.cursor {
-			self.clear();
-			return None;
+		if let None = buf {
+			return Ok(());
 		}
 
-		let c = buf[self.cursor];
-		self.cursor += 1;
+		for c in buf.unwrap().iter().map(|b| *b) {
+			if self.icanon {
+				self.line_buffer.push_back(c);
+			} else {
+				self.record.push_back(c); // TODO alloc Error
+			}
 
-		Some(c)
-	}
+			if self.echo {
+				self.do_echo(c)?
+			}
+		}
 
-	fn clear(&mut self) {
-		self.buf = None;
-		self.caret = false;
-		self.cursor = 0;
+		if data == Code::Enter {
+			self.record.append(&mut self.line_buffer);
+		}
+
+		Ok(())
 	}
+}
+
+/// from process
+impl ChWrite<u8> for TTY {
+	fn write_one(&mut self, data: u8) -> Result<(), NoSpace> {
+		self.console.lock().write_one(data)
+	}
+}
+
+/// to process
+impl ChRead<u8> for TTY {
+	fn read_one(&mut self) -> Option<u8> {
+		self.record.pop_front()
+	}
+}
+
+impl BlkWrite for TTY {}
+impl BlkRead for TTY {}
+
+pub type SyncTTY = Arc<Locked<TTY>>;
+
+pub fn open(id: usize) -> Option<SyncTTY> {
+	if id >= CONSOLE_COUNTS {
+		None
+	} else {
+		Some(unsafe { CONSOLE_MANAGER.assume_init_ref().get_tty(id) })
+	}
+}
+
+fn is_printable(c: u8) -> bool {
+	b' ' <= c && c <= b'~'
 }

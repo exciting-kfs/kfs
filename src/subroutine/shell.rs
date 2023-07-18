@@ -1,7 +1,7 @@
 use crate::{
 	collection,
 	console::{constants::*, Ascii, AsciiParser},
-	io::character::{Read as ChRead, Write as ChWrite, RW as ChRW},
+	io::{character::RW as ChRW, ChRead, ChWrite, NoSpace},
 };
 
 use core::fmt::{self, Debug, Write};
@@ -181,7 +181,7 @@ impl ChRead<u8> for Shell {
 }
 
 impl ChWrite<u8> for Shell {
-	fn write_one(&mut self, data: u8) {
+	fn write_one(&mut self, data: u8) -> core::result::Result<(), NoSpace> {
 		if let State::Prompt = self.state {
 			self.write_const(PROMPT);
 			self.sync_cursor(PROMPT.len() as u8);
@@ -190,7 +190,7 @@ impl ChWrite<u8> for Shell {
 
 		let ascii = match self.parser.parse(data) {
 			Some(x) => x,
-			None => return,
+			None => return Ok(()),
 		};
 
 		if let Ascii::CtlSeq(5 | 6, b'~') = ascii {
@@ -209,6 +209,7 @@ impl ChWrite<u8> for Shell {
 		}
 
 		self.parser.reset();
+		Ok(())
 	}
 }
 

@@ -15,6 +15,7 @@ mod collection;
 mod config;
 mod console;
 mod driver;
+mod file;
 mod input;
 mod interrupt;
 mod io;
@@ -26,18 +27,20 @@ mod scheduler;
 mod smp;
 mod subroutine;
 mod sync;
+mod syscall;
 mod test;
 mod user_bin;
 mod util;
 mod x86;
 
-use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
+use console::CONSOLE_MANAGER;
 use core::{arch::asm, panic::PanicInfo};
 use process::context::yield_now;
 use process::task::{Task, TASK_QUEUE};
 use scheduler::work::slow_worker;
 use test::{exit_qemu_with, TEST_ARRAY};
-use user_bin::INIT_CODE;
+
+use crate::config::CONSOLE_COUNTS;
 
 use crate::mm::alloc::page::get_available_pages;
 use crate::mm::constant::{MB, PAGE_SIZE};
@@ -52,9 +55,10 @@ fn panic_handler_impl(info: &PanicInfo) -> ! {
 
 	unsafe {
 		print_stacktrace!();
-		CONSOLE_MANAGER.get().set_foreground(CONSOLE_COUNTS - 1);
-		CONSOLE_MANAGER.get().flush_foreground();
-		CONSOLE_MANAGER.get().draw();
+		CONSOLE_MANAGER
+			.assume_init_mut()
+			.set_foreground(CONSOLE_COUNTS - 1);
+		CONSOLE_MANAGER.assume_init_mut().screen_draw();
 	};
 
 	if cfg!(ktest) {
@@ -88,11 +92,13 @@ fn idle() -> ! {
 fn run_process() -> ! {
 	let a = Task::new_kernel(show_page_stat as usize, 0).expect("OOM");
 	let worker = Task::new_kernel(slow_worker as usize, 0).expect("OOM");
-	let init = Task::new_user(INIT_CODE).expect("OOM");
+
+	// use user_bin::INIT_CODE;
+	// let init = Task::new_user(INIT_CODE).expect("OOM");
 
 	TASK_QUEUE.lock().push_back(a);
 	TASK_QUEUE.lock().push_back(worker);
-	TASK_QUEUE.lock().push_back(init);
+	// TASK_QUEUE.lock().push_back(init);
 
 	idle();
 }
@@ -137,6 +143,8 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	mm::alloc::page::init();
 	mm::alloc::phys::init();
 	mm::alloc::virt::init();
+
+	console::console_manager::init();
 
 	acpi::init();
 	interrupt::apic::io::init().unwrap();

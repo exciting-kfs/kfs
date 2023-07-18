@@ -1,7 +1,7 @@
 use crate::{
 	collection::WrapQueue,
 	console::{Ascii, AsciiParser},
-	io::character::{Read as CRead, Write as CWrite, RW},
+	io::{character::RW, ChRead, ChWrite, NoSpace},
 };
 
 use core::fmt::{Result, Write};
@@ -28,17 +28,17 @@ impl Dmesg {
 	}
 }
 
-impl CRead<u8> for Dmesg {
+impl ChRead<u8> for Dmesg {
 	fn read_one(&mut self) -> Option<u8> {
 		self.kern_buf.pop()
 	}
 }
 
-impl CWrite<u8> for Dmesg {
-	fn write_one(&mut self, data: u8) {
+impl ChWrite<u8> for Dmesg {
+	fn write_one(&mut self, data: u8) -> core::result::Result<(), NoSpace> {
 		let ascii = match self.parser.parse(data) {
 			Some(v) => v,
-			None => return,
+			None => return Ok(()),
 		};
 
 		if let Ascii::CtlSeq(param, kind) = ascii {
@@ -57,6 +57,7 @@ impl CWrite<u8> for Dmesg {
 		}
 
 		self.parser.reset();
+		Ok(())
 	}
 }
 

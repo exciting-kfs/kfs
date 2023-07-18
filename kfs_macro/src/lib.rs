@@ -84,6 +84,5 @@ pub fn context(attr: TokenStream, input: TokenStream) -> TokenStream {
 			ret
 		}
 	};
-
 	TokenStream::from(new_func)
 }

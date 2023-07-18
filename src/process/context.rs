@@ -110,6 +110,8 @@ impl InContext {
 			return to;
 		}
 
+		// use crate::pr_debug;
+		// use crate::smp::smp_id;
 		// pr_debug!("[{}]: ctx: {} -> {}", smp_id(), self, to);
 
 		let ret = core::mem::replace(self, to);

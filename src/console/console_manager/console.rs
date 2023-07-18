@@ -21,13 +21,19 @@
 //! 	- CSI N m: alter character display properties. (see console/ascii)
 //! 	- CSI N ~: pc style extra keys. (see driver/tty)
 
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+
 use super::ascii::{constants::*, Ascii, AsciiParser};
 use super::cursor::Cursor;
 
 use crate::collection::WrapQueue;
 use crate::driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
+use crate::io::{BlkWrite, ChWrite, NoSpace};
 
 use crate::driver::vga::text_vga::{HEIGHT as WINDOW_HEIGHT, WIDTH as WINDOW_WIDTH, WINDOW_SIZE};
+use crate::sync::locked::Locked;
+
 pub const BUFFER_HEIGHT: usize = WINDOW_HEIGHT * 4;
 pub const BUFFER_WIDTH: usize = WINDOW_WIDTH;
 pub const BUFFER_SIZE: usize = BUFFER_HEIGHT * BUFFER_WIDTH;
@@ -63,18 +69,6 @@ impl Console {
 			cursor_backup: Cursor::new(),
 			attr: VGAAttr::default(),
 			parser: AsciiParser::new(),
-		}
-	}
-
-	/// general character I/O interface
-	pub fn write(&mut self, c: u8) {
-		if let Some(v) = self.parser.parse(c) {
-			match v {
-				Ascii::Text(ch) => self.handle_text(ch),
-				Ascii::Control(ctl) => self.handle_ctl(ctl),
-				Ascii::CtlSeq(p, k) => self.handle_ctlseq(p, k),
-			}
-			self.parser.reset();
 		}
 	}
 
@@ -326,3 +320,24 @@ impl Console {
 		};
 	}
 }
+
+impl ChWrite<u8> for Console {
+	fn write_one(&mut self, data: u8) -> Result<(), NoSpace> {
+		if let Some(v) = self.parser.parse(data) {
+			match v {
+				Ascii::Text(ch) => self.handle_text(ch),
+				Ascii::Control(ctl) => self.handle_ctl(ctl),
+				Ascii::CtlSeq(p, k) => self.handle_ctlseq(p, k),
+			}
+			self.parser.reset();
+		}
+		Ok(())
+	}
+}
+
+impl BlkWrite for Console {}
+
+pub type SyncConsole = Arc<Locked<Console>>;
+pub static mut CONSOLE_ARRAY: Vec<SyncConsole> = Vec::new();
+
+pub fn init() {}
