@@ -17,6 +17,11 @@ pub fn free_pages(page: NonNull<u8>) {
 	PAGE_ALLOC.lock().free_pages(page);
 }
 
+#[context(irq_disabled)]
+pub fn get_available_pages() -> usize {
+	PAGE_ALLOC.lock().get_available_pages()
+}
+
 pub fn init() {
 	unsafe { PageAlloc::init() };
 }

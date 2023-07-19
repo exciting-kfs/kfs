@@ -1,10 +1,12 @@
 use core::alloc::AllocError;
+use core::ptr::NonNull;
 
-use crate::mm::alloc::page::alloc_pages;
+use crate::mm::alloc::page::free_pages;
 use crate::mm::alloc::virt::{kmap, kunmap};
 use crate::mm::alloc::Zone;
 use crate::mm::page::{PageFlag, PD};
 use crate::mm::{constant::*, util::*};
+use crate::ptr::PageBox;
 
 use super::copy::{copy_user_to_user_page, memset_to_user_page};
 use super::vma::{AreaFlag, UserAddressSpace};
@@ -39,13 +41,13 @@ impl Memory {
 		for area in vma.get_areas() {
 			for vaddr in (area.start..area.end).step_by(PAGE_SIZE) {
 				let src_paddr = self.page_dir.lookup(vaddr).unwrap();
-				let dst_paddr = virt_to_phys(
-					alloc_pages(0, Zone::High).unwrap().as_ptr().cast::<u8>() as usize,
-				);
+				let dst_page = PageBox::new(Zone::High)?;
 
-				unsafe { copy_user_to_user_page(src_paddr, dst_paddr)? };
+				unsafe { copy_user_to_user_page(src_paddr, dst_page.as_phys_addr())? };
 
-				page_dir.map_user(vaddr, dst_paddr, PageFlag::USER_RDWR)?;
+				page_dir.map_user(vaddr, dst_page.as_phys_addr(), PageFlag::USER_RDWR)?;
+
+				dst_page.forget();
 			}
 		}
 
@@ -64,10 +66,9 @@ impl Memory {
 		)?;
 
 		for (i, chunk) in data.chunks(PAGE_SIZE).enumerate() {
-			let user_page = alloc_pages(0, Zone::High)?;
-			let user_paddr = virt_to_phys(user_page.as_ptr().cast::<u8>() as usize);
+			let user_page = PageBox::new(Zone::High)?;
 
-			let temp_ptr = kmap(user_paddr)?;
+			let temp_ptr = kmap(user_page.as_phys_addr())?;
 			unsafe {
 				temp_ptr
 					.as_ptr()
@@ -83,8 +84,13 @@ impl Memory {
 			}
 			kunmap(temp_ptr.as_ptr() as usize);
 
-			self.page_dir
-				.map_user(addr + i * PAGE_SIZE, user_paddr, PageFlag::USER_RDWR)?;
+			self.page_dir.map_user(
+				addr + i * PAGE_SIZE,
+				user_page.as_phys_addr(),
+				PageFlag::USER_RDWR,
+			)?;
+
+			user_page.forget();
 		}
 
 		Ok(())
@@ -100,15 +106,28 @@ impl Memory {
 		)?;
 
 		for user_vaddr in (0..nr_pages).map(|x| stack_top + x * PAGE_SIZE) {
-			let user_page = alloc_pages(0, Zone::High)?;
-			let user_paddr = virt_to_phys(user_page.as_ptr().cast::<u8>() as usize);
+			let user_page = PageBox::new(Zone::High)?;
 
-			unsafe { memset_to_user_page(user_paddr, 0)? };
+			unsafe { memset_to_user_page(user_page.as_phys_addr(), 0)? };
 
 			self.page_dir
-				.map_user(user_vaddr, user_paddr, PageFlag::USER_RDWR)?;
+				.map_user(user_vaddr, user_page.as_phys_addr(), PageFlag::USER_RDWR)?;
+
+			user_page.forget();
 		}
 
 		Ok(())
+	}
+}
+
+impl Drop for Memory {
+	fn drop(&mut self) {
+		for area in self.vma.get_areas() {
+			for vaddr in area.iter_pages() {
+				if let Some(paddr) = self.page_dir.lookup(vaddr) {
+					free_pages(unsafe { NonNull::new_unchecked(phys_to_virt(paddr) as *mut u8) })
+				}
+			}
+		}
 	}
 }

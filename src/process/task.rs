@@ -1,4 +1,5 @@
 use core::alloc::AllocError;
+use core::mem;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::{collections::LinkedList, sync::Arc};
@@ -69,10 +70,13 @@ impl Task {
 
 	pub fn clone_for_fork(&self, frame: *mut InterruptFrame) -> Result<Arc<Self>, AllocError> {
 		let pid = LAST_PID.fetch_add(1, Ordering::Relaxed);
-		unsafe { (*frame).eax = pid };
+
+		unsafe { (*frame).eax = mem::transmute(-1) };
 
 		let kstack = self.kstack.clone_for_fork(frame)?;
 		let memory = self.memory.as_ref().unwrap().lock().clone()?;
+
+		unsafe { (*frame).eax = pid };
 
 		Ok(Arc::new(Task {
 			kstack,
