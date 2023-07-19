@@ -8,7 +8,7 @@ use crate::sync::singleton::Singleton;
 use core::alloc::AllocError;
 use core::arch::asm;
 use core::cell::UnsafeCell;
-use core::ptr::{addr_of_mut, NonNull};
+use core::ptr::NonNull;
 
 extern "C" {
 	pub static mut GLOBAL_PD_VIRT: [PDE; 1024];
@@ -59,16 +59,6 @@ impl PD {
 
 	fn inner(&self) -> &[PDE; 1024] {
 		unsafe { (*self.inner.get()).as_ref() }
-	}
-
-	fn clone_fail_cleanup(mut pd: NonNull<[PDE; 1024]>, failed_index: usize) {
-		unsafe {
-			for i in 0..failed_index {
-				let pde = addr_of_mut!(pd.as_mut()[i]);
-				(*pde).destory();
-			}
-		}
-		free_pages(pd.cast())
 	}
 
 	fn map_kmap_area(&self, vaddr: usize, paddr: usize, flags: PageFlag) {
@@ -220,6 +210,19 @@ impl PD {
 	}
 }
 
+impl Drop for PD {
+	fn drop(&mut self) {
+		let inner = self.inner_mut();
+		for pde in inner.iter().take(VM_OFFSET / PT_COVER_SIZE) {
+			if !pde.is_4m() {
+				let vaddr = phys_to_virt(pde.addr());
+
+				free_pages(unsafe { NonNull::new_unchecked(vaddr as *mut u8) });
+			}
+		}
+	}
+}
+
 #[derive(Clone, Copy)]
 #[repr(transparent)]
 pub struct PDE {
@@ -230,18 +233,6 @@ impl PDE {
 	const PSE: u32 = 128;
 	const ADDR_MASK_4M: u32 = 0b11111111_11000000_00000000_00000000;
 	const ADDR_MASK: u32 = 0b11111111_11111111_11110000_00000000;
-
-	pub fn clone_deep(&self) -> Result<Self, AllocError> {
-		if self.is_4m() {
-			return Ok(Self { data: self.data });
-		}
-
-		let pt: NonNull<PT> = alloc_pages(0, Zone::Normal)?.cast();
-		let src = self.as_pt().unwrap();
-		unsafe { pt.as_ptr().copy_from_nonoverlapping(src, 1) }
-
-		Ok(Self::new(virt_to_phys(pt.as_ptr() as usize), self.flag()))
-	}
 
 	pub fn new_4m(paddr: usize, flags: PageFlag) -> Self {
 		Self {
@@ -273,17 +264,5 @@ impl PDE {
 
 	pub fn flag(&self) -> PageFlag {
 		PageFlag::from_bits_truncate(self.data.bits())
-	}
-
-	pub fn destory(self) {
-		if !self.is_4m() {
-			free_pages(unsafe { NonNull::new_unchecked(phys_to_virt(self.addr()) as *mut u8) });
-		}
-	}
-}
-
-impl AsMut<PageFlag> for PDE {
-	fn as_mut(&mut self) -> &mut PageFlag {
-		&mut self.data
 	}
 }

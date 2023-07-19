@@ -22,6 +22,28 @@ pub struct Area {
 	pub flags: AreaFlag,
 }
 
+pub struct AreaPageIter {
+	start: usize,
+	nr_pages: usize,
+}
+
+impl Iterator for AreaPageIter {
+	type Item = usize;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		if self.nr_pages == 0 {
+			return None;
+		}
+
+		let ret = self.start;
+
+		self.start += PAGE_SIZE;
+		self.nr_pages -= 1;
+
+		Some(ret)
+	}
+}
+
 impl Area {
 	pub fn new(start: usize, end: usize, flags: AreaFlag) -> Self {
 		Self { start, end, flags }
@@ -47,6 +69,15 @@ impl Area {
 			Ordering::Greater
 		} else {
 			Ordering::Equal
+		}
+	}
+
+	pub fn iter_pages(&self) -> AreaPageIter {
+		let nr_pages = (self.end - self.start) / PAGE_SIZE;
+
+		AreaPageIter {
+			start: self.start,
+			nr_pages,
 		}
 	}
 }

@@ -85,9 +85,3 @@ impl PTE {
 		PageFlag::from_bits_truncate(self.data.bits())
 	}
 }
-
-impl AsMut<PageFlag> for PTE {
-	fn as_mut(&mut self) -> &mut PageFlag {
-		&mut self.data
-	}
-}

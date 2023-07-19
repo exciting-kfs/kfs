@@ -4,7 +4,7 @@ use core::ptr::{addr_of_mut, NonNull};
 
 use crate::config::KSTACK_RANK;
 use crate::interrupt::InterruptFrame;
-use crate::mm::alloc::page::alloc_pages;
+use crate::mm::alloc::page::{alloc_pages, free_pages};
 use crate::mm::alloc::Zone;
 use crate::mm::util::*;
 use crate::x86::{get_eflags, DPL_USER, GDT};
@@ -142,5 +142,11 @@ impl Stack {
 
 	pub fn base(&self) -> usize {
 		self.storage.as_ptr() as usize + KSTACK_SIZE
+	}
+}
+
+impl Drop for Stack {
+	fn drop(&mut self) {
+		free_pages(self.storage.cast());
 	}
 }

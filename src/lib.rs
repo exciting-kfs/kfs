@@ -21,6 +21,7 @@ mod io;
 mod mm;
 mod printk;
 mod process;
+mod ptr;
 mod scheduler;
 mod smp;
 mod subroutine;
