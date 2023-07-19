@@ -39,6 +39,9 @@ use scheduler::work::slow_worker;
 use test::{exit_qemu_with, TEST_ARRAY};
 use user_bin::INIT_CODE;
 
+use crate::mm::alloc::page::get_available_pages;
+use crate::mm::constant::{MB, PAGE_SIZE};
+
 /// very simple panic handler.
 /// that just print panic infomation and fall into infinity loop.
 ///
@@ -83,15 +86,11 @@ fn idle() -> ! {
 }
 
 fn run_process() -> ! {
-	let a = Task::new_kernel(repeat_x as usize, 1111).expect("OOM");
-	let b = Task::new_kernel(repeat_x as usize, 2222).expect("OOM");
-	let c = Task::new_kernel(repeat_x as usize, 3333).expect("OOM");
+	let a = Task::new_kernel(show_page_stat as usize, 0).expect("OOM");
 	let worker = Task::new_kernel(slow_worker as usize, 0).expect("OOM");
 	let init = Task::new_user(INIT_CODE).expect("OOM");
 
 	TASK_QUEUE.lock().push_back(a);
-	TASK_QUEUE.lock().push_back(b);
-	TASK_QUEUE.lock().push_back(c);
 	TASK_QUEUE.lock().push_back(worker);
 	TASK_QUEUE.lock().push_back(init);
 
@@ -101,6 +100,14 @@ fn run_process() -> ! {
 extern "C" fn repeat_x(x: usize) -> ! {
 	loop {
 		pr_info!("FROM X={}", x);
+		unsafe { asm!("hlt") }
+	}
+}
+
+extern "C" fn show_page_stat(_: usize) -> ! {
+	loop {
+		let pages = get_available_pages();
+		pr_info!("AVAILABLE PAGES: {} ({} MB)", pages, pages * PAGE_SIZE / MB);
 		unsafe { asm!("hlt") }
 	}
 }

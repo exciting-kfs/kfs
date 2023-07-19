@@ -4,6 +4,7 @@ use super::buddy_allocator::BuddyAlloc;
 
 use crate::boot::MEM_INFO;
 use crate::mm::alloc::Zone;
+use crate::mm::page::index_to_meta;
 use crate::mm::{constant::*, util::*};
 use crate::sync::singleton::Singleton;
 
@@ -14,6 +15,7 @@ use core::ptr::{addr_of_mut, NonNull};
 /// - high: allocate from ZONE_HIGH (not mapped)
 /// - normal: allocate from ZONE_NORMAL (linear mapped)
 pub struct PageAlloc {
+	available_pages: usize,
 	high: BuddyAlloc,
 	normal: BuddyAlloc,
 }
@@ -30,6 +32,8 @@ impl PageAlloc {
 			mem.normal_start_pfn..mem.high_start_pfn,
 		);
 		BuddyAlloc::construct_at(addr_of_mut!((*ptr).high), mem.high_start_pfn..mem.end_pfn);
+
+		(*ptr).available_pages = mem.end_pfn - mem.normal_start_pfn;
 	}
 
 	/// Allocate new `rank` ranked pages from zone `flag`.
@@ -38,11 +42,17 @@ impl PageAlloc {
 	/// and there is no sufficient pages in `Zone::High`, then
 	/// pages from `Zone::Normal` can be returned.
 	pub fn alloc_pages(&mut self, rank: usize, flag: Zone) -> Result<NonNull<[u8]>, AllocError> {
-		match flag {
+		let pages = match flag {
 			Zone::High => self.high.alloc_pages(rank),
 			Zone::Normal => Err(AllocError),
 		}
-		.or_else(|_| self.normal.alloc_pages(rank))
+		.or_else(|_| self.normal.alloc_pages(rank));
+
+		if pages.is_ok() {
+			self.available_pages -= rank_to_pages(rank);
+		}
+
+		pages
 	}
 
 	/// Deallocate pages.
@@ -50,11 +60,18 @@ impl PageAlloc {
 		let addr = page.as_ptr() as usize;
 		let pfn = addr_to_pfn(virt_to_phys(addr));
 
+		let rank = unsafe { index_to_meta(pfn).as_ref() }.rank();
+		self.available_pages += rank_to_pages(rank);
+
 		if pfn < unsafe { MEM_INFO.high_start_pfn } {
 			self.normal.free_pages(page)
 		} else {
 			self.high.free_pages(page)
 		};
+	}
+
+	pub fn get_available_pages(&self) -> usize {
+		self.available_pages
 	}
 }
 

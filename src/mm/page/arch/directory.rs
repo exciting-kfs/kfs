@@ -220,6 +220,8 @@ impl Drop for PD {
 				free_pages(unsafe { NonNull::new_unchecked(vaddr as *mut u8) });
 			}
 		}
+
+		free_pages(NonNull::from(inner).cast());
 	}
 }
 
