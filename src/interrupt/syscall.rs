@@ -1,19 +1,34 @@
+use crate::file::read::sys_read;
+use crate::file::write::sys_write;
+use crate::interrupt::InterruptFrame;
+
+pub mod errno;
 use crate::pr_info;
 use crate::process::{exit::sys_exit, fork::sys_fork, task::CURRENT};
 
-use super::InterruptFrame;
+use self::errno::Errno;
 
 #[no_mangle]
 pub extern "C" fn handle_syscall_impl(mut frame: InterruptFrame) {
 	let current = unsafe { CURRENT.get_mut() };
 
-	match frame.eax {
+	let ret: Result<usize, Errno> = match frame.eax {
 		1 => {
 			pr_info!("PID[{}]: exited.", current.get_pid());
 			sys_exit(frame.ebx);
+			Ok(0)
 		}
 		2 => {
 			sys_fork(&mut frame);
+			Ok(0)
+		}
+		3 => {
+			pr_info!("syscall: read");
+			sys_read(frame.ebx as isize, frame.ecx as *mut u8, frame.edx as isize)
+		}
+		4 => {
+			pr_info!("syscall: write");
+			sys_write(frame.ebx as isize, frame.ecx as *mut u8, frame.edx as isize)
 		}
 		42 => {
 			pr_info!(
@@ -21,7 +36,18 @@ pub extern "C" fn handle_syscall_impl(mut frame: InterruptFrame) {
 				current.get_pid(),
 				frame.ebx
 			);
+			Ok(0)
 		}
-		_ => (),
+		_ => {
+			pr_info!("syscall: the syscall {} is unsupported.", frame.eax);
+			Ok(0)
+		}
 	};
+
+	let ret = match ret {
+		Ok(u) => u as isize,
+		Err(e) => -(e as isize),
+	};
+
+	frame.eax = ret as usize;
 }

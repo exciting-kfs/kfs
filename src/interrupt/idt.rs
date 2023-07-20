@@ -84,7 +84,7 @@ pub fn init() {
 
 	let keyboard = SystemDesc::new_interrupt(handle_keyboard as usize, GDT::KERNEL_CODE, DPL_USER);
 	let lapic_timer = SystemDesc::new_interrupt(handle_timer as usize, GDT::KERNEL_CODE, DPL_USER);
-	let syscall = SystemDesc::new_interrupt(handle_syscall as usize, GDT::KERNEL_CODE, DPL_USER);
+	let syscall = SystemDesc::new_trap(handle_syscall as usize, GDT::KERNEL_CODE, DPL_USER);
 
 	let mut idt = IDT.lock();
 	idt.write_exception(CpuException::DE, de);

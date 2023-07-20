@@ -1,7 +1,7 @@
 use kfs_macro::context;
 
 use crate::{
-	console::console_manager_work,
+	console::{console_manager_work, CONSOLE_MANAGER},
 	driver::ps2::keyboard::{get_raw_scancode, into_key_event},
 	input::{self, key_event::Code},
 	interrupt::{apic::local::LOCAL_APIC, InterruptFrame},
@@ -20,6 +20,11 @@ pub extern "C" fn handle_keyboard_impl(_frame: InterruptFrame) {
 		}
 		input::keyboard::change_state(ev);
 
+		unsafe {
+			if ev.pressed() {
+				CONSOLE_MANAGER.assume_init_ref().update(ev.key);
+			}
+		}
 		schedule_fast_work(console_manager_work, ev);
 		wakeup_fast_woker();
 	});

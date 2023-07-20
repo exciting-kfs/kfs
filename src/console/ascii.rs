@@ -1,5 +1,11 @@
 pub mod constants {
 	pub const ESC: u8 = b'\x1b';
+
+	pub const ETX: u8 = b'\x03'; // ^C
+	pub const EOF: u8 = b'\x04'; // ^D (EOT)
+	pub const NAK: u8 = b'\x15'; // ^U
+	pub const FS: u8 = b'\x1c'; // ^\
+
 	pub const BS: u8 = b'\x08';
 	pub const HT: u8 = b'\x09';
 	pub const LF: u8 = b'\x0a';
@@ -109,7 +115,7 @@ impl AsciiParser {
 	}
 
 	fn parse_start(&mut self, c: u8) -> Option<Ascii> {
-		if b' ' <= c && c <= 127 {
+		if b' ' <= c && c <= b'~' {
 			Some(Ascii::Text(c))
 		} else if c == ESC {
 			self.state = State::Escape;

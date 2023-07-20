@@ -15,6 +15,7 @@ mod collection;
 mod config;
 mod console;
 mod driver;
+mod file;
 mod input;
 mod interrupt;
 mod io;
@@ -31,13 +32,17 @@ mod user_bin;
 mod util;
 mod x86;
 
-use console::{CONSOLE_COUNTS, CONSOLE_MANAGER};
+use alloc::sync::Arc;
+use console::CONSOLE_MANAGER;
 use core::{arch::asm, panic::PanicInfo};
+use driver::tty;
+use file::File;
 use process::context::yield_now;
 use process::task::{Task, TASK_QUEUE};
 use scheduler::work::slow_worker;
 use test::{exit_qemu_with, TEST_ARRAY};
-use user_bin::INIT_CODE;
+
+use crate::config::CONSOLE_COUNTS;
 
 use crate::mm::alloc::page::get_available_pages;
 use crate::mm::constant::{MB, PAGE_SIZE};
@@ -52,9 +57,10 @@ fn panic_handler_impl(info: &PanicInfo) -> ! {
 
 	unsafe {
 		print_stacktrace!();
-		CONSOLE_MANAGER.get().set_foreground(CONSOLE_COUNTS - 1);
-		CONSOLE_MANAGER.get().flush_foreground();
-		CONSOLE_MANAGER.get().draw();
+		CONSOLE_MANAGER
+			.assume_init_mut()
+			.set_foreground(CONSOLE_COUNTS - 1);
+		CONSOLE_MANAGER.assume_init_mut().screen_draw();
 	};
 
 	if cfg!(ktest) {
@@ -85,14 +91,42 @@ fn idle() -> ! {
 	}
 }
 
+fn halt() {
+	unsafe { asm!("hlt") }
+}
+
+fn open_default_fd(task: &mut Arc<Task>) {
+	task.fd_table.lock()[0] = Some(Arc::new(File {
+		ops: tty::open(0).unwrap(),
+		open_flag: 0,
+	}));
+
+	task.fd_table.lock()[1] = Some(Arc::new(File {
+		ops: tty::open(0).unwrap(),
+		open_flag: 0,
+	}));
+
+	task.fd_table.lock()[2] = Some(Arc::new(File {
+		ops: tty::open(0).unwrap(),
+		open_flag: 0,
+	}));
+}
+
 fn run_process() -> ! {
 	let a = Task::new_kernel(show_page_stat as usize, 0).expect("OOM");
+	let a = Task::new_kernel(repeat_x as usize, 1111).expect("OOM");
 	let worker = Task::new_kernel(slow_worker as usize, 0).expect("OOM");
-	let init = Task::new_user(INIT_CODE).expect("OOM");
+
+	// use user_bin::INIT_CODE;
+	// let mut init = Task::new_user(INIT_CODE).expect("OOM");
 
 	TASK_QUEUE.lock().push_back(a);
 	TASK_QUEUE.lock().push_back(worker);
-	TASK_QUEUE.lock().push_back(init);
+
+	use user_bin::SHELL;
+	let mut shell = Task::new_user(SHELL).expect("OOM");
+	open_default_fd(&mut shell);
+	TASK_QUEUE.lock().push_back(shell);
 
 	idle();
 }
@@ -137,6 +171,8 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	mm::alloc::page::init();
 	mm::alloc::phys::init();
 	mm::alloc::virt::init();
+
+	console::console_manager::init();
 
 	acpi::init();
 	interrupt::apic::io::init().unwrap();

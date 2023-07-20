@@ -76,6 +76,7 @@ pub fn slow_worker(_: usize) {
 	}
 }
 
+// irq_disabled
 pub fn wakeup_fast_woker() {
 	let task = unsafe { FAST_WORKER.assume_init_mut().clone() };
 

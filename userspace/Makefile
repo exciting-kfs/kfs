@@ -1,4 +1,12 @@
-PREFIX = i686-elf-
+# === OS ===
+OS := $(shell uname -s)
+ifeq ($(OS), Linux)
+PREFIX := i686-linux-gnu-
+else
+PREFIX := i686-elf-
+endif
+
+# ==========
 
 GCC := $(PREFIX)gcc
 AR := $(PREFIX)ar
@@ -11,7 +19,7 @@ BUILDDIR := build
 LIBSYSTEM := $(BUILDDIR)/libsystem.a
 
 .PHONY : all
-all : $(BUILDDIR)/forkbomb.bin
+all : $(BUILDDIR)/forkbomb.bin $(BUILDDIR)/shell.bin
 
 $(BUILDDIR) :
 	mkdir $(BUILDDIR)
@@ -19,7 +27,7 @@ $(BUILDDIR) :
 $(LIBSYSTEM) : $(addprefix $(BUILDDIR)/,crt0.o syscall.o) | $(BUILDDIR)
 	$(AR) -rcs $@ --output $(BUILDDIR) $^
 
-$(BUILDDIR)/forkbomb.bin : $(LIBSYSTEM) $(BUILDDIR)/forkbomb.o | $(BUILDDIR)
+$(BUILDDIR)/%.bin : $(LIBSYSTEM) $(BUILDDIR)/%.o | $(BUILDDIR)
 	$(GCC) $(CFLAGS) -Wl,--oformat=binary -o $@ $^
 
 $(BUILDDIR)/%.o : %.c | $(BUILDDIR)

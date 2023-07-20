@@ -21,13 +21,19 @@
 //! 	- CSI N m: alter character display properties. (see console/ascii)
 //! 	- CSI N ~: pc style extra keys. (see driver/tty)
 
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+
 use super::ascii::{constants::*, Ascii, AsciiParser};
 use super::cursor::Cursor;
 
 use crate::collection::WrapQueue;
 use crate::driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
+use crate::io::{BlkWrite, ChWrite, NoSpace};
 
 use crate::driver::vga::text_vga::{HEIGHT as WINDOW_HEIGHT, WIDTH as WINDOW_WIDTH, WINDOW_SIZE};
+use crate::sync::locked::Locked;
+
 pub const BUFFER_HEIGHT: usize = WINDOW_HEIGHT * 4;
 pub const BUFFER_WIDTH: usize = WINDOW_WIDTH;
 pub const BUFFER_SIZE: usize = BUFFER_HEIGHT * BUFFER_WIDTH;
@@ -63,18 +69,6 @@ impl Console {
 			cursor_backup: Cursor::new(),
 			attr: VGAAttr::default(),
 			parser: AsciiParser::new(),
-		}
-	}
-
-	/// general character I/O interface
-	pub fn write(&mut self, c: u8) {
-		if let Some(v) = self.parser.parse(c) {
-			match v {
-				Ascii::Text(ch) => self.handle_text(ch),
-				Ascii::Control(ctl) => self.handle_ctl(ctl),
-				Ascii::CtlSeq(p, k) => self.handle_ctlseq(p, k),
-			}
-			self.parser.reset();
 		}
 	}
 
@@ -239,6 +233,7 @@ impl Console {
 	/// print normal ascii character.
 	fn handle_text(&mut self, ch: u8) {
 		if let Err(_) = self.cursor.check_rel(0, 1) {
+			self.handle_ctl(CR);
 			self.handle_ctl(LF);
 		}
 		self.put_char(ch);
@@ -249,24 +244,22 @@ impl Console {
 	fn handle_ctl(&mut self, ctl: u8) {
 		// TODO: HT VT
 		match ctl {
+			DEL => self.delete_char(),
 			BS => {
 				if let Ok(_) = self.cursor.check_rel(0, -1) {
 					self.cursor.move_rel_x(-1);
-					self.delete_char();
 				}
 			}
-			CR | LF => {
-				match self.cursor.check_rel(1, 0) {
-					Err(_) => self.line_feed(1),
-					Ok(_) => self.cursor.move_rel_y(1),
-				}
-				self.carriage_return();
-			}
+			LF => match self.cursor.check_rel(1, 0) {
+				Err(_) => self.line_feed(1),
+				Ok(_) => self.cursor.move_rel_y(1),
+			},
 			FF => {
 				let (y, _) = self.cursor.to_tuple();
 				self.line_feed(y);
 				self.cursor.move_abs(0, 0);
 			}
+			CR => self.carriage_return(),
 			_ => (),
 		}
 	}
@@ -326,3 +319,24 @@ impl Console {
 		};
 	}
 }
+
+impl ChWrite<u8> for Console {
+	fn write_one(&mut self, data: u8) -> Result<(), NoSpace> {
+		if let Some(v) = self.parser.parse(data) {
+			match v {
+				Ascii::Text(ch) => self.handle_text(ch),
+				Ascii::Control(ctl) => self.handle_ctl(ctl),
+				Ascii::CtlSeq(p, k) => self.handle_ctlseq(p, k),
+			}
+			self.parser.reset();
+		}
+		Ok(())
+	}
+}
+
+impl BlkWrite for Console {}
+
+pub type SyncConsole = Arc<Locked<Console>>;
+pub static mut CONSOLE_ARRAY: Vec<SyncConsole> = Vec::new();
+
+pub fn init() {}

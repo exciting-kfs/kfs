@@ -3,23 +3,29 @@
 pub mod console;
 pub mod cursor;
 
-use core::array;
+use core::mem::MaybeUninit;
+
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use kfs_macro::context;
+
+use self::console::{Console, SyncConsole};
 
 use super::ascii;
-use super::console_chain::ConsoleChain;
 
-use crate::input::key_event::{KeyEvent, KeyKind};
-use crate::io::character::RW;
-use crate::subroutine::{DMESG, RAW, SHELL};
-use crate::util::LazyInit;
+use crate::config::CONSOLE_COUNTS;
+use crate::driver::tty::{SyncTTY, TTYFlag, TTY};
+use crate::driver::vga::text_vga::WINDOW_SIZE;
+use crate::input::key_event::{Code, KeyEvent, KeyKind};
+use crate::io::ChWrite;
+use crate::sync::locked::Locked;
 
-pub static mut CONSOLE_MANAGER: LazyInit<ConsoleManager> = LazyInit::new(ConsoleManager::new);
-
-pub const CONSOLE_COUNTS: usize = 4;
+pub static mut CONSOLE_MANAGER: MaybeUninit<ConsoleManager> = MaybeUninit::uninit();
 
 pub struct ConsoleManager {
-	foreground: usize,
-	cons: [ConsoleChain; CONSOLE_COUNTS],
+	foreground: Locked<usize>,
+	cons: Vec<SyncConsole>,
+	ttys: Vec<SyncTTY>,
 }
 
 impl ConsoleManager {
@@ -33,67 +39,69 @@ impl ConsoleManager {
 	///     - 2 => raw console (echo off)
 	/// 	- 3 => kernel message buffer
 	pub fn new() -> Self {
+		let mut cons = Vec::new();
+		let mut ttys = Vec::new();
+		cons.reserve(CONSOLE_COUNTS);
+
+		for _ in 0..CONSOLE_COUNTS {
+			cons.push(Arc::new(Locked::new(Console::buffer_reserved(WINDOW_SIZE))));
+		}
+
+		for i in 0..CONSOLE_COUNTS {
+			ttys.push(Arc::new(Locked::new(TTY::new(
+				cons[i].clone(),
+				TTYFlag::SANE,
+			))));
+		}
+
 		ConsoleManager {
-			foreground: 0,
-			cons: array::from_fn(|i| {
-				let (sub, echo) = unsafe {
-					match i {
-						0 => (&mut SHELL as &mut dyn RW<u8, u8>, false),
-						1 => (&mut RAW[0] as &mut dyn RW<u8, u8>, true),
-						2 => (&mut RAW[1] as &mut dyn RW<u8, u8>, false),
-						3 => (&mut DMESG as &mut dyn RW<u8, u8>, false),
-						_ => unreachable!("mismatch console count"),
-					}
-				};
-				ConsoleChain::new(sub, echo)
-			}),
+			foreground: Locked::new(0),
+			cons,
+			ttys,
 		}
 	}
 
-	/// update console with new key event.
-	pub fn update(&mut self, ev: KeyEvent) {
-		if !ev.pressed() {
-			return;
-		}
-
-		if let KeyKind::Function(v) = ev.identify() {
-			let idx = v.index() as usize;
-
-			if idx < CONSOLE_COUNTS {
-				self.foreground = idx;
-				return;
-			}
-		}
-		self.cons[self.foreground].update(ev.key);
+	// #[context(irq_disabled)]
+	pub fn update(&self, code: Code) {
+		let foreground = *self.foreground.lock();
+		let _ = self.ttys[foreground].lock().write_one(code);
 	}
 
-	pub fn draw(&self) {
-		self.cons[self.foreground].draw();
+	#[context(irq_disabled)]
+	pub fn screen_draw(&self) {
+		let foreground = *self.foreground.lock();
+		self.cons[foreground].lock().draw();
 	}
 
 	/// change foreground console.
+	#[context(irq_disabled)]
 	pub fn set_foreground(&mut self, idx: usize) {
 		if idx < CONSOLE_COUNTS {
-			self.foreground = idx;
+			*self.foreground.lock() = idx;
 		}
 	}
 
-	pub fn flush_all(&mut self) {
-		for console in &mut self.cons[..] {
-			console.flush();
-		}
-	}
-
-	pub fn flush_foreground(&mut self) {
-		self.cons[self.foreground].flush();
+	pub fn get_tty(&self, id: usize) -> SyncTTY {
+		self.ttys[id].clone()
 	}
 }
 
 pub fn console_manager_work(key_event: &mut KeyEvent) {
 	unsafe {
-		let cm = CONSOLE_MANAGER.get();
-		cm.update(*key_event);
-		cm.draw();
-		cm.flush_all();
+		let cm = CONSOLE_MANAGER.assume_init_mut();
+
+		if let KeyKind::Function(v) = key_event.identify() {
+			let idx = v.index() as usize;
+
+			if idx < CONSOLE_COUNTS {
+				cm.set_foreground(idx);
+			}
+		}
+
+		cm.screen_draw();
 	}
+}
+
+pub fn init() {
+	unsafe { CONSOLE_MANAGER.write(ConsoleManager::new()) };
 }

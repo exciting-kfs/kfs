@@ -98,6 +98,12 @@ pub enum InContext {
 	/// - CpuLocal (x)
 	/// - Singleton (x)
 	Kernel,
+	/// `User`
+	///
+	/// - irq enabled
+	/// - CpuLocal (x)
+	/// - Singleton (x)
+	User,
 }
 
 impl InContext {
@@ -110,13 +116,15 @@ impl InContext {
 			return to;
 		}
 
+		// use crate::pr_debug;
+		// use crate::smp::smp_id;
 		// pr_debug!("[{}]: ctx: {} -> {}", smp_id(), self, to);
 
 		let ret = core::mem::replace(self, to);
 
 		match to {
 			Self::IrqDisabled => irq_disable(),
-			Self::Kernel | Self::PreemptDisabled => irq_enable(),
+			Self::Kernel | Self::PreemptDisabled | Self::User => irq_enable(),
 			Self::NMI | Self::HwIrq => {}
 		}
 
@@ -132,6 +140,7 @@ impl Display for InContext {
 			Self::IrqDisabled => "I",
 			Self::PreemptDisabled => "P",
 			Self::Kernel => "K",
+			Self::User => "U",
 		};
 
 		write!(f, "{}", c)
