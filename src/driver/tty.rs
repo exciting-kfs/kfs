@@ -286,7 +286,7 @@ impl TTY {
 				match (is_control(c), echo_ctl) {
 					(true, true) => {
 						console.write_one(b'^')?;
-						console.write_one(c.wrapping_sub(b'@'))?;
+						console.write_one((b'@' + c) & !(1 << 7))?;
 					}
 					_ => console.write_one(c)?,
 				}
