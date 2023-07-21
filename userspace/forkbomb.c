@@ -2,11 +2,14 @@
 
 int main(void) {
 	for (;;) {
-		pid_t cpid = fork();
-		if (cpid != 0) {
-			fortytwo(cpid);
+		pid_t pid = fork();
+
+		if (pid == 0) {
+			fortytwo(1);
 			break;
 		}
+
+		waitpid(pid, NULL, 0);
 	}
 	return 0;
 }
