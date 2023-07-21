@@ -1,4 +1,5 @@
-# === OS ===
+# tools 
+
 OS := $(shell uname -s)
 ifeq ($(OS), Linux)
 PREFIX := i686-linux-gnu-
@@ -6,40 +7,55 @@ else
 PREFIX := i686-elf-
 endif
 
-# ==========
+CC := $(PREFIX)gcc
+export CC
 
-GCC := $(PREFIX)gcc
 AR := $(PREFIX)ar
+export AR
+
+AS := nasm
+export AS
+
+# common flags
 
 CFLAGS := -Wall -Wextra -Werror -nostdlib
-CFLAGS += -Iinclude
+CFLAGS += -I$(realpath include)
+export CFLAGS
 
-BUILDDIR := build
+BUILDDIR := $(realpath .)/build
+export BUILDDIR
+
+COMMON := $(realpath common.mk)
+export COMMON
+
+# targets
+
+MODULES := init shell
 
 LIBSYSTEM := $(BUILDDIR)/libsystem.a
 
+# recipes
+
 .PHONY : all
-all : $(BUILDDIR)/forkbomb.bin $(BUILDDIR)/shell.bin
+all : $(MODULES)
+
+.PHONY : $(MODULES)
+$(MODULES) : $(LIBSYSTEM) | $(BUILDDIR)
+	@echo BUILD $@.bin
+	@$(MAKE) -s -C $@
+
+.PHONY : $(LIBSYSTEM)
+$(LIBSYSTEM) : | $(BUILDDIR)
+	@echo BUILD libsystem.a
+	@$(MAKE) -s -C libsystem $@ 
 
 $(BUILDDIR) :
-	mkdir $(BUILDDIR)
-
-$(LIBSYSTEM) : $(addprefix $(BUILDDIR)/,crt0.o syscall.o) | $(BUILDDIR)
-	$(AR) -rcs $@ --output $(BUILDDIR) $^
-
-$(BUILDDIR)/%.bin : $(LIBSYSTEM) $(BUILDDIR)/%.o | $(BUILDDIR)
-	$(GCC) $(CFLAGS) -Wl,--oformat=binary -o $@ $^
-
-$(BUILDDIR)/%.o : %.c | $(BUILDDIR)
-	$(GCC) $(CFLAGS) -c $^ -o $@
-
-$(BUILDDIR)/%.o : %.S | $(BUILDDIR)
-	nasm -felf -o $@ $^
+	@mkdir $@
 
 .PHONY : clean
 clean :
-	rm -rf $(BUILDDIR) 
+	@rm -rf $(BUILDDIR) 
 
 .PHONY : re
 re : clean
-	$(MAKE) all
+	@$(MAKE) all

@@ -1,5 +1,7 @@
 #include <kfs/kernel.h>
 
+const char *test = "abcd";
+
 int main(void) {
 	for (;;) {
 		pid_t cpid = fork();
@@ -8,5 +10,5 @@ int main(void) {
 			break;
 		}
 	}
-	return 0;
+	return test[0];
 }
