@@ -73,10 +73,7 @@ pub fn context(attr: TokenStream, input: TokenStream) -> TokenStream {
 		#vis #sig {
 			use crate::process::context::InContext;
 			let __original_context = crate::process::context::context_switch_auto(#to_context);
-
-			let __ret = #block;
-
-			__ret
+			#block
 		}
 	};
 

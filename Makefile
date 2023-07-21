@@ -28,7 +28,7 @@ LD := i686-$(UTIL)-ld
 
 ADDR2LINE := i686-$(UTIL)-addr2line
 
-# PAGER := vim -
+PAGER := vim -
 
 # === compiler flag ===
 
@@ -105,11 +105,16 @@ re : clean
 run : rescue
 	@scripts/qemu.sh $(RESCUE_IMG) stdio -monitor pty
 
-.PHONY : debug
+.PHONY : debug debug-display
 ifeq ($(DEBUG_WITH_VSCODE),y)
 debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
 	@scripts/vsc-debug.py $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN) &
 	@scripts/qemu.sh $(RESCUE_IMG) stdio -s -S -monitor pty -display none 
+
+debug-display : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
+	@scripts/vsc-debug.py $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN) &
+	@scripts/qemu.sh $(RESCUE_IMG) stdio -s -S -monitor pty
+
 else
 debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
 	@scripts/qemu.sh $(RESCUE_IMG) stdio -s -S -monitor pty & rust-lldb   \

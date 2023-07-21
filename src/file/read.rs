@@ -20,22 +20,18 @@ pub(super) fn get_file(fd: isize) -> Result<Arc<File>, Errno> {
 
 // TODO copy to user..?
 pub fn sys_read(fd: isize, buf: *mut u8, len: isize) -> Result<usize, Errno> {
-	fn read(file: &mut Arc<File>, buf: &mut [u8]) -> usize {
-		file.ops.read(buf)
-	}
-
 	if len < 0 {
 		return Err(Errno::EINVAL);
 	}
 
 	let len = len as usize;
-	let mut file = get_file(fd)?;
+	let file = get_file(fd)?;
 	let mut count = 0;
 
 	// block
 	while count < len {
 		let buf = unsafe { from_raw_parts_mut(buf.offset(count as isize), len - count) };
-		count += read(&mut file, buf);
+		count += file.ops.read(buf);
 	}
 
 	Ok(len)

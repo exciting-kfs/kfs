@@ -9,10 +9,12 @@ pub type SyncTask = Arc<Task>;
 
 #[context(irq_disabled)]
 pub fn schedule_first(task: SyncTask) {
-	TASK_QUEUE.lock().push_front(task);
+	let mut q = TASK_QUEUE.lock();
+	q.push_front(task);
 }
 
 #[context(irq_disabled)]
 pub fn schedule_last(task: SyncTask) {
-	TASK_QUEUE.lock().push_back(task);
+	let mut q = TASK_QUEUE.lock();
+	q.push_back(task);
 }

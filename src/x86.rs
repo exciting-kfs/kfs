@@ -4,8 +4,6 @@ use core::{
 	mem::size_of,
 };
 
-use kfs_macro::context;
-
 use crate::{
 	sync::cpu_local::CpuLocal,
 	util::bitrange::{BitData, BitRange},
@@ -396,7 +394,6 @@ pub fn get_eflags() -> usize {
 	eflags
 }
 
-#[context(irq_disabled)]
 pub unsafe fn init() {
 	CPU_TASK_STATE.init(TaskState::new());
 

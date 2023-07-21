@@ -1,5 +1,6 @@
 use core::alloc::AllocError;
 use core::array;
+use core::ptr::copy_nonoverlapping;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::{collections::LinkedList, sync::Arc};
@@ -9,6 +10,8 @@ use crate::file::File;
 use crate::interrupt::InterruptFrame;
 use crate::mm::user::memory::Memory;
 use crate::process::context::{context_switch, InContext};
+use crate::signal::SigInfo;
+use crate::signal::Signal;
 use crate::sync::locked::{Locked, LockedGuard};
 use crate::sync::{cpu_local::CpuLocal, singleton::Singleton};
 
@@ -33,7 +36,9 @@ pub struct Task {
 	state: Locked<State>,
 	memory: Option<Locked<Memory>>,
 	pid: usize,
-	pub fd_table: Locked<[Option<Arc<File>>; FDTABLE_SIZE]>,
+
+	pub fd_table: Locked<[Option<Arc<File>>; FDTABLE_SIZE]>, // TODO thread share
+	pub signal: Option<Arc<Signal>>,
 }
 
 static LAST_PID: AtomicUsize = AtomicUsize::new(1);
@@ -51,6 +56,7 @@ impl Task {
 			memory: Some(Locked::new(memory)),
 			pid,
 			fd_table: Locked::new(array::from_fn(|_| None)),
+			signal: Some(Arc::new(Signal::new())),
 		}))
 	}
 
@@ -63,6 +69,7 @@ impl Task {
 			memory: None,
 			pid: 0,
 			fd_table: Locked::new(array::from_fn(|_| None)),
+			signal: None,
 		}))
 	}
 
@@ -73,6 +80,7 @@ impl Task {
 			memory: None,
 			pid: 0,
 			fd_table: Locked::new(array::from_fn(|_| None)),
+			signal: None,
 		})
 	}
 
@@ -88,7 +96,26 @@ impl Task {
 			memory: Some(Locked::new(memory)),
 			pid,
 			fd_table: Locked::new(array::from_fn(|_| None)),
+			signal: Some(Arc::new(
+				self.signal.as_ref().expect("user task").clone_for_fork(), // TODO test needed.
+			)),
 		}))
+	}
+
+	pub fn recv_signal(&self, sig_info: SigInfo) {
+		let signal = match self.signal {
+			Some(ref s) => s,
+			None => return,
+		};
+		signal.recv_signal(sig_info);
+	}
+
+	pub fn do_signal(&self) {
+		let signal = match self.signal {
+			Some(ref s) => s,
+			None => return,
+		};
+		signal.do_signal(self.kstack.as_interrupt_frame());
 	}
 
 	pub fn get_pid(&self) -> usize {
@@ -118,4 +145,10 @@ extern "C" {
 
 pub extern "C" fn return_from_fork() {
 	context_switch(InContext::User);
+}
+
+/// push data to user stack.
+unsafe fn push_to_user_stack(esp: &mut usize, src: *const u8, len: usize) {
+	*esp -= len;
+	copy_nonoverlapping(src, (*esp) as *mut _, len);
 }

@@ -40,20 +40,23 @@ static mut FAST_WORKER: MaybeUninit<SyncTask> = MaybeUninit::uninit();
 pub fn schedule_slow_work<ArgType: 'static>(func: fn(&mut ArgType), arg: ArgType) {
 	let arg = Box::new_in(arg, Atomic);
 	let work = Box::new_in(Work::new(func, arg), Atomic);
-	SLOW_WORK_POOL.lock().push_back(work);
+	let mut pool = SLOW_WORK_POOL.lock();
+	pool.push_back(work);
 }
 
 #[context(irq_disabled)]
 pub fn schedule_fast_work<ArgType: 'static>(func: fn(&mut ArgType), arg: ArgType) {
 	let arg = Box::new_in(arg, Atomic);
 	let work = Box::new_in(Work::new(func, arg), Atomic);
-	FAST_WORK_POOL.lock().push_back(work);
+	let mut pool = FAST_WORK_POOL.lock();
+	pool.push_back(work);
 }
 
 pub fn fast_worker(_: usize) {
 	#[context(irq_disabled)]
 	fn take_work() -> Option<Box<dyn Workable, Atomic>> {
-		FAST_WORK_POOL.lock().pop_front()
+		let mut pool = FAST_WORK_POOL.lock();
+		pool.pop_front()
 	}
 
 	while let Some(mut w) = take_work() {

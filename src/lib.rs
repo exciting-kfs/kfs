@@ -5,6 +5,7 @@
 #![feature(maybe_uninit_uninit_array)]
 #![feature(const_maybe_uninit_uninit_array)]
 #![feature(asm_const)]
+#![feature(variant_count)]
 
 extern crate alloc;
 
@@ -24,6 +25,7 @@ mod printk;
 mod process;
 mod ptr;
 mod scheduler;
+mod signal;
 mod smp;
 mod subroutine;
 mod sync;
@@ -96,33 +98,34 @@ fn halt() {
 }
 
 fn open_default_fd(task: &mut Arc<Task>) {
+	let tty = tty::open(0).unwrap();
+
+	tty.lock().set_owner(task.clone());
+
 	task.fd_table.lock()[0] = Some(Arc::new(File {
-		ops: tty::open(0).unwrap(),
+		ops: tty.clone(),
 		open_flag: 0,
 	}));
 
 	task.fd_table.lock()[1] = Some(Arc::new(File {
-		ops: tty::open(0).unwrap(),
+		ops: tty.clone(),
 		open_flag: 0,
 	}));
 
 	task.fd_table.lock()[2] = Some(Arc::new(File {
-		ops: tty::open(0).unwrap(),
+		ops: tty.clone(),
 		open_flag: 0,
 	}));
 }
 
 fn run_process() -> ! {
-	let stat = Task::new_kernel(show_page_stat as usize, 0).expect("OOM");
-	let worker = Task::new_kernel(slow_worker as usize, 0).expect("OOM");
-
-	let init = Task::new_user(user_bin::INIT).expect("OOM");
+	// let init = Task::new_user(user_bin::INIT).expect("OOM");
 	let mut shell = Task::new_user(user_bin::SHELL).expect("OOM");
 	open_default_fd(&mut shell);
 
-	TASK_QUEUE.lock().push_back(stat);
+	let worker = Task::new_kernel(slow_worker as usize, 0).expect("OOM");
 	TASK_QUEUE.lock().push_back(worker);
-	TASK_QUEUE.lock().push_back(init);
+	// TASK_QUEUE.lock().push_back(init);
 	TASK_QUEUE.lock().push_back(shell);
 
 	idle();

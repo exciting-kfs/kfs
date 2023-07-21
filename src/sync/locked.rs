@@ -14,6 +14,15 @@ pub struct Locked<T> {
 unsafe impl<T> Send for Locked<T> {}
 unsafe impl<T> Sync for Locked<T> {}
 
+impl<T: Clone> Clone for Locked<T> {
+	fn clone(&self) -> Self {
+		Self {
+			inner: self.inner.clone(),
+			value: UnsafeCell::new(unsafe { (*self.value.get()).clone() }),
+		}
+	}
+}
+
 impl<T> Locked<T> {
 	pub const fn new(value: T) -> Self {
 		Self {

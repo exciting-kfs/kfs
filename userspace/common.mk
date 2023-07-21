@@ -5,7 +5,7 @@ OBJS := $(addprefix $(OBJS_PREFIX),$(SRCS:.c=.o))
 
 $(BUILDDIR)/$(NAME) : $(OBJS)
 	@echo ' 'LD $(NAME)
-	@$(CC) $(CFLAGS) -L$(BUILDDIR) -lsystem -Wl,--oformat=binary -o $@ $^
+	@$(LD) $(LDFLAGS) -L$(BUILDDIR) -lsystem -o $@ $^
 
 $(OBJS_PREFIX)%.o : %.c
 	@echo ' 'CC $(notdir $^)

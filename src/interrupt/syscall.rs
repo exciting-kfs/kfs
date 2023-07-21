@@ -6,6 +6,9 @@ pub mod errno;
 use crate::pr_info;
 use crate::process::exec::sys_exec;
 use crate::process::{exit::sys_exit, fork::sys_fork, task::CURRENT};
+use crate::signal::context::SigContext;
+use crate::signal::handler::SigAction;
+use crate::signal::{sys_sigaction, sys_signal, sys_sigreturn};
 
 use self::errno::Errno;
 
@@ -36,6 +39,27 @@ pub extern "C" fn handle_syscall_impl(mut frame: InterruptFrame) {
 			Ok(0)
 		}
 		11 => sys_exec(&mut frame, frame.ebx),
+		48 => {
+			pr_info!("syscall: signal: {}, {:x}", frame.ebx, frame.ecx);
+			sys_signal(frame.ebx, frame.ecx)
+		}
+		67 => {
+			pr_info!(
+				"syscall: sigaction: {}, {:x}, {:x}",
+				frame.ebx,
+				frame.ecx,
+				frame.edx
+			);
+			sys_sigaction(
+				frame.ebx,
+				frame.ecx as *const SigAction,
+				frame.edx as *mut SigAction,
+			)
+		}
+		119 => {
+			pr_info!("syscall: sigreturn: {:p}", &frame);
+			sys_sigreturn(frame.ebx as *const SigContext)
+		}
 		_ => {
 			pr_info!("syscall: the syscall {} is unsupported.", frame.eax);
 			Ok(0)
