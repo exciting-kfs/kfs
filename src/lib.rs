@@ -113,20 +113,20 @@ fn open_default_fd(task: &mut Arc<Task>) {
 }
 
 fn run_process() -> ! {
-	let a = Task::new_kernel(show_page_stat as usize, 0).expect("OOM");
-	let a = Task::new_kernel(repeat_x as usize, 1111).expect("OOM");
+	let stat = Task::new_kernel(show_page_stat as usize, 0).expect("OOM");
 	let worker = Task::new_kernel(slow_worker as usize, 0).expect("OOM");
 
-	// use user_bin::INIT_CODE;
-	// let mut init = Task::new_user(INIT_CODE).expect("OOM");
+	use user_bin::INIT_CODE;
+	let init = Task::new_user(INIT_CODE).expect("OOM");
+	// open_default_fd(&mut init);
 
-	TASK_QUEUE.lock().push_back(a);
+	TASK_QUEUE.lock().push_back(stat);
 	TASK_QUEUE.lock().push_back(worker);
+	TASK_QUEUE.lock().push_back(init);
 
-	use user_bin::SHELL;
-	let mut shell = Task::new_user(SHELL).expect("OOM");
-	open_default_fd(&mut shell);
-	TASK_QUEUE.lock().push_back(shell);
+	// use user_bin::SHELL;
+	// let mut shell = Task::new_user(SHELL).expect("OOM");
+	// TASK_QUEUE.lock().push_back(shell);
 
 	idle();
 }

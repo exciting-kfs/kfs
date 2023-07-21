@@ -16,12 +16,8 @@ pub extern "C" fn handle_syscall_impl(mut frame: InterruptFrame) {
 		1 => {
 			pr_info!("PID[{}]: exited.", current.get_pid());
 			sys_exit(frame.ebx);
-			Ok(0)
 		}
-		2 => {
-			sys_fork(&mut frame);
-			Ok(0)
-		}
+		2 => sys_fork(&frame),
 		3 => {
 			pr_info!("syscall: read");
 			sys_read(frame.ebx as isize, frame.ecx as *mut u8, frame.edx as isize)

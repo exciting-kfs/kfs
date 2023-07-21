@@ -3,9 +3,11 @@ use super::{
 	task::{State, CURRENT},
 };
 
-pub fn sys_exit(_status: usize) {
+pub fn sys_exit(_status: usize) -> ! {
 	let current = unsafe { CURRENT.get_mut() };
 
 	*current.lock_state() = State::Exited;
 	yield_now();
+
+	unreachable!("cannot scheduled after sys_exit");
 }
