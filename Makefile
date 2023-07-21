@@ -78,9 +78,6 @@ DOC := $(shell dirname $(TARGET_ROOT))/doc/kernel/index.html
 # === user space targets
 
 USERSPACE_SRC_ROOT := userspace
-USERSPACE_BUILD_ROOT := $(USERSPACE_SRC_ROOT)/build
-
-FORKBOMB := $(USERSPACE_BUILD_ROOT)/forkbomb.bin
 
 # === Phony recipes ===
 
@@ -98,7 +95,7 @@ clean :
 	@echo '[-] cleanup...'
 	@cargo clean -v
 	@rm -f .sw*
-	@rm -rf $(USERSPACE_BUILD_ROOT)
+	@$(MAKE) -s -C $(USERSPACE_SRC_ROOT) clean
 
 .PHONY : re
 re : clean
@@ -164,7 +161,7 @@ test : rescue
 # === Main recipes ===
 
 .PHONY : $(LIB_KERNEL)
-$(LIB_KERNEL) : userspace_bin
+$(LIB_KERNEL) : userspace
 	@cargo rustc $(CARGO_FLAG) -- $(RUSTC_FLAG)
 
 # TODO: better dependency tracking.
@@ -194,9 +191,7 @@ $(RESCUE_IMG) : $(KERNEL_BIN) $(shell find $(RESUCE_SRC_ROOT) -type f)
 	@cp $(KERNEL_BIN) $(RESCUE_TARGET_ROOT)/boot
 	@$(GRUB2_MKRESCUE) -d $(GRUB2_I386_LIB) $(RESCUE_TARGET_ROOT) -o $@ 2>/dev/null >/dev/null
 
-.PHONY : userspace_bin
-userspace_bin : $(FORKBOMB)
-
-.PHONY : $(FORKBOMB)
-$(FORKBOMB) : 
-	$(MAKE) -C $(USERSPACE_SRC_ROOT)
+.PHONY : userspace
+userspace :
+	@echo "[-] build userspace binaries"
+	@$(MAKE) -s -C $(USERSPACE_SRC_ROOT)
