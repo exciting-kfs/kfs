@@ -109,7 +109,6 @@ macro_rules! fmt_with {
 }
 
 use crate::driver::serial;
-use crate::subroutine::DMESG;
 use core::fmt::{Arguments, Result, Write};
 
 pub fn __printk(arg: Arguments) -> Result {

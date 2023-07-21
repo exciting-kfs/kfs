@@ -48,15 +48,8 @@ pub fn ktest(attr: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn context(attr: TokenStream, input: TokenStream) -> TokenStream {
 	let func_impl = parse_macro_input!(input as ItemFn);
-	let ident = func_impl.sig.ident.clone();
+	let sig = func_impl.sig.clone();
 	let vis = func_impl.vis.clone();
-	let param = func_impl.sig.inputs.clone();
-	let ret = func_impl.sig.output.clone();
-	let abi = func_impl.sig.abi.clone();
-	let unsafety = func_impl.sig.unsafety.clone();
-	let asyncness = func_impl.sig.asyncness.clone();
-	let constness = func_impl.sig.constness.clone();
-	let generics = func_impl.sig.generics.clone();
 	let block = func_impl.block.clone();
 
 	let attr = attr.to_string();
@@ -77,12 +70,15 @@ pub fn context(attr: TokenStream, input: TokenStream) -> TokenStream {
 
 	let new_func = quote! {
 		#no_mangle
-		#vis #constness #asyncness #unsafety #abi fn #ident #generics (#param) #ret {
+		#vis #sig {
 			use crate::process::context::InContext;
-			let backup = crate::process::context::context_switch_auto(#to_context);
-			let ret = #block;
-			ret
+			let __original_context = crate::process::context::context_switch_auto(#to_context);
+
+			let __ret = #block;
+
+			__ret
 		}
 	};
+
 	TokenStream::from(new_func)
 }

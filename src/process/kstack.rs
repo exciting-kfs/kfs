@@ -84,7 +84,7 @@ impl Stack {
 		Ok(stack)
 	}
 
-	pub fn clone_for_fork(&self, frame: *mut InterruptFrame) -> Result<Self, AllocError> {
+	pub fn clone_for_fork(&self, frame: *const InterruptFrame) -> Result<Self, AllocError> {
 		let mut new = Self::alloc()?;
 
 		new.esp = new.as_interrupt_frame().cast();

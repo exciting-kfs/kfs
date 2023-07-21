@@ -1,8 +1,3 @@
-use crate::{
-	mm::{alloc::virt::AddressSpace, util::virt_to_phys},
-	process::task::CURRENT,
-};
-
 pub mod arch;
 pub mod bitrange;
 pub mod lazy_constant;
@@ -41,16 +36,16 @@ impl<T> Vaddr<T> {
 		self.0 as usize
 	}
 
-	pub fn paddr(&self) -> Option<Paddr<T>> {
-		let vaddr = self.0 as usize;
-		let paddr = match AddressSpace::identify(vaddr) {
-			AddressSpace::User => unsafe {
-				CURRENT.get_mut().lock_memory()?.get_pd().lookup(vaddr)
-			},
-			_ => Some(virt_to_phys(vaddr)),
-		};
-		paddr.map(|addr| Paddr(addr as *mut T))
-	}
+	// pub fn paddr(&self) -> Option<Paddr<T>> {
+	// 	let vaddr = self.0 as usize;
+	// 	let paddr = match AddressSpace::identify(vaddr) {
+	// 		AddressSpace::User => unsafe {
+	// 			CURRENT.get_mut().lock_memory()?.get_pd().lookup(vaddr)
+	// 		},
+	// 		_ => Some(virt_to_phys(vaddr)),
+	// 	};
+	// 	paddr.map(|addr| Paddr(addr as *mut T))
+	// }
 }
 
 #[derive(Clone, Copy)]
