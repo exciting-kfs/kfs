@@ -250,7 +250,12 @@ fn make_function_frame(frame: &mut [usize], user_esp: usize, sig_num: SigNum) {
 /// - CURRENT should be a user task.
 #[context(irq_disabled)]
 pub unsafe fn poll_signal_queue() -> Result<(), Errno> {
-	let signal = CURRENT.get_mut().signal.as_ref().expect("user task");
+	let signal = CURRENT
+		.get_mut()
+		.get_user_ext()
+		.expect("user task")
+		.signal
+		.as_ref();
 	let queue = signal.queue.lock();
 	let mask = signal.mask.lock();
 

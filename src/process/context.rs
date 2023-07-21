@@ -51,12 +51,16 @@ pub unsafe extern "fastcall" fn switch_task_finish(curr: *const Task, next: *con
 		.get_mut()
 		.change_kernel_stack(next.kstack_base());
 
-	if *curr.lock_state() != State::Exited {
-		TASK_QUEUE.lock().push_back(curr);
-	}
+	{
+		let state_lock = curr.lock_state();
+		if *state_lock != State::Exited {
+			mem::drop(state_lock);
+			TASK_QUEUE.lock().push_back(curr);
+		};
+	};
 
-	if let Some(ref m) = next.lock_memory() {
-		m.pick_up();
+	if let Some(user) = next.get_user_ext() {
+		user.lock_memory().pick_up();
 	}
 
 	let _ = mem::replace(CURRENT.get_mut(), next);

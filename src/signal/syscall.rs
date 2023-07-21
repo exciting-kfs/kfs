@@ -39,9 +39,10 @@ pub fn sys_signal(num: usize, handler: usize) -> Result<usize, Errno> {
 	};
 
 	let mut table = unsafe { CURRENT.get_mut() }
+		.get_user_ext()
+		.ok_or(Errno::UnknownErrno)? // kernel task.
 		.signal
 		.as_ref()
-		.ok_or(Errno::UnknownErrno)? // kernel task.
 		.table
 		.lock();
 	let old_handler = mem::replace(&mut table[num.index()], new_handler);
@@ -64,9 +65,10 @@ pub fn sys_sigaction(
 	let num = validate_sig_num(num)?;
 
 	let mut table = unsafe { CURRENT.get_mut() }
+		.get_user_ext()
+		.ok_or(Errno::UnknownErrno)? // kernel task.
 		.signal
 		.as_ref()
-		.ok_or(Errno::UnknownErrno)? // kernel task.
 		.table
 		.lock();
 
@@ -98,7 +100,11 @@ pub fn sys_sigreturn(frame: &InterruptFrame, restart: &mut bool) -> Result<usize
 	unsafe {
 		// pr_debug!("sigreturn: {:p}, {}", sig_ctx, (*sig_ctx).intr);
 		let current = CURRENT.get_mut();
-		let signal = current.signal.as_ref().ok_or(Errno::UnknownErrno)?;
+		let signal = current
+			.get_user_ext()
+			.ok_or(Errno::UnknownErrno)?
+			.signal
+			.as_ref();
 
 		// restore the sig mask of the task.signal.
 		signal.overwrite_mask((*sig_ctx).mask);
@@ -138,7 +144,10 @@ fn validate_user_addr(addr: usize) -> Result<(), Errno> {
 	}
 
 	let current = unsafe { CURRENT.get_mut() };
-	let memory = current.lock_memory().unwrap();
+	let memory = current
+		.get_user_ext()
+		.expect("must be user process")
+		.lock_memory();
 
 	let area = memory.get_vma().find_area(addr).ok_or(Errno::EFAULT)?;
 	if !area.flags.contains(AreaFlag::Readable) {

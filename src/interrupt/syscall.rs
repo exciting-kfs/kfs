@@ -7,6 +7,10 @@ use crate::interrupt::InterruptFrame;
 pub mod errno;
 use crate::pr_info;
 use crate::process::exec::sys_exec;
+use crate::process::relation::{
+	sys_getpgid, sys_getpgrp, sys_getpid, sys_getppid, sys_getsid, sys_setpgid, sys_setsid,
+};
+use crate::process::wait::sys_waitpid;
 use crate::process::{exit::sys_exit, fork::sys_fork, task::CURRENT};
 use crate::signal::sig_handler::SigAction;
 use crate::signal::{sys_sigaction, sys_signal, sys_sigreturn};
@@ -17,7 +21,14 @@ use self::errno::Errno;
 pub extern "C" fn handle_syscall_impl(mut frame: InterruptFrame) {
 	let mut restart = true;
 	let mut ret = Err(Errno::UnknownErrno);
-	let signal = unsafe { CURRENT.get_mut().signal.as_ref().expect("user task") };
+	let signal = unsafe {
+		CURRENT
+			.get_mut()
+			.get_user_ext()
+			.expect("user task")
+			.signal
+			.as_ref()
+	};
 
 	while restart {
 		restart = false;
@@ -42,7 +53,7 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 	let current = unsafe { CURRENT.get_mut() };
 	match frame.eax {
 		1 => {
-			pr_info!("PID[{}]: exited({})", current.get_pid(), frame.ebx);
+			// pr_info!("PID[{}]: exited({})", current.get_pid().as_raw(), frame.ebx);
 			sys_exit(frame.ebx);
 		}
 		2 => sys_fork(frame),
@@ -54,19 +65,25 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 			pr_info!("syscall: write");
 			sys_write(frame.ebx as isize, frame.ecx as *mut u8, frame.edx)
 		}
+		7 => sys_waitpid(frame.ebx as isize, frame.ecx as *mut isize, frame.edx),
+		11 => sys_exec(frame, frame.ebx),
+		20 => sys_getpid(),
 		42 => {
 			pr_info!(
 				"PID[{}]: DEBUG syscall called({})",
-				current.get_pid(),
-				frame.ebx as isize,
+				current.get_pid().as_raw(),
+				frame.ebx as isize
 			);
 			Ok(0)
 		}
-		11 => sys_exec(frame, frame.ebx),
 		48 => {
 			pr_info!("syscall: signal: {}, {:x}", frame.ebx, frame.ecx);
 			sys_signal(frame.ebx, frame.ecx)
 		}
+		57 => sys_setpgid(frame.ebx, frame.ecx),
+		64 => sys_getppid(),
+		65 => sys_getpgrp(),
+		66 => sys_setsid(),
 		67 => {
 			pr_info!(
 				"syscall: sigaction: {}, {:x}, {:x}",
@@ -84,6 +101,8 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 			pr_info!("syscall: sigreturn: {:p}", &frame);
 			sys_sigreturn(frame, restart)
 		}
+		132 => sys_getpgid(frame.ebx),
+		147 => sys_getsid(),
 		_ => {
 			pr_info!("syscall: the syscall {} is unsupported.", frame.eax);
 			Ok(0)

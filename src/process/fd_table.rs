@@ -3,7 +3,7 @@ use core::array;
 use alloc::sync::Arc;
 use kfs_macro::context;
 
-use crate::{file::File, sync::locked::Locked};
+use crate::file::File;
 
 const FDTABLE_SIZE: usize = 256;
 
@@ -21,11 +21,11 @@ impl Fd {
 	}
 }
 
-pub struct FdTable(Locked<[Option<Arc<File>>; FDTABLE_SIZE]>);
+pub struct FdTable([Option<Arc<File>>; FDTABLE_SIZE]);
 
 impl FdTable {
 	pub fn new() -> Self {
-		Self(Locked::new(array::from_fn(|_| None)))
+		Self(array::from_fn(|_| None))
 	}
 
 	pub fn clone_for_fork(&self) -> Self {
@@ -34,15 +34,19 @@ impl FdTable {
 
 	#[context(irq_disabled)]
 	pub fn get_file(&self, fd: Fd) -> Option<Arc<File>> {
-		self.0.lock()[fd.index()].clone()
+		self.0[fd.index()].clone()
 	}
 
 	#[context(irq_disabled)]
-	pub fn alloc_fd(&self, file: Arc<File>) -> Option<Fd> {
-		let mut table = self.0.lock();
+	pub fn alloc_fd(&mut self, file: Arc<File>) -> Option<Fd> {
+		let (fd, entry) = self
+			.0
+			.iter_mut()
+			.enumerate()
+			.find(|(_, entry)| entry.is_none())?;
 
-		let (fd, _) = table.iter().enumerate().find(|(_, x)| x.is_none())?;
-		table[fd] = Some(file);
+		*entry = Some(file);
+
 		Some(Fd(fd))
 	}
 }

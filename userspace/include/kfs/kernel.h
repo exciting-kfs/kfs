@@ -1,7 +1,7 @@
 #ifndef _KFS_KERNEL_H
 #define _KFS_KERNEL_H
 
-#define NULL (void *)0
+#define NULL ((void *)0)
 
 typedef unsigned int size_t;
 typedef int ssize_t;
@@ -14,6 +14,41 @@ ssize_t read(int fildes, void *buf, size_t nbyte);
 ssize_t write(int fildes, const void *buf, size_t nbyte);
 
 int exec(const char *name);
+
+pid_t waitpid(pid_t pid, int *stat_loc, int options);
+
+#define _W_FLAG_MASK 0xff000000;
+#define _W_STATUS_MASK 0x000000ff;
+
+#define _W_SIGNALED 0x01000000;
+#define _W_STOPPED 0x02000000;
+#define _W_EXITED 0x03000000;
+#define _W_CORE_DUMPED 0x04000000;
+
+#define _W_GET_FLAG(x) ((x) & _W_FLAG_MASK)
+#define _W_GET_STATUS(x) ((x) & _W_STATUS_MASK)
+
+#define WIFEXITED(x) (_W_GET_FLAG(x) == _W_EXITED)
+#define WIFSIGNALED(x) (_W_GET_FLAG(x) == _W_SIGNALED)
+#define WIFSTOPPED(x) (_W_GET_FLAG(x) == _W_STOPPED)
+#define WCOREDUMP(x) (_W_GET_FLAG(x) == _W_CORE_DUMPED)
+
+#define WEXITSTATUS(x) _W_GET_STATUS(x)
+#define WTERMSIG(x) _W_GET_STATUS(x)
+#define WSTOPSIG(x) _W_GET_STATUS(x)
+
+#define WNOHANG (1<<0);
+#define WUNTRACED (1<<1);
+
+pid_t getpid(void);
+pid_t getppid(void);
+
+pid_t getpgrp(void);
+pid_t getpgid(pid_t pid);
+pid_t setpgid(pid_t pid, pid_t pgid);
+
+pid_t setsid(void);
+pid_t getsid(void);
 
 void fortytwo(int number);
 

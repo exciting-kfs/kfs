@@ -11,9 +11,9 @@ use crate::{
 pub(super) fn get_file(fd: isize) -> Result<Arc<File>, Errno> {
 	let fd = Fd::from(fd as usize).ok_or(Errno::EBADF)?;
 	let fd_table = unsafe { CURRENT.get_mut() }
-		.fd_table
-		.as_ref()
-		.expect("user task");
+		.get_user_ext()
+		.expect("user task")
+		.lock_fd_table();
 	fd_table.get_file(fd).ok_or(Errno::EBADF)
 }
 

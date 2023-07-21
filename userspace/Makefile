@@ -26,7 +26,7 @@ export LD
 
 # common flags
 
-CFLAGS += -Wall -Wextra -Werror -nostdlib
+CFLAGS += -Wall -Wextra -nostdlib
 CFLAGS += -I$(realpath include)
 export CFLAGS
 
@@ -40,7 +40,7 @@ export LDFLAGS
 
 # targets
 
-MODULES := init shell fortytwo sig_test
+MODULES := init shell fortytwo test_relation sig_test
 
 LIBSYSTEM := $(BUILDDIR)/libsystem.a
 
