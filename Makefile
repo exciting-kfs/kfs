@@ -28,7 +28,7 @@ LD := i686-$(UTIL)-ld
 
 ADDR2LINE := i686-$(UTIL)-addr2line
 
-PAGER := vim -
+# PAGER := vim -
 
 # === compiler flag ===
 
@@ -139,9 +139,13 @@ dump-header :
 dump-text :
 	@$(OBJDUMP) $(OBJDUMP_FLAG) --disassemble $(KERNEL_BIN) $(PAGER)
 
+.PHONY : check-stack
+check-stack :
+	@$(MAKE) dump-text | python3 scripts/checkstack.py
+
 .PHONY : size
 size :
-	@ls -lh $<
+	@ls -lh $(KERNEL_BIN)
 
 .PHONY : lookup-addr
 lookup-addr :
@@ -184,7 +188,7 @@ $(KERNEL_DEBUG_SYMBOL) : $(KERNEL_ELF)
 	@echo "[-] extracting debug-symbols..."
 	@$(OBJCOPY) --only-keep-debug $< $(KERNEL_DEBUG_SYMBOL)
 
-$(RESCUE_IMG) : $(KERNEL_BIN) $(shell find $(RESUCE_SRC_ROOT) -type f)
+$(RESCUE_IMG) : $(KERNEL_BIN) $(shell find $(RESUCE_SRC_ROOT) -type f) $(KERNEL_DEBUG_SYMBOL)
 	@echo "[-] creating rescue image..."
 	@mkdir -p $(TARGET_ROOT)/boot
 	@cp -r $(RESUCE_SRC_ROOT) $(TARGET_ROOT)
