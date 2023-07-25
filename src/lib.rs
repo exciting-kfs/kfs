@@ -116,17 +116,14 @@ fn run_process() -> ! {
 	let stat = Task::new_kernel(show_page_stat as usize, 0).expect("OOM");
 	let worker = Task::new_kernel(slow_worker as usize, 0).expect("OOM");
 
-	use user_bin::INIT_CODE;
-	let init = Task::new_user(INIT_CODE).expect("OOM");
-	// open_default_fd(&mut init);
+	let init = Task::new_user(user_bin::INIT).expect("OOM");
+	let mut shell = Task::new_user(user_bin::SHELL).expect("OOM");
+	open_default_fd(&mut shell);
 
 	TASK_QUEUE.lock().push_back(stat);
 	TASK_QUEUE.lock().push_back(worker);
 	TASK_QUEUE.lock().push_back(init);
-
-	// use user_bin::SHELL;
-	// let mut shell = Task::new_user(SHELL).expect("OOM");
-	// TASK_QUEUE.lock().push_back(shell);
+	TASK_QUEUE.lock().push_back(shell);
 
 	idle();
 }

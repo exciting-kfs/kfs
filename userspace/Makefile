@@ -30,7 +30,7 @@ export COMMON
 
 # targets
 
-MODULES := init shell
+MODULES := init shell fortytwo
 
 LIBSYSTEM := $(BUILDDIR)/libsystem.a
 

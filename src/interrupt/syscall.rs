@@ -4,6 +4,7 @@ use crate::interrupt::InterruptFrame;
 
 pub mod errno;
 use crate::pr_info;
+use crate::process::exec::sys_exec;
 use crate::process::{exit::sys_exit, fork::sys_fork, task::CURRENT};
 
 use self::errno::Errno;
@@ -14,7 +15,7 @@ pub extern "C" fn handle_syscall_impl(mut frame: InterruptFrame) {
 
 	let ret: Result<usize, Errno> = match frame.eax {
 		1 => {
-			pr_info!("PID[{}]: exited.", current.get_pid());
+			pr_info!("PID[{}]: exited({})", current.get_pid(), frame.ebx);
 			sys_exit(frame.ebx);
 		}
 		2 => sys_fork(&frame),
@@ -28,12 +29,13 @@ pub extern "C" fn handle_syscall_impl(mut frame: InterruptFrame) {
 		}
 		42 => {
 			pr_info!(
-				"PID[{}]: DEBUG syscall called ({})",
+				"PID[{}]: DEBUG syscall called({})",
 				current.get_pid(),
-				frame.ebx
+				frame.ebx as isize,
 			);
 			Ok(0)
 		}
+		11 => sys_exec(&mut frame, frame.ebx),
 		_ => {
 			pr_info!("syscall: the syscall {} is unsupported.", frame.eax);
 			Ok(0)
