@@ -91,10 +91,6 @@ impl Task {
 		}))
 	}
 
-	pub unsafe fn interrupt_frame(&self) -> *mut InterruptFrame {
-		self.kstack.as_interrupt_frame()
-	}
-
 	pub fn get_pid(&self) -> usize {
 		self.pid
 	}

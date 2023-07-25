@@ -13,8 +13,10 @@ use super::task::CURRENT;
 
 const PATH_MAX: usize = 128;
 
+/// execute new user binary
+/// do not call from kernel thread!!
 #[context(irq_disabled)]
-pub fn sys_exec(raw_binary_name_ptr: usize) -> Result<usize, Errno> {
+pub fn sys_exec(frame: *mut InterruptFrame, raw_binary_name_ptr: usize) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };
 
 	let mut memory = current.lock_memory().unwrap();
@@ -44,9 +46,7 @@ pub fn sys_exec(raw_binary_name_ptr: usize) -> Result<usize, Errno> {
 	mem::drop(mem::replace(&mut *memory, new_memory));
 
 	unsafe {
-		current
-			.interrupt_frame()
-			.copy_from_nonoverlapping(&InterruptFrame::new_user(USER_CODE_BASE, USTACK_BASE), 1)
+		frame.copy_from_nonoverlapping(&InterruptFrame::new_user(USER_CODE_BASE, USTACK_BASE), 1)
 	};
 
 	Ok(0)

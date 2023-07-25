@@ -35,7 +35,7 @@ pub extern "C" fn handle_syscall_impl(mut frame: InterruptFrame) {
 			);
 			Ok(0)
 		}
-		11 => sys_exec(frame.ebx),
+		11 => sys_exec(&mut frame, frame.ebx),
 		_ => {
 			pr_info!("syscall: the syscall {} is unsupported.", frame.eax);
 			Ok(0)
