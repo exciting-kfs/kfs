@@ -1,5 +1,7 @@
 use core::fmt;
 
+use crate::x86::{get_eflags, DPL_USER, GDT};
+
 /// Stack Frame after interrupt.
 /// constructed by src/asm/interrupt.S (handle_interrupt)
 #[repr(C)]
@@ -31,8 +33,33 @@ pub struct InterruptFrame {
 }
 
 impl InterruptFrame {
+	pub fn new_user(user_return_addr: usize, user_stack: usize) -> Self {
+		let eflags = get_eflags() | (1 << 9); // enable interrupt
+
+		Self {
+			ebp: 0,
+			edi: 0,
+			esi: 0,
+			edx: 0,
+			ecx: 0,
+			ebx: 0,
+			eax: 0,
+			ds: GDT::USER_DATA | DPL_USER,
+			es: GDT::USER_DATA | DPL_USER,
+			fs: GDT::USER_DATA | DPL_USER,
+			gs: GDT::USER_DATA | DPL_USER,
+			handler: 0,
+			error_code: 0,
+			eip: user_return_addr,
+			cs: GDT::USER_CODE | DPL_USER,
+			eflags,
+			esp: user_stack,
+			ss: GDT::USER_DATA | DPL_USER,
+		}
+	}
+
 	pub fn is_user(&self) -> bool {
-		(self.cs & 0x0000ffff) == 24
+		(self.cs & 0x0000fffc) == 24
 	}
 }
 

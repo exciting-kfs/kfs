@@ -1,4 +1,4 @@
 NAME := init.bin
-SRCS := forkbomb.c
+SRCS := init.c
 
 -include $(COMMON)

@@ -2,6 +2,7 @@
 %define FORK_ENTRY 2
 %define READ_ENTRY 3
 %define WRITE_ENTRY 4
+%define EXEC_ENTRY 11 ; TODO: execve
 
 section .text
 
@@ -39,6 +40,13 @@ fortytwo:
 global _exit
 _exit:
     mov eax, EXIT_ENTRY
+    mov ebx, [esp + 4]
+    int 0x80
+    ret
+
+global exec
+exec:
+    mov eax, EXEC_ENTRY
     mov ebx, [esp + 4]
     int 0x80
     ret

@@ -62,6 +62,10 @@ impl Memory {
 		&self.page_dir
 	}
 
+	pub fn get_vma(&self) -> &UserAddressSpace {
+		&self.vma
+	}
+
 	fn copy_data_at(&mut self, addr: usize, data: &[u8]) -> Result<(), AllocError> {
 		self.vma.allocate_fixed_area(
 			addr,

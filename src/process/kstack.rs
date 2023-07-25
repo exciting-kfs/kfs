@@ -7,7 +7,6 @@ use crate::interrupt::InterruptFrame;
 use crate::mm::alloc::page::{alloc_pages, free_pages};
 use crate::mm::alloc::Zone;
 use crate::mm::util::*;
-use crate::x86::{get_eflags, DPL_USER, GDT};
 
 use super::kthread::kthread_entry;
 use super::task::{return_from_fork, return_from_interrupt};
@@ -48,30 +47,33 @@ impl Stack {
 		Ok(stack)
 	}
 
+	pub fn push_interrupt_frame(&mut self, frame: &InterruptFrame) -> Result<(), StackOverFlow> {
+		let new_esp = unsafe {
+			self.esp
+				.sub(size_of::<InterruptFrame>() / size_of::<usize>())
+		};
+
+		if !self.is_esp_in_bound(new_esp) {
+			return Err(StackOverFlow);
+		}
+
+		unsafe {
+			new_esp
+				.cast::<InterruptFrame>()
+				.copy_from_nonoverlapping(frame, 1)
+		};
+
+		self.esp = new_esp;
+
+		Ok(())
+	}
+
 	pub fn new_user(user_return_addr: usize, user_stack: usize) -> Result<Self, AllocError> {
 		let mut stack = Self::alloc()?;
 
-		let eflags = get_eflags() | (1 << 9); // enable interrupt
-
-		// interrupt frame
-		stack.push(GDT::USER_DATA | DPL_USER).unwrap();
-		stack.push(user_stack).unwrap();
-		stack.push(eflags).unwrap();
-		stack.push(GDT::USER_CODE | DPL_USER).unwrap();
-		stack.push(user_return_addr).unwrap();
-		stack.push(0).unwrap();
-		stack.push(0).unwrap();
-		stack.push(GDT::USER_DATA | DPL_USER).unwrap();
-		stack.push(GDT::USER_DATA | DPL_USER).unwrap();
-		stack.push(GDT::USER_DATA | DPL_USER).unwrap();
-		stack.push(GDT::USER_DATA | DPL_USER).unwrap();
-		stack.push(0).unwrap();
-		stack.push(0).unwrap();
-		stack.push(0).unwrap();
-		stack.push(0).unwrap();
-		stack.push(0).unwrap();
-		stack.push(0).unwrap();
-		stack.push(0).unwrap();
+		stack
+			.push_interrupt_frame(&InterruptFrame::new_user(user_return_addr, user_stack))
+			.unwrap();
 
 		// kernel context frame
 		stack.push(return_from_interrupt as usize).unwrap();
