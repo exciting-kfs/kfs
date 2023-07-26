@@ -5,7 +5,7 @@ use crate::x86::{get_eflags, DPL_USER, GDT};
 /// Stack Frame after interrupt.
 /// constructed by src/asm/interrupt.S (handle_interrupt)
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct InterruptFrame {
 	pub ebp: usize,
 	pub edi: usize,

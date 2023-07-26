@@ -4,9 +4,10 @@ use super::sig_mask::SigMask;
 
 #[derive(Debug)]
 #[repr(C)]
-pub struct SigContext {
-	pub intr: InterruptFrame,
+pub struct SigCtx {
+	pub intr_frame: InterruptFrame,
 	pub mask: SigMask,
+	pub syscall_ret: isize,
 }
 
 // struct sigcontext {
@@ -15,11 +16,12 @@ pub struct SigContext {
 //   unsigned long cr2;
 // };
 
-impl SigContext {
-	pub fn new(intr_frame: *const InterruptFrame, mask: SigMask) -> Self {
+impl SigCtx {
+	pub fn new(intr_frame: &InterruptFrame, mask: SigMask, syscall_ret: isize) -> Self {
 		Self {
-			intr: unsafe { *intr_frame },
+			intr_frame: intr_frame.clone(),
 			mask,
+			syscall_ret,
 		}
 	}
 }

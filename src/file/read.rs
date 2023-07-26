@@ -26,13 +26,7 @@ pub fn sys_read(fd: isize, buf: *mut u8, len: isize) -> Result<usize, Errno> {
 
 	let len = len as usize;
 	let file = get_file(fd)?;
-	let mut count = 0;
 
-	// block
-	while count < len {
-		let buf = unsafe { from_raw_parts_mut(buf.offset(count as isize), len - count) };
-		count += file.ops.read(buf);
-	}
-
-	Ok(len)
+	let buf = unsafe { from_raw_parts_mut(buf, len) };
+	file.ops.read(&file, buf)
 }

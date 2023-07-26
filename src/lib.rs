@@ -38,7 +38,7 @@ use alloc::sync::Arc;
 use console::CONSOLE_MANAGER;
 use core::{arch::asm, panic::PanicInfo};
 use driver::tty;
-use file::File;
+use file::{File, OpenFlag};
 use process::context::yield_now;
 use process::task::{Task, TASK_QUEUE};
 use scheduler::work::slow_worker;
@@ -104,17 +104,17 @@ fn open_default_fd(task: &mut Arc<Task>) {
 
 	task.fd_table.lock()[0] = Some(Arc::new(File {
 		ops: tty.clone(),
-		open_flag: 0,
+		open_flag: OpenFlag::O_RDWR,
 	}));
 
 	task.fd_table.lock()[1] = Some(Arc::new(File {
 		ops: tty.clone(),
-		open_flag: 0,
+		open_flag: OpenFlag::O_RDWR,
 	}));
 
 	task.fd_table.lock()[2] = Some(Arc::new(File {
 		ops: tty.clone(),
-		open_flag: 0,
+		open_flag: OpenFlag::O_RDWR,
 	}));
 }
 

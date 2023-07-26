@@ -1,16 +1,6 @@
 use super::{sig_flag::SigFlag, sig_mask::SigMask, sig_num::SigNum};
 
 #[derive(Debug, Clone)]
-pub enum SigHandler {
-	Core,
-	Continue,
-	Stop,
-	Terminate,
-	Ignore,
-	Some(SigAction),
-}
-
-#[derive(Debug, Clone)]
 #[repr(C)]
 pub struct SigAction {
 	addr: usize,
@@ -59,6 +49,16 @@ impl SigAction {
 	}
 }
 
+#[derive(Debug, Clone)]
+pub enum SigHandler {
+	Core,
+	Continue,
+	Stop,
+	Terminate,
+	Ignore,
+	Some(SigAction),
+}
+
 impl SigHandler {
 	pub fn some(act: SigAction) -> Self {
 		Self::Some(act)
@@ -100,6 +100,13 @@ impl SigHandler {
 			XCPU => Core,
 			XFSZ => Core,
 			WINCH => Ignore,
+		}
+	}
+
+	pub fn get_flag(&self) -> SigFlag {
+		match self {
+			SigHandler::Some(act) => act.flag,
+			_ => SigFlag::DEFAULT,
 		}
 	}
 }

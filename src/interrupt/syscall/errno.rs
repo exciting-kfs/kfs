@@ -1,4 +1,5 @@
 #[repr(isize)]
+#[derive(Clone, Copy, Debug)]
 #[non_exhaustive]
 pub enum Errno {
 	UnknownErrno,
@@ -36,6 +37,12 @@ pub enum Errno {
 	EPIPE,
 	EDOM,
 	ERANGE,
+}
+
+impl Errno {
+	pub fn as_ret(&self) -> isize {
+		-(*self as isize)
+	}
 }
 
 fn desc(errno: Errno) -> &'static str {

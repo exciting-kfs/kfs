@@ -3,12 +3,17 @@ use bitflags::bitflags;
 bitflags! {
 	#[derive(Debug, Clone, Copy)]
 	pub struct SigFlag: u32 {
-		const NoChildStop = 1;
-		const OnStack = 2;
+		const OnStack = 1;
+		const Restart = 2;
 		const ResetHand = 4;
-		const Restart = 8;
-		const SigInfo = 16;
+		const NoChildStop = 8;
+		const NoDefer = 16;
 		const NoChildWait = 32;
-		const NoDefer = 64;
+		const SigInfo = 64;
+
 	}
+}
+
+impl SigFlag {
+	pub const DEFAULT: SigFlag = Self::Restart;
 }

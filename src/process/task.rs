@@ -9,7 +9,6 @@ use crate::file::File;
 use crate::interrupt::InterruptFrame;
 use crate::mm::user::memory::Memory;
 use crate::process::context::{context_switch, InContext};
-use crate::signal::SigInfo;
 use crate::signal::Signal;
 use crate::sync::locked::{Locked, LockedGuard};
 use crate::sync::{cpu_local::CpuLocal, singleton::Singleton};
@@ -99,22 +98,6 @@ impl Task {
 				self.signal.as_ref().expect("user task").clone_for_fork(), // TODO test needed.
 			)),
 		}))
-	}
-
-	pub fn recv_signal(&self, sig_info: SigInfo) {
-		let signal = match self.signal {
-			Some(ref s) => s,
-			None => return,
-		};
-		signal.recv_signal(sig_info);
-	}
-
-	pub fn do_signal(&self) {
-		let signal = match self.signal {
-			Some(ref s) => s,
-			None => return,
-		};
-		signal.do_signal(self.kstack.as_interrupt_frame());
 	}
 
 	pub fn get_pid(&self) -> usize {

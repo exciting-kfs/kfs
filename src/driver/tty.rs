@@ -10,14 +10,12 @@ use crate::collection::LineBuffer;
 use crate::config::CONSOLE_COUNTS;
 use crate::console::console_manager::console::SyncConsole;
 use crate::console::CONSOLE_MANAGER;
-use crate::file::FileOps;
+use crate::file::{File, FileOps, OpenFlag};
 use crate::input::key_event::*;
 use crate::input::keyboard::KEYBOARD;
+use crate::interrupt::syscall::errno::Errno;
 use crate::io::{BlkRead, BlkWrite, ChRead, ChWrite, NoSpace};
 use crate::process::task::{Task, CURRENT};
-use crate::signal::sig_code::SigCode;
-use crate::signal::sig_num::SigNum;
-use crate::signal::SigInfo;
 use crate::sync::locked::Locked;
 
 #[rustfmt::skip]
@@ -342,6 +340,10 @@ impl TTY {
 
 	fn send_signal(&self, c: u8) {
 		use crate::pr_debug;
+		use crate::signal::sig_code::SigCode;
+		use crate::signal::sig_info::SigInfo;
+		use crate::signal::sig_num::SigNum;
+
 		pr_debug!("tty: send signal: {}", c);
 
 		let num = match c {
@@ -363,7 +365,11 @@ impl TTY {
 		};
 
 		match self.owner {
-			Some(ref task) => task.recv_signal(sig_info),
+			Some(ref task) => task
+				.signal
+				.as_ref()
+				.expect("user task")
+				.recv_signal(sig_info),
 			None => {}
 		}
 	}
@@ -443,6 +449,8 @@ impl ChWrite<u8> for TTY {
 
 /// to process
 impl ChRead<u8> for TTY {
+	// Because memory allocator is not used in VecDeque.pop_front(),
+	// this function don't need to be in irq_disabled context.
 	fn read_one(&mut self) -> Option<u8> {
 		self.into_process.pop_front()
 	}
@@ -451,17 +459,39 @@ impl ChRead<u8> for TTY {
 impl BlkWrite for TTY {}
 impl BlkRead for TTY {}
 
+use crate::signal::poll_signal_queue;
+
 impl FileOps for Locked<TTY> {
-	#[context(irq_disabled)]
-	fn read(&self, buf: &mut [u8]) -> usize {
-		let mut tty = self.lock();
-		tty.read(buf)
+	fn read(&self, file: &Arc<File>, buf: &mut [u8]) -> Result<usize, Errno> {
+		#[context(irq_disabled)]
+		fn __read(tty: &Locked<TTY>, buf: &mut [u8]) -> usize {
+			let mut tty = tty.lock();
+			tty.read(buf)
+		}
+
+		let block = !file.open_flag.contains(OpenFlag::O_NONBLOCK);
+		let mut count = __read(self, buf);
+		while block && count == 0 {
+			unsafe { poll_signal_queue()? };
+			count += __read(self, buf);
+		}
+		Ok(count)
 	}
 
-	#[context(irq_disabled)]
-	fn write(&self, buf: &[u8]) -> usize {
-		let mut tty = self.lock();
-		tty.write(buf)
+	fn write(&self, file: &Arc<File>, buf: &[u8]) -> Result<usize, Errno> {
+		#[context(irq_disabled)]
+		fn __write(tty: &Locked<TTY>, buf: &[u8]) -> usize {
+			let mut tty = tty.lock();
+			tty.write(buf)
+		}
+
+		let block = !file.open_flag.contains(OpenFlag::O_NONBLOCK);
+		let mut count = __write(self, buf);
+		while block && count == 0 {
+			unsafe { poll_signal_queue()? };
+			count += __write(self, buf);
+		}
+		Ok(count)
 	}
 }
 
