@@ -3,48 +3,51 @@ use core::mem::transmute;
 #[repr(usize)]
 #[derive(Clone, Copy, Debug)]
 pub enum SigNum {
-	Unknown,
-	SIGHUP,
-	SIGINT,
-	SIGQUIT,
-	SIGILL,
-	SIGTRAP,
-	SIGABRT,
-	SIGIOT,
-	SIGBUS,
-	SIGFPE,
-	SIGKILL,
-	SIGUSR1,
-	SIGSEGV,
-	SIGUSR2,
-	SIGPIPE,
-	SIGALRM,
-	SIGTERM,
-	SIGSTKFLT,
-	SIGCHLD,
-	SIGCONT,
-	SIGSTOP,
-	SIGTSTP,
-	SIGTTIN,
-	SIGTTOU,
-	SIGURG,
-	SIGXCPU,
-	SIGXFSZ,
-	SIGVTALRM,
-	SIGPROF,
-	SIGWINCH,
-	SIGIO,
-	SIGPWR,
-	SIGSYS,
+	HUP = 1,
+	INT,
+	QUIT,
+	ILL,
+	TRAP,
+	ABRT,
+	IOT,
+	BUS,
+	FPE,
+	KILL,
+	USR1,
+	SEGV,
+	USR2,
+	PIPE,
+	ALRM,
+	TERM,
+	STKFLT,
+	CHLD,
+	CONT,
+	STOP,
+	TSTP,
+	TTIN,
+	TTOU,
+	URG,
+	XCPU,
+	XFSZ,
+	VTALRM,
+	PROF,
+	WINCH,
+	IO,
+	PWR,
+	SYS,
 }
 
 impl SigNum {
 	pub fn from_usize(num: usize) -> Option<Self> {
 		use SigNum::*;
-		if SIGHUP as usize <= num && num <= SIGSYS as usize {
+		if HUP as usize <= num && num <= SYS as usize {
 			Some(unsafe { transmute(num) })
 		} else {
 			None
 		}
+	}
+
+	pub const fn index(&self) -> usize {
+		*self as usize - 1
 	}
 }

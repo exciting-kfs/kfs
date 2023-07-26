@@ -1,14 +1,12 @@
-use core::ptr::copy_nonoverlapping;
-
 use crate::interrupt::InterruptFrame;
 
-use super::sig_flag::SigFlag;
+use super::sig_mask::SigMask;
 
 #[derive(Debug)]
 #[repr(C)]
 pub struct SigContext {
 	pub intr: InterruptFrame,
-	pub mask: SigFlag,
+	pub mask: SigMask,
 }
 
 // struct sigcontext {
@@ -18,10 +16,10 @@ pub struct SigContext {
 // };
 
 impl SigContext {
-	pub fn new(intr_frame: *const InterruptFrame, mask: SigFlag) -> Self {
-		let mut intr = InterruptFrame::empty();
-		unsafe { copy_nonoverlapping(intr_frame, &mut intr as *mut InterruptFrame, 1) }
-
-		Self { intr, mask }
+	pub fn new(intr_frame: *const InterruptFrame, mask: SigMask) -> Self {
+		Self {
+			intr: unsafe { *intr_frame },
+			mask,
+		}
 	}
 }

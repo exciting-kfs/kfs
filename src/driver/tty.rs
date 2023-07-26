@@ -345,8 +345,8 @@ impl TTY {
 		pr_debug!("tty: send signal: {}", c);
 
 		let num = match c {
-			x if x == self.control.sig_intr => SigNum::SIGINT,
-			x if x == self.control.sig_quit => SigNum::SIGQUIT,
+			x if x == self.control.sig_intr => SigNum::INT,
+			x if x == self.control.sig_quit => SigNum::QUIT,
 			_ => unreachable!(),
 		};
 

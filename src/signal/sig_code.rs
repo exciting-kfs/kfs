@@ -1,5 +1,5 @@
 #[allow(non_camel_case_types)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 #[repr(usize)]
 pub enum SigCode {
 	SI_USER,   // kill

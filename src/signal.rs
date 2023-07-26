@@ -2,6 +2,7 @@ pub mod context;
 pub mod handler;
 pub mod sig_code;
 pub mod sig_flag;
+pub mod sig_mask;
 pub mod sig_num;
 
 use core::{
@@ -18,11 +19,11 @@ use crate::{
 	interrupt::{syscall::errno::Errno, InterruptFrame},
 	pr_debug,
 	process::task::CURRENT,
-	signal::{handler::SigHandler, sig_num::SigNum},
+	signal::{handler::SigHandler, sig_flag::SigFlag, sig_num::SigNum},
 	sync::locked::Locked,
 };
 
-use self::{context::SigContext, handler::SigAction, sig_code::SigCode, sig_flag::SigFlag};
+use self::{context::SigContext, handler::SigAction, sig_code::SigCode, sig_mask::SigMask};
 
 extern "C" {
 	fn signal_trampoline();
@@ -80,7 +81,7 @@ pub fn sys_signal(num: usize, handler: usize) -> Result<usize, Errno> {
 	let new_handler = match handler {
 		h if h == SIG_DFL => SigHandler::default(num),
 		h if h == SIG_IGN => SigHandler::Ignore,
-		_ => SigHandler::some(SigAction::new(handler, SigFlag::empty())),
+		_ => SigHandler::some(SigAction::new(handler, SigMask::empty(), SigFlag::empty())),
 	};
 
 	let mut table = unsafe { CURRENT.get_mut() }
@@ -89,10 +90,10 @@ pub fn sys_signal(num: usize, handler: usize) -> Result<usize, Errno> {
 		.ok_or(Errno::UnknownErrno)? // kernel task.
 		.sig_table
 		.lock();
-	let old_handler = mem::replace(&mut table[num as usize - 1], new_handler);
+	let old_handler = mem::replace(&mut table[num.index()], new_handler);
 
 	match old_handler {
-		SigHandler::Some(sig_act) => Ok(sig_act.addr),
+		SigHandler::Some(sig_act) => Ok(sig_act.handler()),
 		SigHandler::Ignore => Ok(SIG_IGN),
 		_ => Ok(SIG_DFL),
 	}
@@ -116,10 +117,14 @@ pub fn sys_sigaction(
 		.lock();
 
 	let old_handler = if act.is_null() {
-		table[num as usize - 1].clone()
+		table[num.index()].clone()
 	} else {
-		let new_handler = SigHandler::some(unsafe { (*act).clone() });
-		mem::replace(&mut table[num as usize - 1], new_handler)
+		let act = unsafe { &*act };
+		let new_handler = match act.flag().contains(SigFlag::ResetHand) {
+			true => SigHandler::default(num), // SIGTRAP SIGILL ?
+			false => SigHandler::some(act.clone()),
+		};
+		mem::replace(&mut table[num.index()], new_handler)
 	};
 
 	if !old.is_null() {
@@ -131,10 +136,6 @@ pub fn sys_sigaction(
 	}
 
 	Ok(0)
-}
-
-extern "C" {
-	fn return_from_signal_handler(sig_ctx: *const SigContext, old_esp: usize) -> !;
 }
 
 pub fn sys_sigreturn(sig_ctx: *const SigContext /* user stack */) -> Result<usize, Errno> {
@@ -155,7 +156,7 @@ pub fn sys_sigreturn(sig_ctx: *const SigContext /* user stack */) -> Result<usiz
 
 fn validate_sig_num(num: usize) -> Result<SigNum, Errno> {
 	let num = SigNum::from_usize(num).ok_or(Errno::EINVAL)?;
-	if let SigNum::SIGKILL | SigNum::SIGSTOP = num {
+	if let SigNum::KILL | SigNum::STOP = num {
 		return Err(Errno::EINVAL);
 	}
 	Ok(num)
@@ -180,14 +181,14 @@ fn validate_user_addr(addr: usize) -> Result<(), Errno> {
 
 pub struct Signal {
 	sig_queue: Locked<LinkedList<SigInfo>>,
-	sig_mask: Locked<SigFlag>,
-	pub sig_table: Locked<[SigHandler; variant_count::<SigNum>() - 1]>,
+	sig_mask: Locked<SigMask>,
+	pub sig_table: Locked<[SigHandler; variant_count::<SigNum>()]>,
 }
 
 impl Signal {
 	pub fn new() -> Self {
 		Self {
-			sig_mask: Locked::new(SigFlag::empty()),
+			sig_mask: Locked::new(SigMask::empty()),
 			sig_queue: Locked::new(LinkedList::new()),
 			sig_table: Locked::new(array::from_fn(|i| {
 				SigHandler::default(SigNum::from_usize(i + 1).unwrap())
@@ -195,39 +196,50 @@ impl Signal {
 		}
 	}
 
-	pub fn set_signal_mask(&self, mask: SigFlag) {
-		self.replace_mask(mask);
+	#[context(irq_disabled)]
+	pub fn set_signal_mask(&self, mask: SigMask) {
+		let _lock = self.sig_mask.lock();
+		unsafe { *self.sig_mask.as_mut_ptr() = mask }
 	}
 
 	pub fn clone_for_fork(&self) -> Self {
 		Self {
-			sig_queue: self.sig_queue.clone(),
+			sig_queue: Locked::new(LinkedList::new()),
 			sig_mask: self.sig_mask.clone(),
 			sig_table: self.sig_table.clone(),
 		}
 	}
 
 	#[context(irq_disabled)]
-	fn replace_mask(&self, mask: SigFlag) -> SigFlag {
-		let _lock = self.sig_mask.lock();
-		unsafe { ptr::replace(self.sig_mask.as_mut_ptr(), mask) }
+	fn calc_mask(&self, act: &SigAction, info: &SigInfo) -> SigMask {
+		let lock = self.sig_mask.lock();
+		let o_mask = *lock;
+		let n_mask = if act.flag().contains(SigFlag::NoDefer) {
+			o_mask - info.num.into() | act.mask()
+		} else {
+			o_mask | info.num.into() | act.mask()
+		};
+		unsafe { ptr::replace(self.sig_mask.as_mut_ptr(), n_mask) }
 	}
 
 	#[context(irq_disabled)]
 	pub fn recv_signal(&self, sig_info: SigInfo) {
-		let flag = SigFlag::from_bits_truncate(1 << sig_info.num as u32);
 		let sig_mask = self.sig_mask.lock();
-		if sig_mask.contains(flag) {
+		if sig_mask.contains(sig_info.num.into()) {
 			return;
 		}
 
 		pr_debug!("received [{:?}] from pid[{}]", sig_info.num, sig_info.pid);
 		let mut sig_queue = self.sig_queue.lock();
-		sig_queue.push_back(sig_info);
+
+		match sig_info.num {
+			SigNum::KILL | SigNum::STOP => sig_queue.push_front(sig_info),
+			_ => sig_queue.push_back(sig_info),
+		}
 	}
 
 	pub fn do_signal(&self, intr_frame: *const InterruptFrame) -> Option<()> {
-		let sig_info = self.get_sig_info()?;
+		let sig_info = self.get_event()?;
 		let sig_handler = self.get_handler_info(&sig_info);
 		match sig_handler {
 			SigHandler::Some(act) => unsafe { self.sig_action(act, sig_info, intr_frame) },
@@ -256,7 +268,7 @@ impl Signal {
 		info: SigInfo,
 		intr_frame: *const InterruptFrame,
 	) -> ! {
-		let o_mask = self.replace_mask(act.mask);
+		let o_mask = self.calc_mask(&act, &info);
 		let sig_ctx = SigContext::new(intr_frame, o_mask);
 
 		let mut esp = (*intr_frame).esp;
@@ -279,27 +291,33 @@ impl Signal {
 			func_frame.len() * size_of::<usize>(),
 		);
 		pr_debug!("go_to_signal_handler");
-		go_to_signal_handler(intr_frame, esp, act.addr);
+		go_to_signal_handler(intr_frame, esp, act.handler());
 	}
 
 	#[context(irq_disabled)]
-	fn get_sig_info(&self) -> Option<SigInfo> {
-		let _lock = self.sig_queue.lock();
-		let queue = unsafe { ptr::replace(self.sig_queue.as_mut_ptr(), LinkedList::new()) };
-		let (satisfied, mut not): (LinkedList<SigInfo>, LinkedList<SigInfo>) = queue
-			.into_iter()
-			.partition(|info| self.sig_mask.lock().contains(info.num.into()));
+	fn get_event(&self) -> Option<SigInfo> {
+		let mut queue = self.sig_queue.lock();
+		let mask = self.sig_mask.lock();
 
-		let ret = not.pop_front();
-		not.extend(satisfied);
-		let _ = unsafe { ptr::replace(self.sig_queue.as_mut_ptr(), not) };
+		let mut ret = None;
+		let mut not = LinkedList::new();
+		while let Some(info) = queue.pop_front() {
+			if mask.contains(info.num.into()) {
+				not.push_back(info)
+			} else {
+				ret = Some(info);
+				break;
+			}
+		}
+		queue.extend(not);
+
 		ret
 	}
 
 	#[context(irq_disabled)]
 	fn get_handler_info<'a>(&self, sig_info: &SigInfo) -> SigHandler {
 		let table = self.sig_table.lock();
-		let handler = &table[sig_info.num as usize - 1];
+		let handler = &table[sig_info.num.index()];
 		handler.clone()
 	}
 }

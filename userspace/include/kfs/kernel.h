@@ -29,12 +29,14 @@ typedef struct siginfo {
 	size_t num;
 	size_t pid;
 	size_t uid;
+	size_t code;
 } siginfo_t;
 
 struct sigaction {
 	void (*sa_handler)(int);
 	void (*sa_sigaction)(int, siginfo_t *, void *);
 	sigset_t sa_mask;
+	int sa_flags;
 };
 
 sighandler_t signal(int signum, sighandler_t handler);

@@ -1,11 +1,11 @@
-use core::{fmt, mem};
+use core::fmt;
 
 use crate::x86::{get_eflags, DPL_USER, GDT};
 
 /// Stack Frame after interrupt.
 /// constructed by src/asm/interrupt.S (handle_interrupt)
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct InterruptFrame {
 	pub ebp: usize,
 	pub edi: usize,
@@ -61,10 +61,6 @@ impl InterruptFrame {
 
 	pub fn is_user(&self) -> bool {
 		(self.cs & 0x0000fffc) == 24
-	}
-
-	pub fn empty() -> Self {
-		unsafe { mem::zeroed() }
 	}
 }
 

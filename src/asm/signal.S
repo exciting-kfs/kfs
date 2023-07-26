@@ -28,15 +28,3 @@ go_to_signal_handler:
 	push dword [eax]        ; ebp
 
 	jmp return_from_interrupt
-
-global return_from_signal_handler
-return_from_signal_handler:
-	mov eax, [esp] ; sig_ctx
-
-	mov ebx, [eax]
-	mov edi, [eax + 0x04]
-	mov esi, [eax + 0x08]
-	mov ebp, [eax + 0x0c]
-
-	mov esp, [esp + 4] ; old_esp
-	jmp [eax + 0x10]

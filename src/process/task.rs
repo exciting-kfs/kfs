@@ -1,6 +1,5 @@
 use core::alloc::AllocError;
 use core::array;
-use core::ptr::copy_nonoverlapping;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::{collections::LinkedList, sync::Arc};
@@ -145,10 +144,4 @@ extern "C" {
 
 pub extern "C" fn return_from_fork() {
 	context_switch(InContext::User);
-}
-
-/// push data to user stack.
-unsafe fn push_to_user_stack(esp: &mut usize, src: *const u8, len: usize) {
-	*esp -= len;
-	copy_nonoverlapping(src, (*esp) as *mut _, len);
 }
