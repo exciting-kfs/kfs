@@ -120,13 +120,13 @@ fn open_default_fd(task: &mut Arc<Task>) {
 
 fn run_process() -> ! {
 	// let init = Task::new_user(user_bin::INIT).expect("OOM");
-	let mut shell = Task::new_user(user_bin::SHELL).expect("OOM");
-	open_default_fd(&mut shell);
+	let mut sig_test = Task::new_user(user_bin::SIGTEST).expect("OOM");
+	open_default_fd(&mut sig_test);
 
 	let worker = Task::new_kernel(slow_worker as usize, 0).expect("OOM");
 	TASK_QUEUE.lock().push_back(worker);
 	// TASK_QUEUE.lock().push_back(init);
-	TASK_QUEUE.lock().push_back(shell);
+	TASK_QUEUE.lock().push_back(sig_test);
 
 	idle();
 }

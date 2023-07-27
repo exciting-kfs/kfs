@@ -116,7 +116,7 @@ pub fn sys_sigreturn(frame: &InterruptFrame, restart: &mut bool) -> Result<usize
 	}
 }
 
-unsafe fn restore_interrupt_frame(backup_frame: &InterruptFrame) {
+unsafe fn restore_interrupt_frame(backup_frame: &InterruptFrame /* user stack */) {
 	let current = CURRENT.get_mut();
 	let frame = (current.kstack_base() - size_of::<InterruptFrame>()) as *mut InterruptFrame;
 	copy_nonoverlapping(backup_frame as *const InterruptFrame, frame, 1);

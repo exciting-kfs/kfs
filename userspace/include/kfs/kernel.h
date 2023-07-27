@@ -11,7 +11,7 @@ void _exit(int code);
 pid_t fork(void);
 
 ssize_t read(int fildes, void *buf, size_t nbyte);
-ssize_t write(int fildes, void *buf, size_t nbyte);
+ssize_t write(int fildes, const void *buf, size_t nbyte);
 
 int exec(const char *name);
 
@@ -41,6 +41,29 @@ typedef struct siginfo {
 	size_t uid;
 	size_t code;
 } siginfo_t;
+
+typedef struct ucontext {
+	size_t ebp;
+	size_t edi;
+	size_t esi;
+	size_t edx;
+	size_t ecx;
+	size_t ebx;
+	size_t eax;
+	size_t ds;
+	size_t es;
+	size_t fs;
+	size_t gs;
+	size_t handler;
+	size_t error_code;
+	size_t eip;
+	size_t cs;
+	size_t eflags;
+	size_t esp;
+	size_t ss;
+	sigset_t mask;
+	ssize_t syscall_ret;
+} ucontext_t;
 
 struct sigaction {
 	void (*sa_handler)(int);

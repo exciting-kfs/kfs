@@ -152,13 +152,14 @@ impl Signal {
 		);
 
 		let mut func_frame = [0; 4];
-		make_function_frame(&mut func_frame, esp, info);
+		make_function_frame(&mut func_frame, esp, info.num);
 		push_to_user_stack(
 			&mut esp,
 			func_frame.as_ptr().cast(),
 			func_frame.len() * size_of::<usize>(),
 		);
-		pr_debug!("sig_action: go_to_signal_handler");
+		pr_debug!("sig_action: go_to_signal_handler: esp {:x}", esp);
+		// pr_debug!("{}", ctx.intr_frame);
 		go_to_signal_handler(&ctx.intr_frame as *const InterruptFrame, esp, act.handler());
 	}
 
@@ -181,7 +182,7 @@ impl Signal {
 			&trampoline as *const usize as *const u8,
 			size_of::<usize>(),
 		);
-		pr_debug!("sig_action_repeat: go_to_signal_handler");
+		pr_debug!("sig_action_repeat: go_to_signal_handler: esp {:x}", esp);
 		go_to_signal_handler(frame as *const InterruptFrame, esp, act.handler());
 	}
 
@@ -231,12 +232,16 @@ unsafe fn push_to_user_stack(esp: &mut usize, src: *const u8, len: usize) {
 	copy_nonoverlapping(src, (*esp) as *mut _, len);
 }
 
-fn make_function_frame(frame: &mut [usize], user_esp: usize, sig_info: &SigInfo) {
+fn make_function_frame(frame: &mut [usize], user_esp: usize, sig_num: SigNum) {
 	let trampoline = trampoline_address(signal_trampoline as usize);
 
 	frame[0] = trampoline;
-	frame[1] = sig_info.num as usize;
+	frame[1] = sig_num as usize;
+
+	// SigInfo pointer
 	frame[2] = user_esp;
+
+	// SigCtx pointer
 	frame[3] = user_esp + size_of::<SigInfo>()
 }
 

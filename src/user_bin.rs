@@ -22,5 +22,6 @@ macro_rules! define_user_bin {
 define_user_bin![
 	(INIT, "init.bin"),
 	(SHELL, "shell.bin"),
+	(SIGTEST, "sig_test.bin"),
 	(FORTYTWO, "fortytwo.bin")
 ];

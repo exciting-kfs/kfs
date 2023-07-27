@@ -40,7 +40,7 @@ export LDFLAGS
 
 # targets
 
-MODULES := init shell fortytwo
+MODULES := init shell fortytwo sig_test
 
 LIBSYSTEM := $(BUILDDIR)/libsystem.a
 
