@@ -7,6 +7,7 @@ use crate::{file::File, sync::locked::Locked};
 
 const FDTABLE_SIZE: usize = 256;
 
+#[derive(Debug)]
 pub struct Fd(usize);
 
 impl Fd {
@@ -40,16 +41,8 @@ impl FdTable {
 	pub fn alloc_fd(&self, file: Arc<File>) -> Option<Fd> {
 		let mut table = self.0.lock();
 
-		let mut iter = table.iter();
-		let mut fd = 0;
-
-		while let Some(_) = iter.next() {
-			fd += 1;
-		}
-
-		(fd < FDTABLE_SIZE).then(|| {
-			table[fd] = Some(file);
-			Fd(fd)
-		})
+		let (fd, _) = table.iter().enumerate().find(|(_, x)| x.is_none())?;
+		table[fd] = Some(file);
+		Some(Fd(fd))
 	}
 }
