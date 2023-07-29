@@ -1,9 +1,10 @@
 use crate::interrupt::{apic::local::LOCAL_APIC, InterruptFrame};
 use crate::process::context::{cpu_context, yield_now, InContext};
+use crate::process::task::CURRENT;
 use crate::sync::cpu_local::CpuLocal;
 
 #[no_mangle]
-pub unsafe extern "C" fn handle_timer_impl(_frame: InterruptFrame) {
+pub unsafe extern "C" fn handle_timer_impl(frame: InterruptFrame) {
 	*JIFFIES.get_mut() += 1;
 	LOCAL_APIC.end_of_interrupt();
 
@@ -12,6 +13,15 @@ pub unsafe extern "C" fn handle_timer_impl(_frame: InterruptFrame) {
 	}
 
 	yield_now();
+
+	if frame.is_user() {
+		CURRENT
+			.get_mut()
+			.signal
+			.as_ref()
+			.expect("user task")
+			.do_signal(&frame, 0);
+	}
 }
 
 static JIFFIES: CpuLocal<usize> = CpuLocal::new(0);

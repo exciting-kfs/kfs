@@ -60,7 +60,7 @@ impl InterruptFrame {
 	}
 
 	pub fn is_user(&self) -> bool {
-		(self.cs & 0x0000fffc) == 24
+		(self.cs & 0x0000fffc) == GDT::USER_CODE
 	}
 }
 

@@ -1,11 +1,9 @@
 use core::alloc::AllocError;
-use core::array;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::{collections::LinkedList, sync::Arc};
 
 use crate::config::{USER_CODE_BASE, USTACK_BASE, USTACK_PAGES};
-use crate::file::File;
 use crate::interrupt::InterruptFrame;
 use crate::mm::user::memory::Memory;
 use crate::process::context::{context_switch, InContext};
@@ -13,6 +11,7 @@ use crate::signal::Signal;
 use crate::sync::locked::{Locked, LockedGuard};
 use crate::sync::{cpu_local::CpuLocal, singleton::Singleton};
 
+use super::fd_table::FdTable;
 use super::kstack::Stack;
 
 pub static CURRENT: CpuLocal<Arc<Task>> = CpuLocal::uninit();
@@ -26,8 +25,6 @@ pub enum State {
 	Exited,
 }
 
-const FDTABLE_SIZE: usize = 256;
-
 #[repr(C)]
 pub struct Task {
 	kstack: Stack,
@@ -35,7 +32,7 @@ pub struct Task {
 	memory: Option<Locked<Memory>>,
 	pid: usize,
 
-	pub fd_table: Locked<[Option<Arc<File>>; FDTABLE_SIZE]>, // TODO thread share
+	pub fd_table: Option<Arc<FdTable>>,
 	pub signal: Option<Arc<Signal>>,
 }
 
@@ -53,7 +50,7 @@ impl Task {
 			state: Locked::new(State::Running),
 			memory: Some(Locked::new(memory)),
 			pid,
-			fd_table: Locked::new(array::from_fn(|_| None)),
+			fd_table: Some(Arc::new(FdTable::new())),
 			signal: Some(Arc::new(Signal::new())),
 		}))
 	}
@@ -66,7 +63,7 @@ impl Task {
 			state: Locked::new(State::Running),
 			memory: None,
 			pid: 0,
-			fd_table: Locked::new(array::from_fn(|_| None)),
+			fd_table: None,
 			signal: None,
 		}))
 	}
@@ -77,7 +74,7 @@ impl Task {
 			state: Locked::new(State::Running),
 			memory: None,
 			pid: 0,
-			fd_table: Locked::new(array::from_fn(|_| None)),
+			fd_table: None,
 			signal: None,
 		})
 	}
@@ -93,7 +90,9 @@ impl Task {
 			state: Locked::new(State::Running),
 			memory: Some(Locked::new(memory)),
 			pid,
-			fd_table: Locked::new(array::from_fn(|_| None)),
+			fd_table: Some(Arc::new(
+				self.fd_table.as_ref().expect("user task").clone_for_fork(), // TODO test needed.
+			)),
 			signal: Some(Arc::new(
 				self.signal.as_ref().expect("user task").clone_for_fork(), // TODO test needed.
 			)),
