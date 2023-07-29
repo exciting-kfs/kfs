@@ -23,11 +23,9 @@ pub extern "C" fn handle_syscall_impl(mut frame: InterruptFrame) {
 		restart = false;
 		ret = syscall(&mut frame, &mut restart);
 
-		signal
-			.do_signal(&frame, syscall_return_to_isize(&ret))
-			.map(|_| {
-				restart = true;
-			});
+		if let Some(_) = signal.do_signal(&frame, syscall_return_to_isize(&ret)) {
+			restart = true;
+		}
 		// use crate::pr_debug;
 		// pr_debug!("syscall: ret: {:?}", ret);
 		// pr_debug!("syscall: restart: {}", restart);

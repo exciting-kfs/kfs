@@ -191,9 +191,9 @@ impl Signal {
 		let lock = self.mask.lock();
 		let o_mask = *lock;
 		let n_mask = if act.flag().contains(SigFlag::NoDefer) {
-			o_mask - info.num.into() | act.mask()
+			o_mask | act.mask() - info.num.into()
 		} else {
-			o_mask | info.num.into() | act.mask()
+			o_mask | act.mask() | info.num.into()
 		};
 		unsafe { ptr::replace(self.mask.as_mut_ptr(), n_mask) }
 	}
