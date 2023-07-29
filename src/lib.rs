@@ -102,20 +102,16 @@ fn open_default_fd(task: &mut Arc<Task>) {
 
 	tty.lock().set_owner(task.clone());
 
-	task.fd_table.lock()[0] = Some(Arc::new(File {
-		ops: tty.clone(),
-		open_flag: OpenFlag::O_RDWR,
-	}));
+	let fd_table = task.fd_table.as_ref().expect("user task");
 
-	task.fd_table.lock()[1] = Some(Arc::new(File {
+	let file = Arc::new(File {
 		ops: tty.clone(),
 		open_flag: OpenFlag::O_RDWR,
-	}));
+	});
 
-	task.fd_table.lock()[2] = Some(Arc::new(File {
-		ops: tty.clone(),
-		open_flag: OpenFlag::O_RDWR,
-	}));
+	fd_table.alloc_fd(file.clone());
+	fd_table.alloc_fd(file.clone());
+	fd_table.alloc_fd(file.clone());
 }
 
 fn run_process() -> ! {

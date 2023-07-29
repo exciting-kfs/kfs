@@ -1,6 +1,7 @@
 pub mod context;
 pub mod exec;
 pub mod exit;
+pub mod fd_table;
 pub mod fork;
 pub mod kstack;
 pub mod kthread;

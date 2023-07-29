@@ -48,11 +48,11 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 		2 => sys_fork(frame),
 		3 => {
 			pr_info!("syscall: read");
-			sys_read(frame.ebx as isize, frame.ecx as *mut u8, frame.edx as isize)
+			sys_read(frame.ebx as isize, frame.ecx as *mut u8, frame.edx)
 		}
 		4 => {
 			pr_info!("syscall: write");
-			sys_write(frame.ebx as isize, frame.ecx as *mut u8, frame.edx as isize)
+			sys_write(frame.ebx as isize, frame.ecx as *mut u8, frame.edx)
 		}
 		42 => {
 			pr_info!(
