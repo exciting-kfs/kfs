@@ -3,8 +3,13 @@
 OS := $(shell uname -s)
 ifeq ($(OS), Linux)
 PREFIX := i686-linux-gnu-
+CFLAGS := -fno-pie -fno-stack-protector # for removing stack canary.
+LINKER_SCRIPT = $(realpath .)/userspace.ld
+LDFLAGS := -n --script=$(LINKER_SCRIPT) --oformat=binary -nostdlib
 else
 PREFIX := i686-elf-
+CFLAGS =
+LDFLAGS := -n --oformat=binary -nostdlib
 endif
 
 CC := $(PREFIX)gcc
@@ -16,9 +21,12 @@ export AR
 AS := nasm
 export AS
 
+LD := $(PREFIX)ld
+export LD
+
 # common flags
 
-CFLAGS := -Wall -Wextra -Werror -nostdlib
+CFLAGS += -Wall -Wextra -Werror -nostdlib
 CFLAGS += -I$(realpath include)
 export CFLAGS
 
@@ -28,9 +36,11 @@ export BUILDDIR
 COMMON := $(realpath common.mk)
 export COMMON
 
+export LDFLAGS
+
 # targets
 
-MODULES := init shell fortytwo
+MODULES := init shell fortytwo sig_test
 
 LIBSYSTEM := $(BUILDDIR)/libsystem.a
 

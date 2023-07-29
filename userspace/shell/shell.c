@@ -1,10 +1,9 @@
 #include <kfs/kernel.h>
 
 int main(void) {
-	char c;
+
+	write(0, "loop\n", 5);
 	while (1) {
-		read(0, &c, 1);
-		write(0, &c, 1);
 	}
 	return 0;
 }

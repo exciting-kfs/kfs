@@ -10,6 +10,13 @@ pub struct SpinLock {
 
 unsafe impl Sync for SpinLock {}
 
+/// lock state is not cloned.
+impl Clone for SpinLock {
+	fn clone(&self) -> Self {
+		Self::new()
+	}
+}
+
 impl SpinLock {
 	pub const fn new() -> Self {
 		SpinLock {

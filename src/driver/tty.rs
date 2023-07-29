@@ -10,10 +10,12 @@ use crate::collection::LineBuffer;
 use crate::config::CONSOLE_COUNTS;
 use crate::console::console_manager::console::SyncConsole;
 use crate::console::CONSOLE_MANAGER;
-use crate::file::FileOps;
+use crate::file::{File, FileOps, OpenFlag};
 use crate::input::key_event::*;
 use crate::input::keyboard::KEYBOARD;
+use crate::interrupt::syscall::errno::Errno;
 use crate::io::{BlkRead, BlkWrite, ChRead, ChWrite, NoSpace};
+use crate::process::task::{Task, CURRENT};
 use crate::sync::locked::Locked;
 
 #[rustfmt::skip]
@@ -158,6 +160,7 @@ pub struct TTY {
 	console: SyncConsole,
 	line_buffer: LineBuffer<4096>,
 	into_process: VecDeque<u8>,
+	owner: Option<Arc<Task>>, // instead of session.
 }
 
 struct ControlChars {
@@ -210,7 +213,13 @@ impl TTY {
 			console,
 			line_buffer: LineBuffer::new(),
 			into_process: VecDeque::new(),
+			owner: None,
 		}
+	}
+
+	/// Temporal method for signal development.
+	pub fn set_owner(&mut self, task: Arc<Task>) {
+		self.owner = Some(task)
 	}
 
 	fn input_convert<'a>(&self, data: Code, buf: &'a mut [u8]) -> Option<&'a [u8]> {
@@ -329,15 +338,45 @@ impl TTY {
 		}
 	}
 
+	fn send_signal(&self, c: u8) {
+		use crate::pr_debug;
+		use crate::signal::sig_code::SigCode;
+		use crate::signal::sig_info::SigInfo;
+		use crate::signal::sig_num::SigNum;
+
+		pr_debug!("tty: send signal: {}", c);
+
+		let num = match c {
+			x if x == self.control.sig_intr => SigNum::INT,
+			x if x == self.control.sig_quit => SigNum::QUIT,
+			_ => unreachable!(),
+		};
+
+		let (pid, uid) = unsafe {
+			let task = CURRENT.get_mut();
+			(task.get_pid(), task.get_uid())
+		};
+
+		let sig_info = SigInfo {
+			num,
+			pid,
+			uid,
+			code: SigCode::SI_KERNEL,
+		};
+
+		match self.owner {
+			Some(ref task) => task
+				.signal
+				.as_ref()
+				.expect("user task")
+				.recv_signal(sig_info),
+			None => {}
+		}
+	}
+
 	fn is_signal(&self, c: u8) -> bool {
 		self.flag.contains(TTYFlag::Isig)
 			&& (self.control.sig_intr == c || self.control.sig_quit == c)
-	}
-
-	fn send_signal(&self, c: u8) {
-		// TODO send signal
-		use crate::pr_debug;
-		pr_debug!("send signal: {}", c);
 	}
 }
 
@@ -401,7 +440,8 @@ impl ChWrite<u8> for TTY {
 		let iter = self.output_convert(&mut buf, 1);
 
 		for c in iter.iter().map(|b| *b) {
-			self.console.lock().write_one(c)?
+			let mut console = self.console.lock();
+			console.write_one(c)?
 		}
 		Ok(())
 	}
@@ -409,7 +449,8 @@ impl ChWrite<u8> for TTY {
 
 /// to process
 impl ChRead<u8> for TTY {
-	#[context(irq_disabled)]
+	// Because memory allocator is not used in VecDeque.pop_front(),
+	// this function don't need to be in irq_disabled context.
 	fn read_one(&mut self) -> Option<u8> {
 		self.into_process.pop_front()
 	}
@@ -418,15 +459,39 @@ impl ChRead<u8> for TTY {
 impl BlkWrite for TTY {}
 impl BlkRead for TTY {}
 
+use crate::signal::poll_signal_queue;
+
 impl FileOps for Locked<TTY> {
-	#[context(irq_disabled)]
-	fn read(&self, buf: &mut [u8]) -> usize {
-		self.lock().read(buf)
+	fn read(&self, file: &Arc<File>, buf: &mut [u8]) -> Result<usize, Errno> {
+		#[context(irq_disabled)]
+		fn __read(tty: &Locked<TTY>, buf: &mut [u8]) -> usize {
+			let mut tty = tty.lock();
+			tty.read(buf)
+		}
+
+		let block = !file.open_flag.contains(OpenFlag::O_NONBLOCK);
+		let mut count = __read(self, buf);
+		while block && count == 0 {
+			unsafe { poll_signal_queue()? };
+			count += __read(self, buf);
+		}
+		Ok(count)
 	}
 
-	#[context(irq_disabled)]
-	fn write(&self, buf: &[u8]) -> usize {
-		self.lock().write(buf)
+	fn write(&self, file: &Arc<File>, buf: &[u8]) -> Result<usize, Errno> {
+		#[context(irq_disabled)]
+		fn __write(tty: &Locked<TTY>, buf: &[u8]) -> usize {
+			let mut tty = tty.lock();
+			tty.write(buf)
+		}
+
+		let block = !file.open_flag.contains(OpenFlag::O_NONBLOCK);
+		let mut count = __write(self, buf);
+		while block && count == 0 {
+			unsafe { poll_signal_queue()? };
+			count += __write(self, buf);
+		}
+		Ok(count)
 	}
 }
 

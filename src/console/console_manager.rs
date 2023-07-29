@@ -63,21 +63,24 @@ impl ConsoleManager {
 
 	// #[context(irq_disabled)]
 	pub fn update(&self, code: Code) {
-		let foreground = *self.foreground.lock();
-		let _ = self.ttys[foreground].lock().write_one(code);
+		let foreground = self.foreground.lock();
+		let mut tty = self.ttys[*foreground].lock();
+		let _ = tty.write_one(code);
 	}
 
 	#[context(irq_disabled)]
 	pub fn screen_draw(&self) {
-		let foreground = *self.foreground.lock();
-		self.cons[foreground].lock().draw();
+		let foreground = self.foreground.lock();
+		let console = self.cons[*foreground].lock();
+		console.draw();
 	}
 
 	/// change foreground console.
 	#[context(irq_disabled)]
 	pub fn set_foreground(&mut self, idx: usize) {
 		if idx < CONSOLE_COUNTS {
-			*self.foreground.lock() = idx;
+			let mut foreground = self.foreground.lock();
+			*foreground = idx;
 		}
 	}
 

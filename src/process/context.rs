@@ -120,14 +120,13 @@ impl InContext {
 		// use crate::smp::smp_id;
 		// pr_debug!("[{}]: ctx: {} -> {}", smp_id(), self, to);
 
+		// order sensitive: deadlock
 		let ret = core::mem::replace(self, to);
-
 		match to {
 			Self::IrqDisabled => irq_disable(),
 			Self::Kernel | Self::PreemptDisabled | Self::User => irq_enable(),
 			Self::NMI | Self::HwIrq => {}
 		}
-
 		ret
 	}
 }

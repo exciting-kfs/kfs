@@ -33,4 +33,11 @@ SECTIONS {
 		. = ALIGN(4K);
 		*(.stack)
 	}
+
+	.trampoline : ALIGN(4K) {
+		__trampoline_start = .;
+		*(.trampoline .trampoline.*)
+		. = ALIGN(4K);
+		__trampoline_end = .;
+	}
 }

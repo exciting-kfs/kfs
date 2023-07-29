@@ -16,24 +16,18 @@ impl Normal {
 	pub fn init() {
 		NORMAL_ALLOC.lock().init();
 	}
-
-	#[context(irq_disabled)]
-	fn __alloc(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-		NORMAL_ALLOC.lock().allocate(layout)
-	}
-
-	#[context(irq_disabled)]
-	unsafe fn __dealloc(&self, ptr: NonNull<u8>, layout: Layout) {
-		NORMAL_ALLOC.lock().deallocate(ptr, layout)
-	}
 }
 
 unsafe impl Allocator for Normal {
+	#[context(irq_disabled)]
 	fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-		self.__alloc(layout)
+		let mut normal = NORMAL_ALLOC.lock();
+		normal.allocate(layout)
 	}
+	#[context(irq_disabled)]
 	unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-		self.__dealloc(ptr, layout)
+		let mut normal = NORMAL_ALLOC.lock();
+		normal.deallocate(ptr, layout)
 	}
 }
 

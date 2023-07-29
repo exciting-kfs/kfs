@@ -1,6 +1,8 @@
 use core::alloc::AllocError;
 use core::ptr::NonNull;
+use core::slice::from_raw_parts;
 
+use crate::config::TRAMPOLINE_BASE;
 use crate::mm::alloc::page::free_pages;
 use crate::mm::alloc::virt::{kmap, kunmap};
 use crate::mm::alloc::Zone;
@@ -14,6 +16,11 @@ use super::vma::{AreaFlag, UserAddressSpace};
 pub struct Memory {
 	vma: UserAddressSpace,
 	page_dir: PD,
+}
+
+extern "C" {
+	fn __trampoline_start();
+	fn __trampoline_end();
 }
 
 impl Memory {
@@ -30,6 +37,10 @@ impl Memory {
 
 		memory.reserve_stack(stack_base, nr_stack_pages)?;
 		memory.copy_data_at(code_base, code)?;
+
+		let len = __trampoline_end as usize - __trampoline_start as usize;
+		let trampoline = unsafe { from_raw_parts(__trampoline_start as *const u8, len) };
+		memory.copy_data_at(TRAMPOLINE_BASE, trampoline)?;
 
 		Ok(memory)
 	}
@@ -69,7 +80,7 @@ impl Memory {
 	fn copy_data_at(&mut self, addr: usize, data: &[u8]) -> Result<(), AllocError> {
 		self.vma.allocate_fixed_area(
 			addr,
-			(data.len() / PAGE_SIZE) + 1,
+			(data.len() / PAGE_SIZE) + (data.len() % PAGE_SIZE != 0) as usize,
 			AreaFlag::Readable | AreaFlag::Writable,
 		)?;
 

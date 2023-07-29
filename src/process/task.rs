@@ -9,6 +9,7 @@ use crate::file::File;
 use crate::interrupt::InterruptFrame;
 use crate::mm::user::memory::Memory;
 use crate::process::context::{context_switch, InContext};
+use crate::signal::Signal;
 use crate::sync::locked::{Locked, LockedGuard};
 use crate::sync::{cpu_local::CpuLocal, singleton::Singleton};
 
@@ -33,7 +34,9 @@ pub struct Task {
 	state: Locked<State>,
 	memory: Option<Locked<Memory>>,
 	pid: usize,
-	pub fd_table: Locked<[Option<Arc<File>>; FDTABLE_SIZE]>,
+
+	pub fd_table: Locked<[Option<Arc<File>>; FDTABLE_SIZE]>, // TODO thread share
+	pub signal: Option<Arc<Signal>>,
 }
 
 static LAST_PID: AtomicUsize = AtomicUsize::new(1);
@@ -51,6 +54,7 @@ impl Task {
 			memory: Some(Locked::new(memory)),
 			pid,
 			fd_table: Locked::new(array::from_fn(|_| None)),
+			signal: Some(Arc::new(Signal::new())),
 		}))
 	}
 
@@ -63,6 +67,7 @@ impl Task {
 			memory: None,
 			pid: 0,
 			fd_table: Locked::new(array::from_fn(|_| None)),
+			signal: None,
 		}))
 	}
 
@@ -73,6 +78,7 @@ impl Task {
 			memory: None,
 			pid: 0,
 			fd_table: Locked::new(array::from_fn(|_| None)),
+			signal: None,
 		})
 	}
 
@@ -88,6 +94,9 @@ impl Task {
 			memory: Some(Locked::new(memory)),
 			pid,
 			fd_table: Locked::new(array::from_fn(|_| None)),
+			signal: Some(Arc::new(
+				self.signal.as_ref().expect("user task").clone_for_fork(), // TODO test needed.
+			)),
 		}))
 	}
 

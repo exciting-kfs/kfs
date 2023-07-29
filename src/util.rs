@@ -1,3 +1,5 @@
+use crate::{pr_info, printk};
+
 pub mod arch;
 pub mod bitrange;
 pub mod lazy_constant;
@@ -58,5 +60,30 @@ impl<T> Paddr<T> {
 
 	pub fn as_usize(&self) -> usize {
 		self.0 as usize
+	}
+}
+
+pub unsafe fn print_stack(esp: *const usize, count: usize) {
+	pr_info!("[[stack]]");
+	for i in 0..count {
+		let next = esp.offset(i as isize);
+		pr_info!("----------------------");
+		pr_info!("{:x?}: 0x{:x}", next, *next);
+	}
+}
+
+pub unsafe fn print_memory(ptr: *const u8, count: usize) {
+	pr_info!("[[mem]]");
+	pr_info!("range: {:x?} ~ {:x?}", ptr, ptr.offset(count as isize));
+	let line = count / 16 + 1;
+
+	for i in 0..line {
+		printk!("0x{:x?}: ", ptr.offset((i * 16) as isize));
+
+		for j in 0..16 {
+			let next = ptr.offset((i * 16 + j) as isize);
+			printk!("{:02x?} ", *next);
+		}
+		printk!("\n");
 	}
 }

@@ -18,23 +18,17 @@ impl Atomic {
 	pub fn init() {
 		ATOMIC_ALLOC.lock().init();
 	}
-
-	#[context(irq_disabled)]
-	fn __alloc(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-		ATOMIC_ALLOC.lock().allocate(layout)
-	}
-
-	#[context(irq_disabled)]
-	unsafe fn __dealloc(&self, ptr: NonNull<u8>, layout: Layout) {
-		ATOMIC_ALLOC.lock().deallocate(ptr, layout)
-	}
 }
 
 unsafe impl Allocator for Atomic {
+	#[context(irq_disabled)]
 	fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-		self.__alloc(layout)
+		let mut atomic = ATOMIC_ALLOC.lock();
+		atomic.allocate(layout)
 	}
+	#[context(irq_disabled)]
 	unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-		self.__dealloc(ptr, layout)
+		let mut atomic = ATOMIC_ALLOC.lock();
+		atomic.deallocate(ptr, layout)
 	}
 }

@@ -1,5 +1,7 @@
 use core::{cell::UnsafeCell, mem::MaybeUninit};
 
+use kfs_macro::context;
+
 use crate::{config::NR_CPUS, smp::smp_id};
 
 pub struct CpuLocal<T> {
@@ -35,6 +37,7 @@ impl<T> CpuLocal<T> {
 		&mut arr[smp_id()]
 	}
 
+	#[context(irq_disabled)]
 	pub unsafe fn replace(&self, src: T) -> T {
 		let arr = self.arr_mut();
 		let dest = &mut arr[smp_id()];

@@ -96,7 +96,7 @@ pub fn invlpg(vaddr: usize) {
 /// It is wrapper function for `bsf` x86 instruction.
 ///
 /// # Safety
-/// `data` must not be 0. It is undefined behavior for x86 cpu.
+/// `data` must not be 0. It is undefined behavior on x86 cpu.
 pub unsafe fn bit_scan_forward(data: usize) -> usize {
 	let ret;
 	unsafe {
@@ -112,7 +112,7 @@ pub unsafe fn bit_scan_forward(data: usize) -> usize {
 /// It is wrapper function for `bsr` x86 instruction.
 ///
 /// # Safety
-/// `data` must not be 0. It is undefined behavior for x86 cpu.
+/// `data` must not be 0. It is undefined behavior on x86 cpu.
 pub unsafe fn bit_scan_reverse(data: usize) -> usize {
 	let ret;
 	unsafe {
