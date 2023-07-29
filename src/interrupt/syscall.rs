@@ -31,7 +31,11 @@ pub extern "C" fn handle_syscall_impl(mut frame: InterruptFrame) {
 		// pr_debug!("syscall: restart: {}", restart);
 	}
 
-	frame.eax = syscall_return_to_isize(&ret) as usize;
+	// Because of signal system, This can be `return` from timer interrupt.
+	// To preserve previous `eax` value, We should check where this `return` go.
+	if frame.handler == handle_syscall_impl as usize {
+		frame.eax = syscall_return_to_isize(&ret) as usize;
+	}
 }
 
 fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errno> {
