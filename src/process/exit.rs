@@ -1,10 +1,8 @@
-
-
-use crate::{process::context::InContext};
+use crate::{process::context::InContext, signal::sig_num::SigNum};
 
 use super::{
 	context::{context_switch, yield_now},
-	task::{CURRENT},
+	task::CURRENT,
 };
 
 #[repr(transparent)]
@@ -27,6 +25,10 @@ impl ExitStatus {
 			raw: flag as usize | status as usize,
 		}
 	}
+
+	pub fn as_raw(&self) -> usize {
+		self.raw
+	}
 }
 
 pub fn sys_exit(status: usize) -> ! {
@@ -36,4 +38,14 @@ pub fn sys_exit(status: usize) -> ! {
 
 	yield_now();
 	unreachable!("cannot scheduled after sys_exit");
+}
+
+pub fn exit_with_signal(sig: SigNum) -> ! {
+	context_switch(InContext::IrqDisabled);
+	let current = unsafe { CURRENT.get_mut() };
+
+	current.exit(ExitStatus::new(ExitFlag::Signaled, sig as usize as u8));
+
+	yield_now();
+	unreachable!("cannot scheduled after exit_with_signal");
 }

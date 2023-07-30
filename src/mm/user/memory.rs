@@ -45,6 +45,24 @@ impl Memory {
 		Ok(memory)
 	}
 
+	pub fn query_flags_range(&self, start: usize, bytes: usize, flags: AreaFlag) -> bool {
+		let end = start + bytes;
+		let mut curr = start;
+
+		while curr < end {
+			if let Some(a) = self.vma.find_area(curr) {
+				if a.flags.contains(flags) {
+					curr = a.end;
+				} else {
+					return false;
+				}
+			} else {
+				return false;
+			}
+		}
+		return true;
+	}
+
 	pub fn clone(&self) -> Result<Self, AllocError> {
 		let vma = self.vma.clone();
 		let mut page_dir = PD::new()?;
