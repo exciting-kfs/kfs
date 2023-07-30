@@ -1,3 +1,4 @@
+mod kill;
 pub mod sig_code;
 pub mod sig_ctx;
 pub mod sig_flag;
@@ -7,6 +8,7 @@ pub mod sig_mask;
 pub mod sig_num;
 mod syscall;
 
+pub use kill::sys_kill;
 pub use syscall::{sys_sigaction, sys_signal, sys_sigreturn};
 
 use core::{
@@ -22,7 +24,7 @@ use crate::{
 	config::TRAMPOLINE_BASE,
 	interrupt::{syscall::errno::Errno, InterruptFrame},
 	pr_debug,
-	process::task::CURRENT,
+	process::{exit::exit_with_signal, task::CURRENT},
 	signal::{sig_flag::SigFlag, sig_handler::SigHandler, sig_num::SigNum},
 	sync::locked::Locked,
 };
@@ -97,6 +99,7 @@ impl Signal {
 				let sig_ctx = SigCtx::new(frame, o_mask, syscall_ret);
 				self.do_action(act, &info, &sig_ctx)
 			},
+			SigHandler::Terminate | SigHandler::Core => exit_with_signal(info.num),
 			x => self.do_signal_default(x),
 		};
 
@@ -111,18 +114,15 @@ impl Signal {
 				self.replace_mask(act, &info);
 				self.do_action_repeat(act, &info, frame);
 			},
+			SigHandler::Terminate | SigHandler::Core => exit_with_signal(info.num),
 			x => self.do_signal_default(x),
 		}
 	}
 
 	fn do_signal_default(&self, handler: &SigHandler) -> Option<()> {
-		// TODO core, term, stop, cont
+		// TODO stop, cont
 		match handler {
 			SigHandler::Ignore => Some(()),
-			SigHandler::Terminate | SigHandler::Core => {
-				pr_debug!("sig term!");
-				Some(())
-			}
 			SigHandler::Continue => {
 				pr_debug!("sig cont!");
 				Some(())

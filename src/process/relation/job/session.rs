@@ -1,9 +1,7 @@
 use alloc::{collections::BTreeMap, sync::Arc};
 
-use crate::{
-	process::relation::{Pgid, Pid, Sid},
-	sync::locked::Locked,
-};
+use crate::process::relation::{Pgid, Pid, Sid};
+use crate::sync::locked::Locked;
 
 use super::group::{ProcessGroup, ProcessGroupTree};
 

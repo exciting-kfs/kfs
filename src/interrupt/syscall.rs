@@ -13,7 +13,7 @@ use crate::process::relation::{
 use crate::process::wait::sys_waitpid;
 use crate::process::{exit::sys_exit, fork::sys_fork, task::CURRENT};
 use crate::signal::sig_handler::SigAction;
-use crate::signal::{sys_sigaction, sys_signal, sys_sigreturn};
+use crate::signal::{sys_kill, sys_sigaction, sys_signal, sys_sigreturn};
 
 use self::errno::Errno;
 
@@ -68,6 +68,7 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 		7 => sys_waitpid(frame.ebx as isize, frame.ecx as *mut isize, frame.edx),
 		11 => sys_exec(frame, frame.ebx),
 		20 => sys_getpid(),
+		37 => sys_kill(frame.ebx as isize, frame.ecx as isize),
 		42 => {
 			pr_info!(
 				"PID[{}]: DEBUG syscall called({})",

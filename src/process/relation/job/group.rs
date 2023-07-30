@@ -4,9 +4,7 @@ use alloc::{
 };
 
 use crate::{
-	process::{
-		relation::{Pgid, Pid},
-	},
+	process::relation::{Pgid, Pid},
 	sync::locked::Locked,
 };
 
@@ -21,6 +19,10 @@ impl ProcessGroup {
 			pgid,
 			members: BTreeSet::new(),
 		}
+	}
+
+	pub fn members(&self) -> &BTreeSet<Pid> {
+		&self.members
 	}
 
 	pub fn get_pgid(&self) -> Pgid {
