@@ -1,4 +1,4 @@
-use core::sync::atomic::{AtomicUsize, Ordering::Relaxed};
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::collections::LinkedList;
 
@@ -16,7 +16,7 @@ impl Pid {
 			return pid;
 		}
 
-		let pid = NEXT_PID.fetch_add(1, Relaxed);
+		let pid = NEXT_PID.fetch_add(1, Ordering::Relaxed);
 
 		Pid(pid)
 	}

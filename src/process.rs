@@ -7,6 +7,7 @@ pub mod kstack;
 pub mod kthread;
 pub mod relation;
 pub mod task;
+pub mod uid;
 pub mod wait;
 
 use core::mem::MaybeUninit;

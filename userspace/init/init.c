@@ -24,6 +24,7 @@ void kill_all_by_wildcard(void) {
 }
 
 void do_something(void) {
+	fortytwo(-getuid());
 	for (;;)
 		;
 }
@@ -36,6 +37,7 @@ int main(void) {
 
 			if (*child == 0) {
 				// no_return
+				setuid(1000 + i);
 				do_something();
 			}
 

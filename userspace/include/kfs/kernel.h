@@ -6,6 +6,7 @@
 typedef unsigned int size_t;
 typedef int ssize_t;
 typedef int pid_t;
+typedef int uid_t;
 
 void _exit(int code);
 pid_t fork(void);
@@ -141,5 +142,8 @@ sighandler_t signal(int signum, sighandler_t handler);
 int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
 
 int kill(pid_t pid, int sig);
+
+uid_t getuid(void);
+int setuid(uid_t uid);
 
 #endif

@@ -18,6 +18,7 @@ use super::exit::ExitStatus;
 use super::fd_table::FdTable;
 use super::kstack::Stack;
 use super::relation::{Pgid, Pid, Relation, Sid};
+use super::uid::Uid;
 use super::wait::Who;
 
 pub static CURRENT: CpuLocal<Arc<Task>> = CpuLocal::uninit();
@@ -37,6 +38,7 @@ pub struct Task {
 	kstack: Stack,
 	state: Locked<State>,
 	pid: Pid,
+	uid: Uid,
 	user_ext: Option<UserTaskExt>,
 }
 
@@ -87,6 +89,7 @@ impl Task {
 			kstack,
 			state: Locked::new(State::Running),
 			pid: Pid::from_raw(1),
+			uid: Uid::from_raw(0),
 			user_ext: Some(UserTaskExt {
 				exec_called: AtomicBool::new(false),
 				memory: Locked::new(memory),
@@ -114,6 +117,7 @@ impl Task {
 			kstack,
 			state: Locked::new(State::Running),
 			pid,
+			uid: Uid::from_raw(0),
 			user_ext: None,
 		});
 
@@ -133,6 +137,7 @@ impl Task {
 	) -> Result<Arc<Self>, AllocError> {
 		let kstack = self.kstack.clone_for_fork(frame)?;
 		let pid = Pid::allocate();
+		let uid = self.uid.clone();
 
 		let user_ext = self.get_user_ext().unwrap();
 
@@ -145,6 +150,7 @@ impl Task {
 			kstack,
 			state: Locked::new(State::Running),
 			pid,
+			uid,
 			user_ext: Some(UserTaskExt {
 				exec_called: AtomicBool::new(false),
 				memory: Locked::new(memory),
@@ -171,7 +177,11 @@ impl Task {
 	}
 
 	pub fn get_uid(&self) -> usize {
-		0 // TODO
+		self.uid.as_raw()
+	}
+
+	pub fn set_uid(&self, new_uid: usize) -> Result<(), Errno> {
+		self.uid.set(new_uid)
 	}
 
 	pub fn get_pgid(&self) -> Pgid {
