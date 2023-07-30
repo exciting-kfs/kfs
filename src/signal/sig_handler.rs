@@ -78,7 +78,6 @@ impl SigHandler {
 			ILL => Core,
 			INT => Terminate,
 			IO => Terminate,
-			IOT => Core,
 			KILL => Terminate,
 			PIPE => Terminate,
 			PROF => Terminate,

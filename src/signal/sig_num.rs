@@ -9,7 +9,6 @@ pub enum SigNum {
 	ILL,
 	TRAP,
 	ABRT,
-	IOT,
 	BUS,
 	FPE,
 	KILL,

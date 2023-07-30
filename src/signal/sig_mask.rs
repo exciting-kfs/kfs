@@ -12,7 +12,6 @@ bitflags! {
 		const ILL = (1 << (SigNum::ILL as u32 - 1));
 		const TRAP = (1 << (SigNum::TRAP as u32 - 1));
 		const ABRT = (1 << (SigNum::ABRT as u32 - 1));
-		const IOT = (1 << (SigNum::IOT as u32 - 1));
 		const BUS = (1 << (SigNum::BUS as u32 - 1));
 		const FPE = (1 << (SigNum::FPE as u32 - 1));
 		const KILL = (1 << (SigNum::KILL as u32 - 1));

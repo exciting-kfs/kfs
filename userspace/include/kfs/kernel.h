@@ -17,13 +17,13 @@ int exec(const char *name);
 
 pid_t waitpid(pid_t pid, int *stat_loc, int options);
 
-#define _W_FLAG_MASK 0xff000000;
-#define _W_STATUS_MASK 0x000000ff;
+#define _W_FLAG_MASK 0xff000000
+#define _W_STATUS_MASK 0x000000ff
 
-#define _W_SIGNALED 0x01000000;
-#define _W_STOPPED 0x02000000;
-#define _W_EXITED 0x03000000;
-#define _W_CORE_DUMPED 0x04000000;
+#define _W_SIGNALED 0x01000000
+#define _W_STOPPED 0x02000000
+#define _W_EXITED 0x03000000
+#define _W_CORE_DUMPED 0x04000000
 
 #define _W_GET_FLAG(x) ((x) & _W_FLAG_MASK)
 #define _W_GET_STATUS(x) ((x) & _W_STATUS_MASK)

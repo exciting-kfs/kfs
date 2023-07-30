@@ -1,22 +1,25 @@
 #include <kfs/kernel.h>
 
+// typedef void (a)(void);
+
 int main(void) {
-	pid_t pid = fork();
-
+	int a = 123;
 	// child path
+	pid_t pid = fork();
 	if (pid == 0) {
-		int result = exec("test_relation.bin");
-
-		// exec failed.
-		_exit(result);
+		((void (*)(void))(&a))();
+		// fortytwo(*p);
+		_exit(0);
 	}
 
 	pid_t child;
 	int status;
 	for (;;) {
 		while ((child = waitpid(-1, &status, 0)) > 0) {
-			fortytwo(child);
-			fortytwo(status);
+			if (WIFSIGNALED(status)) {
+				fortytwo(WTERMSIG(status));
+				fortytwo(child);
+			}
 		}
 	}
 	return 0;
