@@ -359,16 +359,17 @@ impl TTY {
 
 		let sig_info = SigInfo {
 			num,
-			pid,
+			pid: pid.as_raw(),
 			uid,
 			code: SigCode::SI_KERNEL,
 		};
 
 		match self.owner {
 			Some(ref task) => task
+				.get_user_ext()
+				.expect("user task")
 				.signal
 				.as_ref()
-				.expect("user task")
 				.recv_signal(sig_info),
 			None => {}
 		}

@@ -1,0 +1,61 @@
+use kfs_macro::context;
+
+use crate::{
+	interrupt::syscall::errno::Errno,
+	process::{context::yield_now, task::CURRENT},
+};
+
+use super::relation::{Pgid, Pid};
+
+#[derive(Clone, Copy)]
+pub enum Who {
+	Any,
+	Pid(Pid),
+	Pgid(Pgid),
+}
+
+mod wait_option {
+	pub const WNOHANG: usize = 1 << 0;
+	pub const WUNTRACED: usize = 1 << 1; // not implemented.
+	pub const IMPLEMENTED_MASK: usize = WNOHANG;
+}
+
+#[context(irq_disabled)]
+pub fn sys_waitpid(cpid: isize, stat_loc: *mut isize, option: usize) -> Result<usize, Errno> {
+	let current = unsafe { CURRENT.get_mut() };
+
+	// TODO: stat_lock sanity check
+
+	if stat_loc.is_null() {
+		return Err(Errno::EFAULT);
+	}
+
+	// unknown option
+	if (option & wait_option::IMPLEMENTED_MASK) != option {
+		return Err(Errno::EINVAL);
+	}
+
+	let who = match cpid {
+		-1 => Who::Any,
+		0 => Who::Pgid(current.get_pgid()),
+		x if x < 0 => Who::Pgid(Pgid::from_raw(-x as usize)),
+		x if x > 0 => Who::Pid(Pid::from_raw(x as usize)),
+		_ => unreachable!("obviously unreachable..."),
+	};
+
+	let non_block = (option & wait_option::WNOHANG) != 0;
+
+	loop {
+		let result = current.waitpid(who).map(|z| z.pid.as_raw());
+
+		if let Err(_) = result {
+			if non_block {
+				break result;
+			}
+		} else {
+			break result;
+		}
+
+		yield_now();
+	}
+}

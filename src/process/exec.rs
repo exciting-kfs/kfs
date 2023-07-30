@@ -19,7 +19,11 @@ const PATH_MAX: usize = 128;
 pub fn sys_exec(frame: *mut InterruptFrame, raw_binary_name_ptr: usize) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };
 
-	let mut memory = current.lock_memory().unwrap();
+	let mut memory = current
+		.get_user_ext()
+		.expect("not user process")
+		.lock_memory();
+
 	let area = memory
 		.get_vma()
 		.find_area(raw_binary_name_ptr)

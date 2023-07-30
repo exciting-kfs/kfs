@@ -7,11 +7,6 @@ use crate::sync::singleton::Singleton;
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct Pid(usize);
 
-pub enum ReservedPid {
-	Idle = 0,
-	Init = 1,
-}
-
 static NEXT_PID: AtomicUsize = AtomicUsize::new(2);
 static FREED_PID: Singleton<LinkedList<Pid>> = Singleton::new(LinkedList::new());
 
@@ -30,8 +25,21 @@ impl Pid {
 		FREED_PID.lock().push_back(self);
 	}
 
-	pub fn reserved(who: ReservedPid) -> Self {
-		Pid(who as usize)
+	pub fn as_raw(&self) -> usize {
+		self.0
+	}
+
+	pub fn from_raw(raw: usize) -> Self {
+		Pid(raw)
+	}
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+pub struct Pgid(usize);
+
+impl Pgid {
+	pub fn new(pid: Pid) -> Self {
+		Pgid(pid.as_raw())
 	}
 
 	pub fn as_raw(&self) -> usize {
@@ -39,6 +47,23 @@ impl Pid {
 	}
 
 	pub fn from_raw(raw: usize) -> Self {
-		Pid(raw)
+		Pgid(raw)
+	}
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+pub struct Sid(usize);
+
+impl Sid {
+	pub fn new(pid: Pid) -> Self {
+		Sid(pid.as_raw())
+	}
+
+	pub fn as_raw(&self) -> usize {
+		self.0
+	}
+
+	pub fn from_raw(raw: usize) -> Self {
+		Sid(raw)
 	}
 }

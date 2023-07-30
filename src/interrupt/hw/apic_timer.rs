@@ -17,9 +17,9 @@ pub unsafe extern "C" fn handle_timer_impl(frame: InterruptFrame) {
 	if frame.is_user() {
 		CURRENT
 			.get_mut()
-			.signal
-			.as_ref()
+			.get_user_ext()
 			.expect("user task")
+			.signal
 			.do_signal(&frame, 0);
 	}
 }

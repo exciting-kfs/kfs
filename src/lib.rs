@@ -102,7 +102,7 @@ fn open_default_fd(task: &mut Arc<Task>) {
 
 	tty.lock().set_owner(task.clone());
 
-	let fd_table = task.fd_table.as_ref().expect("user task");
+	let mut fd_table = task.get_user_ext().expect("user task").lock_fd_table();
 
 	let file = Arc::new(File {
 		ops: tty.clone(),
@@ -115,14 +115,15 @@ fn open_default_fd(task: &mut Arc<Task>) {
 }
 
 fn run_process() -> ! {
-	// let init = Task::new_user(user_bin::INIT).expect("OOM");
-	let mut sig_test = Task::new_user(user_bin::SIGTEST).expect("OOM");
-	open_default_fd(&mut sig_test);
+	// let stat = Task::new_kernel(show_page_stat as usize, 0).expect("OOM");
+	// TASK_QUEUE.lock().push_back(stat);
 
 	let worker = Task::new_kernel(slow_worker as usize, 0).expect("OOM");
+	let mut init = process::get_init_task();
+	open_default_fd(&mut init);
+
+	TASK_QUEUE.lock().push_back(init);
 	TASK_QUEUE.lock().push_back(worker);
-	// TASK_QUEUE.lock().push_back(init);
-	TASK_QUEUE.lock().push_back(sig_test);
 
 	idle();
 }
@@ -176,9 +177,10 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	unsafe { x86::init() };
 
 	driver::ps2::init().expect("failed to init PS/2");
-	scheduler::work::init().expect("worker thread init");
 
 	process::init();
+
+	scheduler::work::init().expect("worker thread init");
 
 	match cfg!(ktest) {
 		true => run_test(),
