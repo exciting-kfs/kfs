@@ -12,11 +12,6 @@ use crate::sync::locked::Locked;
 
 use super::sig_num::SigNum;
 
-pub enum Who {
-	Everyone,
-	Pid(Pid),
-	Pgid(Pgid),
-}
 
 #[context(irq_disabled)]
 pub fn sys_kill(pid: isize, sig: isize) -> Result<usize, Errno> {
