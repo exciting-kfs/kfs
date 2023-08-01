@@ -203,7 +203,7 @@ impl TTYFlag {
 }
 
 impl TTY {
-	pub const fn new(console: SyncConsole, flag: TTYFlag) -> Self {
+	pub fn new(console: SyncConsole, flag: TTYFlag) -> Self {
 		Self {
 			flag,
 			control: ControlChars {

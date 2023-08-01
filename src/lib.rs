@@ -4,6 +4,7 @@
 #![feature(allocator_api)]
 #![feature(maybe_uninit_uninit_array)]
 #![feature(const_maybe_uninit_uninit_array)]
+#![feature(new_uninit)]
 #![feature(asm_const)]
 #![feature(variant_count)]
 

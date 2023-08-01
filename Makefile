@@ -145,8 +145,8 @@ dump-text :
 	@$(OBJDUMP) $(OBJDUMP_FLAG) --disassemble $(KERNEL_BIN) $(PAGER)
 
 .PHONY : check-stack
-check-stack :
-	@$(MAKE) dump-text | python3 scripts/checkstack.py
+check-stack : 
+	@$(MAKE) PAGER='' dump-text | python3 scripts/checkstack.py
 
 .PHONY : size
 size :
