@@ -28,7 +28,6 @@ impl<T> CpuLocal<T> {
 		unsafe { self.as_ptr().write(value) };
 	}
 
-	/// precondition: context(irq_disabled).
 	pub unsafe fn get_mut(&self) -> &mut T {
 		unsafe { &mut *self.as_ptr() }
 	}
