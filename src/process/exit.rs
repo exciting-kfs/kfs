@@ -1,9 +1,6 @@
-use crate::{process::context::InContext, signal::sig_num::SigNum};
+use crate::signal::sig_num::SigNum;
 
-use super::{
-	context::{context_switch, yield_now},
-	task::CURRENT,
-};
+use super::{context::yield_now, task::CURRENT};
 
 #[repr(transparent)]
 #[derive(Clone, Copy)]
@@ -32,7 +29,7 @@ impl ExitStatus {
 }
 
 pub fn sys_exit(status: usize) -> ! {
-	context_switch(InContext::IrqDisabled);
+	// context_switch(InContext::IrqDisabled);
 	let current = unsafe { CURRENT.get_mut() };
 	current.exit(ExitStatus::new(ExitFlag::Exited, status as u8));
 
@@ -41,7 +38,7 @@ pub fn sys_exit(status: usize) -> ! {
 }
 
 pub fn exit_with_signal(sig: SigNum) -> ! {
-	context_switch(InContext::IrqDisabled);
+	// context_switch(InContext::IrqDisabled);
 	let current = unsafe { CURRENT.get_mut() };
 
 	current.exit(ExitStatus::new(ExitFlag::Signaled, sig as usize as u8));

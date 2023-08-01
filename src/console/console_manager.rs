@@ -7,7 +7,6 @@ use core::mem::MaybeUninit;
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use kfs_macro::context;
 
 use self::console::{Console, SyncConsole};
 
@@ -68,7 +67,6 @@ impl ConsoleManager {
 		let _ = tty.write_one(code);
 	}
 
-	#[context(irq_disabled)]
 	pub fn screen_draw(&self) {
 		let foreground = self.foreground.lock();
 		let console = self.cons[*foreground].lock();
@@ -76,7 +74,6 @@ impl ConsoleManager {
 	}
 
 	/// change foreground console.
-	#[context(irq_disabled)]
 	pub fn set_foreground(&mut self, idx: usize) {
 		if idx < CONSOLE_COUNTS {
 			let mut foreground = self.foreground.lock();

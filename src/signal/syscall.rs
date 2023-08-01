@@ -1,9 +1,5 @@
-use core::{
-	mem::{self, size_of},
-	ptr::copy_nonoverlapping,
-};
-
-use kfs_macro::context;
+use core::mem::{self, size_of};
+use core::ptr::copy_nonoverlapping;
 
 use crate::{
 	interrupt::{
@@ -27,7 +23,6 @@ pub const SIG_ERR: usize = usize::MAX;
 pub const SIG_DFL: usize = 0;
 pub const SIG_IGN: usize = 1;
 
-#[context(irq_disabled)]
 pub fn sys_signal(num: usize, handler: usize) -> Result<usize, Errno> {
 	validate_user_addr(handler)?;
 	let num = validate_sig_num(num)?;
@@ -54,7 +49,6 @@ pub fn sys_signal(num: usize, handler: usize) -> Result<usize, Errno> {
 	}
 }
 
-#[context(irq_disabled)]
 pub fn sys_sigaction(
 	num: usize,
 	act: *const SigAction,

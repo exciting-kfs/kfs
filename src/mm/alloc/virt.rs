@@ -35,7 +35,15 @@ pub fn init() {
 }
 
 pub fn io_allocate(paddr: usize, count: usize) -> Result<NonNull<[u8]>, AllocError> {
-	let vaddr = ADDRESS_TREE.lock().alloc(count).ok_or_else(|| AllocError)?;
+	let vaddr = {
+		let mut addr_tree = ADDRESS_TREE.lock();
+		unsafe {
+			addr_tree
+				.assume_init_mut()
+				.alloc(count)
+				.ok_or_else(|| AllocError)?
+		}
+	};
 
 	for (vaddr, paddr) in (0..count).map(|x| (vaddr + x * PAGE_SIZE, paddr + x * PAGE_SIZE)) {
 		KERNEL_PD.map_kernel(
@@ -58,7 +66,7 @@ pub fn io_allocate(paddr: usize, count: usize) -> Result<NonNull<[u8]>, AllocErr
 }
 
 pub fn io_deallocate(vaddr: usize, count: usize) {
-	ADDRESS_TREE.lock().dealloc(vaddr, count);
+	unsafe { ADDRESS_TREE.lock().assume_init_mut().dealloc(vaddr, count) };
 
 	for vaddr in (0..count).map(|x| vaddr + x * PAGE_SIZE) {
 		KERNEL_PD.unmap_kernel(vaddr);

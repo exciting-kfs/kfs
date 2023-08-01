@@ -2,13 +2,13 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::collections::LinkedList;
 
-use crate::sync::singleton::Singleton;
+use crate::sync::locked::Locked;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct Pid(usize);
 
 static NEXT_PID: AtomicUsize = AtomicUsize::new(2);
-static FREED_PID: Singleton<LinkedList<Pid>> = Singleton::new(LinkedList::new());
+static FREED_PID: Locked<LinkedList<Pid>> = Locked::new(LinkedList::new());
 
 impl Pid {
 	pub fn allocate() -> Self {

@@ -1,13 +1,12 @@
+use core::mem;
 use core::{alloc::AllocError, mem::MaybeUninit};
 
 use alloc::{boxed::Box, collections::LinkedList};
 
-use kfs_macro::context;
-
 use crate::mm::alloc::phys::Atomic;
 use crate::process::context::yield_now;
 use crate::process::task::{State, Task};
-use crate::sync::singleton::Singleton;
+use crate::sync::locked::Locked;
 
 use super::{schedule_first, SyncTask};
 
@@ -32,11 +31,12 @@ impl<ArgType> Workable for Work<ArgType> {
 	}
 }
 
-static FAST_WORK_POOL: Singleton<LinkedList<Box<dyn Workable, Atomic>>> = Singleton::uninit();
-static SLOW_WORK_POOL: Singleton<LinkedList<Box<dyn Workable, Atomic>>> = Singleton::uninit();
+static FAST_WORK_POOL: Locked<LinkedList<Box<dyn Workable, Atomic>>> =
+	Locked::new(LinkedList::new());
+static SLOW_WORK_POOL: Locked<LinkedList<Box<dyn Workable, Atomic>>> =
+	Locked::new(LinkedList::new());
 static mut FAST_WORKER: MaybeUninit<SyncTask> = MaybeUninit::uninit();
 
-#[context(irq_disabled)]
 pub fn schedule_slow_work<ArgType: 'static>(func: fn(&mut ArgType), arg: ArgType) {
 	let arg = Box::new_in(arg, Atomic);
 	let work = Box::new_in(Work::new(func, arg), Atomic);
@@ -44,7 +44,6 @@ pub fn schedule_slow_work<ArgType: 'static>(func: fn(&mut ArgType), arg: ArgType
 	pool.push_back(work);
 }
 
-#[context(irq_disabled)]
 pub fn schedule_fast_work<ArgType: 'static>(func: fn(&mut ArgType), arg: ArgType) {
 	let arg = Box::new_in(arg, Atomic);
 	let work = Box::new_in(Work::new(func, arg), Atomic);
@@ -53,28 +52,30 @@ pub fn schedule_fast_work<ArgType: 'static>(func: fn(&mut ArgType), arg: ArgType
 }
 
 pub fn fast_worker(_: usize) {
-	#[context(irq_disabled)]
 	fn take_work() -> Option<Box<dyn Workable, Atomic>> {
 		let mut pool = FAST_WORK_POOL.lock();
 		pool.pop_front()
 	}
 
 	while let Some(mut w) = take_work() {
-		(*w).work()
+		w.work()
 	}
 }
 
 pub fn slow_worker(_: usize) {
 	loop {
 		fast_worker(0);
-		let works = SLOW_WORK_POOL.replace(LinkedList::new());
+		let works = {
+			let mut pool = SLOW_WORK_POOL.lock();
+			mem::replace(&mut *pool, LinkedList::new())
+		};
 
 		if works.len() == 0 {
 			yield_now();
 		}
 
 		for mut w in works {
-			(*w).work();
+			w.work();
 		}
 	}
 }

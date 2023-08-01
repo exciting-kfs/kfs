@@ -8,11 +8,10 @@ use crate::config::{USER_CODE_BASE, USTACK_BASE, USTACK_PAGES};
 use crate::interrupt::syscall::errno::Errno;
 use crate::interrupt::InterruptFrame;
 use crate::mm::user::memory::Memory;
-use crate::process::context::{context_switch, InContext};
 use crate::process::relation::family::zombie::Zombie;
 use crate::signal::Signal;
+use crate::sync::cpu_local::CpuLocal;
 use crate::sync::locked::{Locked, LockedGuard};
-use crate::sync::{cpu_local::CpuLocal, singleton::Singleton};
 
 use super::exit::ExitStatus;
 use super::fd_table::FdTable;
@@ -22,7 +21,7 @@ use super::uid::Uid;
 use super::wait::Who;
 
 pub static CURRENT: CpuLocal<Arc<Task>> = CpuLocal::uninit();
-pub static TASK_QUEUE: Singleton<LinkedList<Arc<Task>>> = Singleton::new(LinkedList::new());
+pub static TASK_QUEUE: Locked<LinkedList<Arc<Task>>> = Locked::new(LinkedList::new());
 
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -262,12 +261,8 @@ extern "C" {
 	pub fn return_from_interrupt();
 }
 
-pub extern "C" fn return_from_fork() {
-	context_switch(InContext::User);
-}
-
 pub struct ProcessTree(BTreeMap<Pid, Arc<Task>>);
-pub static PROCESS_TREE: Singleton<ProcessTree> = Singleton::new(ProcessTree::new());
+pub static PROCESS_TREE: Locked<ProcessTree> = Locked::new(ProcessTree::new());
 
 impl ProcessTree {
 	pub const fn new() -> Self {

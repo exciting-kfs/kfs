@@ -12,7 +12,7 @@ endif
 # === User settings / toolchain ===
 
 RELEASE_MODE := n
-DEBUG_WITH_VSCODE := n
+DEBUG_WITH_VSCODE := y
 TEST_CASE := all
 # LOG_LEVEL := debug # ALL = debug > info > warn > error
 

@@ -1,16 +1,17 @@
+use core::mem::MaybeUninit;
 use core::ptr::{addr_of_mut, NonNull};
 
 use crate::acpi::IOAPIC_INFO;
 use crate::io::pmio::Port;
 use crate::mm::constant::HIGH_IO_OFFSET;
-use crate::sync::singleton::Singleton;
+use crate::sync::locked::Locked;
 use crate::util::bitrange::{BitData, BitRange};
 
 pub const KEYBOARD_IRQ: usize = 1;
 pub const SERIAL_PORT1: usize = 3;
 pub const SERIAL_PORT2: usize = 4;
 
-pub static IO_APIC: Singleton<IOAPIC> = Singleton::uninit();
+pub static IO_APIC: Locked<MaybeUninit<IOAPIC>> = Locked::uninit();
 
 #[derive(Debug)]
 pub enum IOAPICError {
@@ -31,13 +32,13 @@ pub fn init() -> Result<(), IOAPICError> {
 		return Err(IOAPICError::InvalidBaseAddr);
 	}
 
-	unsafe {
-		IO_APIC.write(IOAPIC::new(NonNull::new_unchecked(
-			mmio_base as *mut DirectRegister,
-		)))
-	};
-
 	let mut apic = IO_APIC.lock();
+
+	apic.write(IOAPIC::new(unsafe {
+		NonNull::new_unchecked(mmio_base as *mut DirectRegister)
+	}));
+
+	let apic = unsafe { apic.assume_init_mut() };
 
 	let mut keyboard_redir = apic.read_redir(KEYBOARD_IRQ).expect("IRQ number too high.");
 

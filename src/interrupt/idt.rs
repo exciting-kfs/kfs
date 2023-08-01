@@ -1,7 +1,7 @@
 use core::{arch::asm, mem::size_of};
 
 use crate::interrupt::exception::CpuException;
-use crate::sync::singleton::Singleton;
+use crate::sync::locked::Locked;
 use crate::x86::{SystemDesc, DPL_USER, GDT};
 
 const IDTE_COUNT: usize = 256;
@@ -43,7 +43,7 @@ impl IDT {
 	}
 }
 
-static IDT: Singleton<IDT> = Singleton::new(IDT::new());
+static IDT: Locked<IDT> = Locked::new(IDT::new());
 
 #[repr(packed)]
 struct IDTR {

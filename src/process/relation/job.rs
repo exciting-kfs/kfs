@@ -5,10 +5,7 @@ use core::mem;
 
 use alloc::sync::Arc;
 
-use crate::{
-	interrupt::syscall::errno::Errno,
-	sync::{locked::Locked, singleton::Singleton},
-};
+use crate::{interrupt::syscall::errno::Errno, sync::locked::Locked};
 
 use self::{
 	group::ProcessGroup,
@@ -17,7 +14,7 @@ use self::{
 
 use super::{Pgid, Pid, Sid};
 
-pub static SESSION_TREE: Singleton<SessionTree> = Singleton::new(SessionTree::new());
+pub static SESSION_TREE: Locked<SessionTree> = Locked::new(SessionTree::new());
 
 #[derive(Clone)]
 pub struct JobGroup {

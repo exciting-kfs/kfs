@@ -46,36 +46,19 @@ pub fn ktest(attr: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn context(attr: TokenStream, input: TokenStream) -> TokenStream {
+pub fn interrupt_handler(_attr: TokenStream, input: TokenStream) -> TokenStream {
 	let func_impl = parse_macro_input!(input as ItemFn);
+
 	let sig = func_impl.sig.clone();
 	let vis = func_impl.vis.clone();
 	let block = func_impl.block.clone();
 
-	let attr = attr.to_string();
-	let no_mangle = match attr.as_str() {
-		"nmi" | "hw_irq" => quote!(#[no_mangle]),
-		"kernel" | "irq_disabled" | "preempt_disabled" => quote!(),
-		_ => panic!("kfs_macro: context: invalid context"),
-	};
-
-	let to_context = match attr.as_str() {
-		"nmi" => quote!(InContext::NMI),
-		"hw_irq" => quote!(InContext::HwIrq),
-		"kernel" => quote!(InContext::Kernel),
-		"irq_disabled" => quote!(InContext::IrqDisabled),
-		"preempt_disabled" => quote!(InContext::PreemptDisabled),
-		_ => panic!("kfs_macro: context: invalid context"),
-	};
-
-	let new_func = quote! {
-		#no_mangle
+	quote! {
+		#[no_mangle]
 		#vis #sig {
-			use crate::process::context::InContext;
-			let __original_context = crate::process::context::context_switch_auto(#to_context);
-			#block
+			let __interrupt_guard = crate::interrupt::enter_interrupt_context();
+			#block;
 		}
-	};
-
-	TokenStream::from(new_func)
+	}
+	.into()
 }

@@ -1,14 +1,12 @@
 use core::{alloc::AllocError, ptr::NonNull};
 
-use kfs_macro::context;
-
 use crate::mm::page::{PageFlag, KERNEL_PD};
 use crate::mm::{constant::*, util::*};
-use crate::sync::singleton::Singleton;
+use crate::sync::locked::Locked;
 
 use super::AddressSpace;
 
-static KMAP_BITMAP: Singleton<BitMap> = Singleton::new(BitMap::new());
+static KMAP_BITMAP: Locked<BitMap> = Locked::new(BitMap::new());
 
 struct BitMap {
 	inner: [usize; 32],
@@ -38,7 +36,6 @@ impl BitMap {
 	}
 }
 
-#[context(irq_disabled)]
 pub fn kmap(paddr: usize) -> Result<NonNull<u8>, AllocError> {
 	let mut bitmap = KMAP_BITMAP.lock();
 
@@ -57,7 +54,6 @@ pub fn kmap(paddr: usize) -> Result<NonNull<u8>, AllocError> {
 	Ok(unsafe { NonNull::new_unchecked(vaddr as *mut u8) })
 }
 
-#[context(irq_disabled)]
 pub fn kunmap(vaddr: usize) {
 	// early return
 	if !matches!(AddressSpace::identify(vaddr), AddressSpace::Kmap) {

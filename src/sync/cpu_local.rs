@@ -1,7 +1,5 @@
 use core::{cell::UnsafeCell, mem::MaybeUninit};
 
-use kfs_macro::context;
-
 use crate::{config::NR_CPUS, smp::smp_id};
 
 pub struct CpuLocal<T> {
@@ -27,25 +25,20 @@ impl<T> CpuLocal<T> {
 	}
 
 	pub fn init(&self, value: T) {
-		unsafe { self.data.get().cast::<T>().add(smp_id()).write(value) };
+		unsafe { self.as_ptr().write(value) };
 	}
 
 	/// precondition: context(irq_disabled).
 	pub unsafe fn get_mut(&self) -> &mut T {
-		let arr = self.arr_mut();
-
-		&mut arr[smp_id()]
+		unsafe { &mut *self.as_ptr() }
 	}
 
-	#[context(irq_disabled)]
-	pub unsafe fn replace(&self, src: T) -> T {
-		let arr = self.arr_mut();
-		let dest = &mut arr[smp_id()];
-		core::mem::replace(dest, src)
+	pub unsafe fn get_ref(&self) -> &T {
+		unsafe { &*self.as_ptr() }
 	}
 
-	fn arr_mut<'l>(&self) -> &'l mut [T; NR_CPUS] {
-		unsafe { self.data.get().as_mut::<'l>().unwrap().assume_init_mut() }
+	fn as_ptr(&self) -> *mut T {
+		unsafe { self.data.get().cast::<T>().add(smp_id()) }
 	}
 }
 

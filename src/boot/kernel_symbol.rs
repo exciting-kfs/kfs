@@ -1,15 +1,14 @@
-use core::{cmp::max, ffi::c_char, mem::size_of};
+use core::cmp::max;
+use core::ffi::c_char;
+use core::mem::{size_of, MaybeUninit};
 
 use multiboot2::{BootInformation, ElfSection, ElfSectionsTag};
 
-use crate::{
-	mm::{constant::VM_OFFSET, util::phys_to_virt},
-	sync::singleton::Singleton,
-};
+use crate::mm::{constant::VM_OFFSET, util::phys_to_virt};
 
 use super::{symtab::SymtabEntry, Error, Strtab, Symtab};
 
-pub static KSYMS: Singleton<KernelSymbol> = Singleton::uninit();
+pub(super) static mut KSYMS: MaybeUninit<KernelSymbol> = MaybeUninit::uninit();
 
 #[derive(Clone)]
 pub struct KernelSymbol {
@@ -41,6 +40,7 @@ pub fn init(bi: &BootInformation, kernel_end: &mut usize) -> Result<(), Error> {
 	*kernel_end = section_end;
 
 	let ksyms = KernelSymbol::new(symtab, strtab);
+
 	unsafe { KSYMS.write(ksyms) };
 
 	Ok(())

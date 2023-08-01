@@ -1,7 +1,7 @@
 use super::control::{test_status_now, Status};
 use crate::input::key_event::{Code, KeyEvent, KeyState};
 use crate::io::pmio::Port;
-use crate::sync::singleton::Singleton;
+use crate::sync::locked::Locked;
 
 pub(super) static KEYBOARD_PORT: Port = Port::new(0x60);
 
@@ -150,7 +150,7 @@ impl Keyboard {
 	}
 }
 
-static PS2_KEYBOARD: Singleton<Keyboard> = Singleton::new(Keyboard {
+static PS2_KEYBOARD: Locked<Keyboard> = Locked::new(Keyboard {
 	state: State::Page0,
 	code: 0,
 	count: 0,

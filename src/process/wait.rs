@@ -1,7 +1,5 @@
 use core::mem::size_of;
 
-use kfs_macro::context;
-
 use crate::{
 	interrupt::syscall::errno::Errno,
 	mm::user::vma::AreaFlag,
@@ -23,7 +21,6 @@ mod wait_option {
 	pub const IMPLEMENTED_MASK: usize = WNOHANG;
 }
 
-#[context(irq_disabled)]
 pub fn sys_waitpid(cpid: isize, stat_loc: *mut isize, option: usize) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };
 
@@ -51,7 +48,7 @@ pub fn sys_waitpid(cpid: isize, stat_loc: *mut isize, option: usize) -> Result<u
 
 	let non_block = (option & wait_option::WNOHANG) != 0;
 
-	loop {
+	let ret = loop {
 		let result = current.waitpid(who);
 		if let Ok(z) = result {
 			unsafe { stat_loc.write(z.exit_status.as_raw() as isize) };
@@ -63,5 +60,7 @@ pub fn sys_waitpid(cpid: isize, stat_loc: *mut isize, option: usize) -> Result<u
 		}
 
 		yield_now();
-	}
+	};
+
+	ret
 }
