@@ -1,5 +1,6 @@
 use core::{
 	cell::UnsafeCell,
+	mem::MaybeUninit,
 	ops::{Deref, DerefMut},
 };
 
@@ -26,16 +27,21 @@ impl<T: Clone> Clone for Locked<T> {
 	}
 }
 
+impl<T> Locked<MaybeUninit<T>> {
+	pub const fn uninit() -> Self {
+		Self {
+			inner: SpinLock::new(),
+			value: UnsafeCell::new(MaybeUninit::uninit()),
+		}
+	}
+}
+
 impl<T> Locked<T> {
 	pub const fn new(value: T) -> Self {
 		Self {
 			inner: SpinLock::new(),
 			value: UnsafeCell::new(value),
 		}
-	}
-
-	pub unsafe fn as_mut_ptr(&self) -> *mut T {
-		self.value.get()
 	}
 
 	pub fn lock(&self) -> LockedGuard<'_, T> {
@@ -83,12 +89,12 @@ impl<'lock, T> Deref for LockedGuard<'lock, T> {
 	type Target = T;
 
 	fn deref(&self) -> &Self::Target {
-		unsafe { self.locked.value.get().as_ref().unwrap() }
+		unsafe { &*self.locked.value.get() }
 	}
 }
 
 impl<'lock, T> DerefMut for LockedGuard<'lock, T> {
 	fn deref_mut(&mut self) -> &mut Self::Target {
-		unsafe { self.locked.value.get().as_mut().unwrap() }
+		unsafe { &mut *self.locked.value.get() }
 	}
 }

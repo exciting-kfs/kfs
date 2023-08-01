@@ -1,7 +1,5 @@
 use core::{ffi::CStr, mem, slice};
 
-use kfs_macro::context;
-
 use crate::{
 	config::{USER_CODE_BASE, USTACK_BASE, USTACK_PAGES},
 	interrupt::{syscall::errno::Errno, InterruptFrame},
@@ -15,7 +13,6 @@ const PATH_MAX: usize = 128;
 
 /// execute new user binary
 /// do not call from kernel thread!!
-#[context(irq_disabled)]
 pub fn sys_exec(frame: *mut InterruptFrame, raw_binary_name_ptr: usize) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };
 

@@ -9,7 +9,7 @@ use crate::mm::alloc::Zone;
 use crate::mm::util::*;
 
 use super::kthread::kthread_entry;
-use super::task::{return_from_fork, return_from_interrupt};
+use super::task::return_from_interrupt;
 
 const KSTACK_SIZE: usize = rank_to_size(KSTACK_RANK);
 type StackStorage = [u8; KSTACK_SIZE];
@@ -77,7 +77,6 @@ impl Stack {
 
 		// kernel context frame
 		stack.push(return_from_interrupt as usize).unwrap();
-		stack.push(return_from_fork as usize).unwrap();
 		stack.push(0).unwrap();
 		stack.push(0).unwrap();
 		stack.push(0).unwrap();
@@ -94,7 +93,6 @@ impl Stack {
 		unsafe { new.set_user_return_value(0) };
 
 		new.push(return_from_interrupt as usize).unwrap();
-		new.push(return_from_fork as usize).unwrap();
 		new.push(0).unwrap();
 		new.push(0).unwrap();
 		new.push(0).unwrap();

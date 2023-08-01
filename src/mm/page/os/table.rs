@@ -1,15 +1,15 @@
-use core::mem::size_of;
+use core::mem::{size_of, MaybeUninit};
 use core::ops::IndexMut;
 use core::ptr::NonNull;
 use core::slice::from_raw_parts_mut;
 
 use crate::boot::{self, BootAlloc};
 use crate::mm::util::*;
-use crate::sync::singleton::Singleton;
+use crate::sync::locked::Locked;
 
 use super::metapage::MetaPage;
 
-static META_PAGE_TABLE: Singleton<&'static mut [MetaPage]> = Singleton::uninit();
+static META_PAGE_TABLE: Locked<MaybeUninit<&'static mut [MetaPage]>> = Locked::uninit();
 
 pub unsafe fn alloc_meta_page_table(bootalloc: &mut BootAlloc) -> NonNull<[MetaPage]> {
 	let page_count = unsafe { boot::MEM_INFO.end_pfn };
@@ -25,7 +25,10 @@ pub unsafe fn init(table: NonNull<[MetaPage]>) {
 		MetaPage::construct_at(entry);
 	}
 
-	META_PAGE_TABLE.write(from_raw_parts_mut(base_ptr, count));
+	META_PAGE_TABLE
+		.lock()
+		.as_mut_ptr()
+		.write(from_raw_parts_mut(base_ptr, count));
 }
 
 pub fn meta_to_ptr(page: NonNull<MetaPage>) -> NonNull<u8> {
@@ -42,11 +45,11 @@ pub fn ptr_to_meta(ptr: NonNull<u8>) -> NonNull<MetaPage> {
 
 pub fn meta_to_index(page: NonNull<MetaPage>) -> usize {
 	let addr = page.as_ptr() as usize;
-	let base = META_PAGE_TABLE.lock().as_ptr() as usize;
+	let base = unsafe { META_PAGE_TABLE.lock().assume_init_mut().as_ptr() } as usize;
 
 	(addr - base) / size_of::<MetaPage>()
 }
 
 pub fn index_to_meta(index: usize) -> NonNull<MetaPage> {
-	NonNull::from(META_PAGE_TABLE.lock().index_mut(index))
+	NonNull::from(unsafe { META_PAGE_TABLE.lock().assume_init_mut() }.index_mut(index))
 }

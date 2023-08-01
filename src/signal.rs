@@ -13,12 +13,11 @@ pub use syscall::{sys_sigaction, sys_signal, sys_sigreturn};
 
 use core::{
 	array,
-	mem::{size_of, variant_count},
-	ptr::{self, copy_nonoverlapping},
+	mem::{self, size_of, variant_count},
+	ptr::copy_nonoverlapping,
 };
 
 use alloc::collections::LinkedList;
-use kfs_macro::context;
 
 use crate::{
 	config::TRAMPOLINE_BASE,
@@ -68,13 +67,10 @@ impl Signal {
 		}
 	}
 
-	#[context(irq_disabled)]
 	pub fn overwrite_mask(&self, mask: SigMask) {
-		let _lock = self.mask.lock();
-		unsafe { *self.mask.as_mut_ptr() = mask }
+		*self.mask.lock() = mask;
 	}
 
-	#[context(irq_disabled)]
 	pub fn recv_signal(&self, info: SigInfo) {
 		let mask = self.mask.lock();
 		if mask.contains(info.num.into()) {
@@ -186,7 +182,6 @@ impl Signal {
 		go_to_signal_handler(frame as *const InterruptFrame, esp, act.handler());
 	}
 
-	#[context(irq_disabled)]
 	fn replace_mask(&self, act: &SigAction, info: &SigInfo) -> SigMask {
 		let lock = self.mask.lock();
 		let o_mask = *lock;
@@ -195,10 +190,10 @@ impl Signal {
 		} else {
 			o_mask | act.mask() | info.num.into()
 		};
-		unsafe { ptr::replace(self.mask.as_mut_ptr(), n_mask) }
+
+		mem::replace(&mut *self.mask.lock(), n_mask)
 	}
 
-	#[context(irq_disabled)]
 	fn get_signal_event(&self) -> Option<SigInfo> {
 		let mut queue = self.queue.lock();
 		let mask = self.mask.lock();
@@ -218,7 +213,6 @@ impl Signal {
 		ret
 	}
 
-	#[context(irq_disabled)]
 	fn get_handler<'a>(&self, num: &SigNum) -> SigHandler {
 		let table = self.table.lock();
 		let handler = &table[num.index()];
@@ -248,7 +242,6 @@ fn make_function_frame(frame: &mut [usize], user_esp: usize, sig_num: SigNum) {
 /// # Safety
 ///
 /// - CURRENT should be a user task.
-#[context(irq_disabled)]
 pub unsafe fn poll_signal_queue() -> Result<(), Errno> {
 	let signal = CURRENT
 		.get_mut()

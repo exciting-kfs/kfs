@@ -1,7 +1,5 @@
-use core::array;
-
 use alloc::sync::Arc;
-use kfs_macro::context;
+use core::array;
 
 use crate::file::File;
 
@@ -32,12 +30,10 @@ impl FdTable {
 		Self(self.0.clone())
 	}
 
-	#[context(irq_disabled)]
 	pub fn get_file(&self, fd: Fd) -> Option<Arc<File>> {
 		self.0[fd.index()].clone()
 	}
 
-	#[context(irq_disabled)]
 	pub fn alloc_fd(&mut self, file: Arc<File>) -> Option<Fd> {
 		let (fd, entry) = self
 			.0

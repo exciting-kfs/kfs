@@ -1,5 +1,3 @@
-use kfs_macro::context;
-
 use crate::{interrupt::syscall::errno::Errno, process::task::CURRENT};
 use core::sync::atomic::{AtomicUsize, Ordering};
 
@@ -30,14 +28,12 @@ impl Uid {
 	}
 }
 
-#[context(irq_disabled)]
 pub fn sys_setuid(new_uid: usize) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };
 
 	current.set_uid(new_uid).map(|_| 0)
 }
 
-#[context(irq_disabled)]
 pub fn sys_getuid() -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };
 

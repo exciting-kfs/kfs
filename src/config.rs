@@ -7,5 +7,5 @@ pub const USTACK_BASE: usize = 0xc000_0000;
 pub const USER_CODE_BASE: usize = 0x0804_8000;
 pub const TRAMPOLINE_BASE: usize = 0xa000_0000;
 
-pub const TIMER_FREQUENCY_HZ: usize = 100;
+pub const TIMER_FREQUENCY_HZ: usize = 1000;
 pub const CONSOLE_COUNTS: usize = 4;

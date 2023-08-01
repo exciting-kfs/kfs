@@ -1,6 +1,7 @@
 use core::alloc::{AllocError, Allocator, Layout};
 
 use core::iter::repeat_with;
+use core::mem::MaybeUninit;
 use core::ops::Range;
 use core::ptr::NonNull;
 
@@ -9,7 +10,7 @@ use crate::mm::page::{index_to_meta, PageFlag, KERNEL_PD};
 use crate::mm::page::{meta_to_ptr, metapage_let, MetaPage};
 use crate::mm::util::virt_to_phys;
 use crate::mm::{constant::*, util::*};
-use crate::sync::singleton::Singleton;
+use crate::sync::locked::Locked;
 use core::slice::from_raw_parts;
 
 use super::AddressTree;
@@ -19,7 +20,8 @@ enum VMallocError {
 	OutOfMemory(usize),
 }
 
-pub static ADDRESS_TREE: Singleton<AddressTree> = Singleton::uninit();
+pub static ADDRESS_TREE: Locked<MaybeUninit<AddressTree>> = Locked::uninit();
+
 pub static VMALLOC: VMemAlloc = VMemAlloc;
 
 /// Virtual memory allocator
@@ -28,7 +30,9 @@ pub struct VMemAlloc;
 
 impl VMemAlloc {
 	pub fn init(&self, area: Range<usize>) {
-		unsafe { ADDRESS_TREE.write(AddressTree::new(area)) };
+		let mut addr_tree = ADDRESS_TREE.lock();
+
+		unsafe { addr_tree.as_mut_ptr().write(AddressTree::new(area)) };
 	}
 
 	pub fn size(&self, ptr: NonNull<u8>) -> usize {
@@ -52,10 +56,13 @@ impl VMemAlloc {
 		head: &mut MetaPage,
 		pages: usize,
 	) -> Result<NonNull<[u8]>, VMallocError> {
-		let base_address = ADDRESS_TREE
-			.lock()
-			.alloc(pages)
-			.ok_or_else(|| VMallocError::OutOfAddress)?;
+		let base_address = unsafe {
+			ADDRESS_TREE
+				.lock()
+				.assume_init_mut()
+				.alloc(pages)
+				.ok_or_else(|| VMallocError::OutOfAddress)?
+		};
 
 		for vaddr in (0..pages).map(|x| base_address + x * PAGE_SIZE) {
 			let paddr = virt_to_phys(unsafe {
@@ -91,7 +98,12 @@ impl VMemAlloc {
 			KERNEL_PD.unmap_kernel(addr);
 		}
 
-		ADDRESS_TREE.lock().dealloc(base_addr, pages);
+		unsafe {
+			ADDRESS_TREE
+				.lock()
+				.assume_init_mut()
+				.dealloc(base_addr, pages)
+		};
 	}
 }
 

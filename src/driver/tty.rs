@@ -4,7 +4,6 @@
 use alloc::collections::VecDeque;
 use alloc::sync::Arc;
 use bitflags::bitflags;
-use kfs_macro::context;
 
 use crate::collection::LineBuffer;
 use crate::config::CONSOLE_COUNTS;
@@ -435,7 +434,6 @@ impl ChWrite<Code> for TTY {
 
 /// from process
 impl ChWrite<u8> for TTY {
-	#[context(irq_disabled)]
 	fn write_one(&mut self, data: u8) -> Result<(), NoSpace> {
 		let mut buf = [data, 0];
 		let iter = self.output_convert(&mut buf, 1);
@@ -464,7 +462,6 @@ use crate::signal::poll_signal_queue;
 
 impl FileOps for Locked<TTY> {
 	fn read(&self, file: &Arc<File>, buf: &mut [u8]) -> Result<usize, Errno> {
-		#[context(irq_disabled)]
 		fn __read(tty: &Locked<TTY>, buf: &mut [u8]) -> usize {
 			let mut tty = tty.lock();
 			tty.read(buf)
@@ -480,7 +477,6 @@ impl FileOps for Locked<TTY> {
 	}
 
 	fn write(&self, file: &Arc<File>, buf: &[u8]) -> Result<usize, Errno> {
-		#[context(irq_disabled)]
 		fn __write(tty: &Locked<TTY>, buf: &[u8]) -> usize {
 			let mut tty = tty.lock();
 			tty.write(buf)

@@ -1,11 +1,7 @@
-use kfs_macro::context;
-
 use crate::interrupt::{syscall::errno::Errno, InterruptFrame};
 
 use super::task::{CURRENT, TASK_QUEUE};
 
-// do not call from kernel context
-#[context(irq_disabled)]
 pub fn sys_fork(frame: *const InterruptFrame) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };
 

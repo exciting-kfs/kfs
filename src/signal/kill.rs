@@ -1,5 +1,4 @@
 use alloc::sync::Arc;
-use kfs_macro::context;
 
 use crate::interrupt::syscall::errno::Errno;
 use crate::process::relation::job::group::ProcessGroup;
@@ -12,7 +11,6 @@ use crate::sync::locked::Locked;
 
 use super::sig_num::SigNum;
 
-#[context(irq_disabled)]
 pub fn sys_kill(pid: isize, sig: isize) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };
 

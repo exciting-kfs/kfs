@@ -6,9 +6,10 @@ use crate::boot::MEM_INFO;
 use crate::mm::alloc::Zone;
 use crate::mm::page::index_to_meta;
 use crate::mm::{constant::*, util::*};
-use crate::sync::singleton::Singleton;
+use crate::sync::locked::Locked;
 
 use core::alloc::AllocError;
+use core::mem::MaybeUninit;
 use core::ptr::{addr_of_mut, NonNull};
 
 /// PageAlloc Holds 2 different buddy allocator.
@@ -20,11 +21,13 @@ pub struct PageAlloc {
 	normal: BuddyAlloc,
 }
 
-pub static PAGE_ALLOC: Singleton<PageAlloc> = Singleton::uninit();
+pub(super) static PAGE_ALLOC: Locked<MaybeUninit<PageAlloc>> = Locked::uninit();
 
 impl PageAlloc {
 	pub unsafe fn init() {
-		let ptr = PAGE_ALLOC.as_mut_ptr();
+		let mut page_alloc = PAGE_ALLOC.lock();
+
+		let ptr = page_alloc.as_mut_ptr();
 		let mem = &mut MEM_INFO;
 
 		BuddyAlloc::construct_at(
@@ -78,7 +81,11 @@ impl PageAlloc {
 mod test {
 	use super::*;
 
-	use crate::{pr_info, pr_warn, util::lcg::LCG};
+	use crate::{
+		mm::alloc::page::{alloc_pages, free_pages},
+		pr_info, pr_warn,
+		util::lcg::LCG,
+	};
 	use kfs_macro::ktest;
 
 	use alloc::{collections::LinkedList, vec::Vec};
@@ -151,7 +158,7 @@ mod test {
 	}
 
 	fn alloc(rank: usize, flag: Zone) -> Result<AllocInfo, AllocError> {
-		let mem = AllocInfo::new(PAGE_ALLOC.lock().alloc_pages(rank, flag.clone())?);
+		let mem = AllocInfo::new(alloc_pages(rank, flag.clone())?);
 
 		assert!(mem.as_ptr() as usize % PAGE_SIZE == 0);
 		assert!(mem.rank() == rank);
@@ -168,7 +175,7 @@ mod test {
 	fn free(info: AllocInfo) {
 		mark_freed(info.ptr.as_ptr() as usize, info.rank);
 
-		PAGE_ALLOC.lock().free_pages(info.ptr);
+		free_pages(info.ptr);
 	}
 
 	fn is_zone_normal(ptr: NonNull<u8>) -> bool {

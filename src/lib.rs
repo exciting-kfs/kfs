@@ -36,9 +36,11 @@ mod x86;
 
 use alloc::sync::Arc;
 use console::CONSOLE_MANAGER;
+use core::mem;
 use core::{arch::asm, panic::PanicInfo};
 use driver::tty;
 use file::{File, OpenFlag};
+use interrupt::enter_interrupt_context;
 use process::context::yield_now;
 use process::task::{Task, TASK_QUEUE};
 use scheduler::work::slow_worker;
@@ -88,6 +90,7 @@ fn run_test() -> ! {
 }
 
 fn idle() -> ! {
+	mem::drop(enter_interrupt_context());
 	loop {
 		yield_now();
 	}
@@ -145,11 +148,15 @@ extern "C" fn show_page_stat(_: usize) -> ! {
 
 unsafe fn kernel_boot_alloc(bi_header: usize, magic: u32) {
 	let mut bootalloc = boot::init(bi_header, magic).expect("boot information");
-
 	let meta_page_table = mm::page::alloc_meta_page_table(&mut bootalloc);
-	mm::page::init(meta_page_table);
-
 	bootalloc.deinit();
+
+	mm::page::init_fixed_map();
+	interrupt::apic::local::init().unwrap();
+	mm::page::init_arbitrary_map();
+	mm::page::init_kernel_pd();
+
+	mm::page::init_metapage_table(meta_page_table);
 }
 
 #[no_mangle]
@@ -158,11 +165,8 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	driver::serial::init();
 
 	// caution: order sensitive.
-	unsafe {
-		kernel_boot_alloc(bi_header, magic);
-	}
+	unsafe { kernel_boot_alloc(bi_header, magic) };
 
-	interrupt::apic::local::init().unwrap();
 	interrupt::idt::init();
 
 	mm::alloc::page::init();

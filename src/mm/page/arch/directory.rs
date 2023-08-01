@@ -3,7 +3,7 @@ use crate::mm::alloc::page::{alloc_pages, free_pages};
 use crate::mm::alloc::virt::AddressSpace;
 use crate::mm::alloc::Zone;
 use crate::mm::{constant::*, util::*};
-use crate::sync::singleton::Singleton;
+use crate::sync::locked::Locked;
 
 use core::alloc::AllocError;
 use core::arch::asm;
@@ -15,10 +15,10 @@ extern "C" {
 }
 
 const NR_VMALLOC_PT: usize = (KMAP_OFFSET - VMALLOC_OFFSET) / PT_COVER_SIZE;
-pub static VMALLOC_PT: Singleton<[PT; NR_VMALLOC_PT]> = Singleton::new([PT::new(); NR_VMALLOC_PT]);
+pub static VMALLOC_PT: Locked<[PT; NR_VMALLOC_PT]> = Locked::new([PT::new(); NR_VMALLOC_PT]);
 
 const NR_KMAP_PT: usize = (HIGH_IO_OFFSET - KMAP_OFFSET) / PT_COVER_SIZE;
-pub static KMAP_PT: Singleton<[PT; NR_KMAP_PT]> = Singleton::new([PT::new(); NR_KMAP_PT]);
+pub static KMAP_PT: Locked<[PT; NR_KMAP_PT]> = Locked::new([PT::new(); NR_KMAP_PT]);
 
 pub static KERNEL_PD: PD = PD::uninit();
 

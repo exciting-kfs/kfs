@@ -1,16 +1,14 @@
+use kfs_macro::interrupt_handler;
+
 use crate::interrupt::{apic::local::LOCAL_APIC, InterruptFrame};
-use crate::process::context::{cpu_context, yield_now, InContext};
+use crate::process::context::yield_now;
 use crate::process::task::CURRENT;
 use crate::sync::cpu_local::CpuLocal;
 
-#[no_mangle]
+#[interrupt_handler]
 pub unsafe extern "C" fn handle_timer_impl(frame: InterruptFrame) {
 	*JIFFIES.get_mut() += 1;
 	LOCAL_APIC.end_of_interrupt();
-
-	if let InContext::PreemptDisabled = cpu_context() {
-		return;
-	}
 
 	yield_now();
 

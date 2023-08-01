@@ -5,7 +5,6 @@ pub mod job;
 use core::mem;
 
 pub use id::*;
-use kfs_macro::context;
 
 use crate::{interrupt::syscall::errno::Errno, process::task::CURRENT};
 
@@ -84,14 +83,12 @@ impl Relation {
 	}
 }
 
-#[context(irq_disabled)]
 pub fn sys_getpid() -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };
 
 	Ok(current.get_pid().as_raw())
 }
 
-#[context(irq_disabled)]
 pub fn sys_setpgid(pid: usize, pgid: usize) -> Result<usize, Errno> {
 	let task = if pid == 0 {
 		unsafe { CURRENT.get_mut().clone() }
@@ -113,28 +110,24 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> Result<usize, Errno> {
 	task.set_pgid(Pgid::from_raw(pgid)).map(|_| 0)
 }
 
-#[context(irq_disabled)]
 pub fn sys_getppid() -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };
 
 	Ok(current.get_ppid().as_raw())
 }
 
-#[context(irq_disabled)]
 pub fn sys_getpgrp() -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };
 
 	Ok(current.get_pgid().as_raw())
 }
 
-#[context(irq_disabled)]
 pub fn sys_setsid() -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };
 
 	current.set_sid()
 }
 
-#[context(irq_disabled)]
 pub fn sys_getpgid(pid: usize) -> Result<usize, Errno> {
 	let ptree = PROCESS_TREE.lock();
 
@@ -148,7 +141,6 @@ pub fn sys_getpgid(pid: usize) -> Result<usize, Errno> {
 	Ok(task.get_pgid().as_raw())
 }
 
-#[context(irq_disabled)]
 pub fn sys_getsid() -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };
 

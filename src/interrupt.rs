@@ -11,6 +11,8 @@ use core::arch::asm;
 pub use hw::apic_timer::jiffies;
 pub use interrupt_frame::InterruptFrame;
 
+use crate::sync::cpu_local::CpuLocal;
+
 #[inline(always)]
 pub fn irq_enable() {
 	unsafe { asm!("sti") };
@@ -33,6 +35,25 @@ pub fn get_interrupt_flag() -> bool {
 	};
 
 	eflags & flag_mask == flag_mask
+}
+
+static IN_INTERRUPT: CpuLocal<bool> = CpuLocal::new(true);
+
+pub struct InterruptGuard(());
+
+impl Drop for InterruptGuard {
+	fn drop(&mut self) {
+		unsafe { *IN_INTERRUPT.get_mut() = false };
+	}
+}
+
+pub fn enter_interrupt_context() -> InterruptGuard {
+	unsafe { *IN_INTERRUPT.get_mut() = true };
+	InterruptGuard(())
+}
+
+pub fn in_interrupt_context() -> bool {
+	unsafe { *IN_INTERRUPT.get_mut() }
 }
 
 #[cfg(disable)]

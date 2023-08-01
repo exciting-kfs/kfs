@@ -47,6 +47,6 @@ pub fn init(bi_header: usize, magic: u32) -> Result<BootAlloc, Error> {
 	Ok(BootAlloc::new())
 }
 
-pub fn get_ksyms() -> KernelSymbol {
-	KSYMS.lock().clone()
+pub fn get_ksyms() -> &'static KernelSymbol {
+	unsafe { KSYMS.assume_init_ref() }
 }
