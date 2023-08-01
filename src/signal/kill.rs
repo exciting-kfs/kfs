@@ -12,7 +12,6 @@ use crate::sync::locked::Locked;
 
 use super::sig_num::SigNum;
 
-
 #[context(irq_disabled)]
 pub fn sys_kill(pid: isize, sig: isize) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };

@@ -10,6 +10,7 @@ use crate::process::exec::sys_exec;
 use crate::process::relation::{
 	sys_getpgid, sys_getpgrp, sys_getpid, sys_getppid, sys_getsid, sys_setpgid, sys_setsid,
 };
+use crate::process::uid::{sys_getuid, sys_setuid};
 use crate::process::wait::sys_waitpid;
 use crate::process::{exit::sys_exit, fork::sys_fork, task::CURRENT};
 use crate::signal::sig_handler::SigAction;
@@ -104,6 +105,8 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 		}
 		132 => sys_getpgid(frame.ebx),
 		147 => sys_getsid(),
+		199 => sys_getuid(),
+		213 => sys_setuid(frame.ebx),
 		_ => {
 			pr_info!("syscall: the syscall {} is unsupported.", frame.eax);
 			Ok(0)

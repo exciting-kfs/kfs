@@ -46,3 +46,5 @@ SYSCALL setsid,         66,             0
 SYSCALL sigaction,      67,             3
 SYSCALL getpgid,        132,            1
 SYSCALL getsid,         147,            0
+SYSCALL getuid,         199,            0
+SYSCALL setuid,         213,            1
