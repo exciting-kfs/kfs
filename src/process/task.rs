@@ -1,7 +1,6 @@
 use core::alloc::AllocError;
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use alloc::collections::BTreeMap;
 use alloc::{collections::LinkedList, sync::Arc};
 
 use crate::config::{USER_CODE_BASE, USTACK_BASE, USTACK_PAGES};
@@ -16,6 +15,7 @@ use crate::sync::locked::{Locked, LockedGuard};
 use super::exit::ExitStatus;
 use super::fd_table::FdTable;
 use super::kstack::Stack;
+use super::process_tree::PROCESS_TREE;
 use super::relation::{Pgid, Pid, Relation, Sid};
 use super::uid::Uid;
 use super::wait::Who;
@@ -84,7 +84,7 @@ impl Task {
 		let kstack = Stack::new_user(USER_CODE_BASE, USTACK_BASE)?;
 		let memory = Memory::new(USTACK_BASE, USTACK_PAGES, USER_CODE_BASE, code)?;
 
-		let task = Arc::new(Task {
+		let task = Arc::new_cyclic(|w| Task {
 			kstack,
 			state: Locked::new(State::Running),
 			pid: Pid::from_raw(1),
@@ -92,7 +92,7 @@ impl Task {
 			user_ext: Some(UserTaskExt {
 				exec_called: AtomicBool::new(false),
 				memory: Locked::new(memory),
-				relation: Locked::new(Relation::new_init()),
+				relation: Locked::new(Relation::new_init(w)),
 				fd_table: Arc::new(Locked::new(FdTable::new())),
 				signal: Arc::new(Signal::new()),
 			}),
@@ -126,8 +126,14 @@ impl Task {
 		task
 	}
 
+	#[inline(always)]
 	pub fn get_user_ext(&self) -> Option<&UserTaskExt> {
 		self.user_ext.as_ref()
+	}
+
+	#[inline(always)]
+	pub fn user_ext(&self, e: Errno) -> Result<&UserTaskExt, Errno> {
+		self.user_ext.as_ref().ok_or(e)
 	}
 
 	pub fn clone_for_fork(
@@ -141,22 +147,27 @@ impl Task {
 		let user_ext = self.get_user_ext().unwrap();
 
 		let memory = user_ext.lock_memory().clone()?;
-		let relation = user_ext.lock_relation().clone_for_fork(pid, self.pid);
 		let fd_table = user_ext.lock_fd_table().clone_for_fork();
 		let signal = user_ext.signal.clone_for_fork();
 
-		let new_task = Arc::new(Task {
-			kstack,
-			state: Locked::new(State::Running),
-			pid,
-			uid,
-			user_ext: Some(UserTaskExt {
-				exec_called: AtomicBool::new(false),
-				memory: Locked::new(memory),
-				relation: Locked::new(relation),
-				fd_table: Arc::new(Locked::new(fd_table)),
-				signal: Arc::new(signal),
-			}),
+		let new_task = Arc::new_cyclic(|w| {
+			let relation = user_ext
+				.lock_relation()
+				.clone_for_fork(pid, self.pid, w.clone());
+
+			Task {
+				kstack,
+				state: Locked::new(State::Running),
+				pid,
+				uid,
+				user_ext: Some(UserTaskExt {
+					exec_called: AtomicBool::new(false),
+					memory: Locked::new(memory),
+					relation: Locked::new(relation),
+					fd_table: Arc::new(Locked::new(fd_table)),
+					signal: Arc::new(signal),
+				}),
+			}
 		});
 
 		let mut ptree = PROCESS_TREE.lock();
@@ -165,6 +176,7 @@ impl Task {
 		Ok(new_task)
 	}
 
+	#[inline(always)]
 	pub fn get_pid(&self) -> Pid {
 		self.pid
 	}
@@ -185,35 +197,14 @@ impl Task {
 
 	pub fn get_pgid(&self) -> Pgid {
 		self.get_user_ext()
-			.map(|ext| ext.lock_relation().get_pgid())
-			.unwrap_or_else(|| Pgid::from_raw(0))
-	}
-
-	pub fn set_pgid(&self, pgid: Pgid) -> Result<(), Errno> {
-		let ext = self.get_user_ext().ok_or_else(|| Errno::EINVAL)?;
-
-		// already called `exec(2)`.
-		if ext.was_exec_called() {
-			return Err(Errno::EACCES);
-		}
-
-		let mut relation = ext.lock_relation();
-
-		relation.set_pgid(self.pid, pgid)
+			.map(|ext| ext.lock_relation().jobgroup.pgroup.get_pgid())
+			.unwrap_or_default()
 	}
 
 	pub fn get_sid(&self) -> Sid {
 		self.get_user_ext()
-			.map(|ext| ext.lock_relation().get_sid())
-			.unwrap_or_else(|| Sid::from_raw(0))
-	}
-
-	pub fn set_sid(&self) -> Result<usize, Errno> {
-		let ext = self.get_user_ext().ok_or_else(|| Errno::EINVAL)?;
-
-		let mut relation = ext.lock_relation();
-
-		relation.set_sid(self.pid)
+			.map(|ext| ext.lock_relation().jobgroup.get_sid())
+			.unwrap_or_default()
 	}
 
 	pub fn lock_state(&self) -> LockedGuard<'_, State> {
@@ -257,35 +248,13 @@ impl Task {
 	}
 }
 
-extern "C" {
-	pub fn return_from_interrupt();
-}
+impl Drop for Task {
+	fn drop(&mut self) {
+		if let Some(ref ext) = self.user_ext {
+			let mut rel = ext.lock_relation();
+			let pgrp = &mut rel.jobgroup.pgroup;
 
-pub struct ProcessTree(BTreeMap<Pid, Arc<Task>>);
-pub static PROCESS_TREE: Locked<ProcessTree> = Locked::new(ProcessTree::new());
-
-impl ProcessTree {
-	pub const fn new() -> Self {
-		Self(BTreeMap::new())
-	}
-
-	pub fn members(&self) -> &BTreeMap<Pid, Arc<Task>> {
-		&self.0
-	}
-
-	pub fn insert(&mut self, task: Arc<Task>) {
-		self.0.insert(task.get_pid(), task);
-	}
-
-	pub fn remove(&mut self, pid: &Pid) {
-		self.0.remove(pid);
-	}
-
-	pub fn get(&self, pid: &Pid) -> Option<&Arc<Task>> {
-		self.0.get(pid)
-	}
-
-	pub fn is_empty(&self) -> bool {
-		self.0.is_empty()
+			pgrp.lock_members().remove(&self.pid);
+		}
 	}
 }

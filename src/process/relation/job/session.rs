@@ -1,16 +1,17 @@
+use alloc::sync::Weak;
 use alloc::{collections::BTreeMap, sync::Arc};
 
 use crate::process::relation::{Pgid, Pid, Sid};
 use crate::sync::locked::Locked;
 
-use super::group::{ProcessGroup, ProcessGroupTree};
+use super::group::ProcessGroup;
 
 type Shared<T> = Arc<Locked<T>>;
 
 pub struct Session {
 	sid: Sid,
-	foreground: Option<Shared<ProcessGroup>>,
-	members: ProcessGroupTree,
+	foreground: Option<Weak<ProcessGroup>>,
+	members: BTreeMap<Pgid, Weak<ProcessGroup>>,
 }
 
 impl Session {
@@ -18,7 +19,7 @@ impl Session {
 		Self {
 			sid,
 			foreground: None,
-			members: ProcessGroupTree::new(),
+			members: BTreeMap::new(),
 		}
 	}
 
@@ -30,56 +31,31 @@ impl Session {
 		self.sid.as_raw() == pid.as_raw()
 	}
 
-	pub fn get_or_insert(&mut self, pgid: Pgid) -> &Shared<ProcessGroup> {
-		let ret = self.members.get_or_insert(pgid);
-
+	pub fn insert(&mut self, pgid: Pgid, w: Weak<ProcessGroup>) {
 		if let None = self.foreground {
-			self.foreground = Some(ret.clone());
+			self.foreground = Some(w.clone());
 		}
-
-		ret
+		self.members.insert(pgid, w);
 	}
 
-	pub fn foreground(&self) -> Option<Shared<ProcessGroup>> {
+	pub fn foreground(&self) -> Option<Weak<ProcessGroup>> {
 		self.foreground.clone()
 	}
 
-	pub fn change_foreground(&mut self, pgid: Pgid) {
-		self.foreground = None;
-		self.get_or_insert(pgid);
-	}
-
 	pub fn remove(&mut self, pgid: &Pgid) {
+		if let Some(pgrp) = self.foreground.as_ref().and_then(|w| w.upgrade()) {
+			if pgrp.get_pgid() == *pgid {
+				self.foreground = self.members.first_entry().map(|o| o.get().clone());
+			}
+		}
 		self.members.remove(pgid);
 	}
 
-	pub fn get(&self, pgid: &Pgid) -> Option<&Shared<ProcessGroup>> {
+	pub fn get(&self, pgid: &Pgid) -> Option<&Weak<ProcessGroup>> {
 		self.members.get(pgid)
 	}
 
 	pub fn is_empty(&self) -> bool {
 		self.members.is_empty()
-	}
-}
-
-pub struct SessionTree(BTreeMap<Sid, Shared<Session>>);
-
-impl SessionTree {
-	pub const fn new() -> Self {
-		Self(BTreeMap::new())
-	}
-
-	pub fn get_or_insert(&mut self, sid: Sid) -> &Shared<Session> {
-		self.0
-			.entry(sid)
-			.or_insert_with(|| Arc::new(Locked::new(Session::new(sid))))
-	}
-
-	pub fn remove(&mut self, sid: &Sid) {
-		self.0.remove(sid);
-	}
-
-	pub fn get(&self, sid: &Sid) -> Option<&Shared<Session>> {
-		self.0.get(sid)
 	}
 }

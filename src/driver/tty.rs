@@ -427,7 +427,7 @@ impl ChWrite<Code> for TTY {
 
 		// wake_up on event
 		if let Some(ref owner) = self.owner {
-			wake_up_foreground(owner)
+			wake_up_foreground(owner);
 		}
 
 		Ok(())

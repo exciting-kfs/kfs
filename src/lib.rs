@@ -6,6 +6,7 @@
 #![feature(const_maybe_uninit_uninit_array)]
 #![feature(asm_const)]
 #![feature(variant_count)]
+#![feature(btree_extract_if)]
 
 extern crate alloc;
 

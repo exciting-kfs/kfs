@@ -26,7 +26,7 @@ use crate::{
 	process::{
 		exit::exit_with_signal,
 		relation::job::session::Session,
-		task::{Task, CURRENT, PROCESS_TREE},
+		task::{Task, CURRENT},
 	},
 	scheduler::sleep::wake_up,
 	signal::{sig_flag::SigFlag, sig_handler::SigHandler, sig_num::SigNum},
@@ -271,8 +271,11 @@ pub unsafe fn poll_signal_queue() -> Result<(), Errno> {
 }
 
 pub fn send_signal_to(task: &Arc<Task>, sig_info: &SigInfo) -> Result<(), Errno> {
-	task.get_user_ext()
-		.ok_or_else(|| Errno::EPERM)?
+	if task.get_pid().as_raw() == 1 {
+		return Ok(()); // ignore signal
+	}
+
+	task.user_ext(Errno::EPERM)?
 		.signal
 		.as_ref()
 		.recv_signal(sig_info.clone());
@@ -284,11 +287,15 @@ pub fn send_signal_to_foreground(
 	sess: &Arc<Locked<Session>>,
 	sig_info: &SigInfo,
 ) -> Result<(), Errno> {
-	if let Some(fg) = sess.lock().foreground() {
-		for pid in fg.lock().members() {
-			let ptree = PROCESS_TREE.lock();
-			let task = ptree.get(pid).expect("task in process group.");
-			let _ = send_signal_to(task, sig_info);
+	let sess_lock = sess.lock();
+	let fg = sess_lock
+		.foreground()
+		.and_then(|w| w.upgrade())
+		.ok_or(Errno::ESRCH)?;
+
+	for (_, weak) in fg.lock_members().iter() {
+		if let Some(task) = weak.upgrade() {
+			let _ = send_signal_to(&task, sig_info);
 		}
 	}
 	Ok(())

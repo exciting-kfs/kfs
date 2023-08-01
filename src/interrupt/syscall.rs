@@ -7,7 +7,7 @@ use crate::interrupt::InterruptFrame;
 pub mod errno;
 use crate::pr_info;
 use crate::process::exec::sys_exec;
-use crate::process::relation::{
+use crate::process::relation::syscall::{
 	sys_getpgid, sys_getpgrp, sys_getpid, sys_getppid, sys_getsid, sys_setpgid, sys_setsid,
 };
 use crate::process::uid::{sys_getuid, sys_setuid};

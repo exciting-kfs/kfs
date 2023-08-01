@@ -1,13 +1,12 @@
 use alloc::sync::Arc;
 
 use crate::interrupt::syscall::errno::Errno;
+use crate::process::process_tree::PROCESS_TREE;
 use crate::process::relation::job::group::ProcessGroup;
-use crate::process::relation::job::SESSION_TREE;
 use crate::process::relation::{Pgid, Pid};
-use crate::process::task::{Task, CURRENT, PROCESS_TREE};
+use crate::process::task::{Task, CURRENT};
 use crate::signal::sig_code::SigCode;
 use crate::signal::sig_info::SigInfo;
-use crate::sync::locked::Locked;
 
 use super::send_signal_to;
 use super::sig_num::SigNum;
@@ -43,13 +42,15 @@ fn kill_pid(pid: Pid, siginfo: &SigInfo) -> Result<(), Errno> {
 
 fn kill_pgid(pgid: Pgid, siginfo: &SigInfo) -> Result<(), Errno> {
 	let current = unsafe { CURRENT.get_mut() };
-	let sess_tree = SESSION_TREE.lock();
-	let session = sess_tree.get(&current.get_sid()).unwrap();
+	let rel = current.user_ext(Errno::EPERM)?.lock_relation();
+	let pgroup = rel
+		.get_session()
+		.lock()
+		.get(&pgid)
+		.and_then(|w| w.upgrade())
+		.ok_or(Errno::ESRCH)?;
 
-	let sess_lock = session.lock();
-	let pgroup = sess_lock.get(&pgid).ok_or_else(|| Errno::ESRCH)?;
-
-	kill_pgroup(pgroup, siginfo)
+	kill_pgroup(&pgroup, siginfo)
 }
 
 fn kill_process(target: &Arc<Task>, siginfo: &SigInfo) -> Result<(), Errno> {
@@ -65,13 +66,11 @@ fn kill_process(target: &Arc<Task>, siginfo: &SigInfo) -> Result<(), Errno> {
 	send_signal_to(target, siginfo)
 }
 
-fn kill_pgroup(pgroup: &Arc<Locked<ProcessGroup>>, siginfo: &SigInfo) -> Result<(), Errno> {
-	let pgroup_lock = pgroup.lock();
-
-	for pid in pgroup_lock.members() {
-		if let Some(task) = PROCESS_TREE.lock().get(pid) {
+fn kill_pgroup(pgroup: &Arc<ProcessGroup>, siginfo: &SigInfo) -> Result<(), Errno> {
+	for (_, weak) in pgroup.lock_members().iter() {
+		if let Some(task) = weak.upgrade() {
 			if task.get_pid().as_raw() != siginfo.pid {
-				let _ = kill_process(task, siginfo);
+				let _ = kill_process(&task, siginfo);
 			}
 		}
 	}
