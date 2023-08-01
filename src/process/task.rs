@@ -264,6 +264,10 @@ impl ProcessTree {
 		Self(BTreeMap::new())
 	}
 
+	pub fn members(&self) -> &BTreeMap<Pid, Arc<Task>> {
+		&self.0
+	}
+
 	pub fn insert(&mut self, task: Arc<Task>) {
 		self.0.insert(task.get_pid(), task);
 	}

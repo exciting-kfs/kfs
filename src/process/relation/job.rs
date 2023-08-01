@@ -109,6 +109,9 @@ impl JobGroup {
 		let mut init_sess_lock = init_sess.lock();
 		let init_pgrp = init_sess_lock.get_or_insert(Pgid::from_raw(1));
 
+		let mut init_pgrp_lock = init_pgrp.lock();
+		init_pgrp_lock.insert(Pid::from_raw(1));
+
 		Self {
 			session: init_sess.clone(),
 			pgroup: init_pgrp.clone(),
