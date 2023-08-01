@@ -9,6 +9,7 @@ use crate::signal::sig_code::SigCode;
 use crate::signal::sig_info::SigInfo;
 use crate::sync::locked::Locked;
 
+use super::send_signal_to;
 use super::sig_num::SigNum;
 
 pub fn sys_kill(pid: isize, sig: isize) -> Result<usize, Errno> {
@@ -61,10 +62,7 @@ fn kill_process(target: &Arc<Task>, siginfo: &SigInfo) -> Result<(), Errno> {
 		return Err(Errno::EPERM);
 	}
 
-	let ext = target.get_user_ext().ok_or_else(|| Errno::EPERM)?;
-	ext.signal.as_ref().recv_signal(siginfo.clone());
-
-	Ok(())
+	send_signal_to(target, siginfo)
 }
 
 fn kill_pgroup(pgroup: &Arc<Locked<ProcessGroup>>, siginfo: &SigInfo) -> Result<(), Errno> {

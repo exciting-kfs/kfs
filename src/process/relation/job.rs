@@ -18,7 +18,7 @@ pub static SESSION_TREE: Locked<SessionTree> = Locked::new(SessionTree::new());
 
 #[derive(Clone)]
 pub struct JobGroup {
-	session: Arc<Locked<Session>>,
+	pub session: Arc<Locked<Session>>,
 	pgroup: Arc<Locked<ProcessGroup>>,
 }
 
@@ -136,5 +136,13 @@ impl JobGroup {
 	pub fn get_sid(&self) -> Sid {
 		let session = self.session.lock();
 		session.get_sid()
+	}
+
+	pub fn get_session(&self) -> Arc<Locked<Session>> {
+		self.session.clone()
+	}
+
+	pub fn get_process_group(&self) -> Arc<Locked<ProcessGroup>> {
+		self.pgroup.clone()
 	}
 }

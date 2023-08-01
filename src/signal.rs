@@ -17,13 +17,18 @@ use core::{
 	ptr::copy_nonoverlapping,
 };
 
-use alloc::collections::LinkedList;
+use alloc::{collections::LinkedList, sync::Arc};
 
 use crate::{
 	config::TRAMPOLINE_BASE,
 	interrupt::{syscall::errno::Errno, InterruptFrame},
 	pr_debug,
-	process::{exit::exit_with_signal, task::CURRENT},
+	process::{
+		exit::exit_with_signal,
+		relation::job::session::Session,
+		task::{Task, CURRENT, PROCESS_TREE},
+	},
+	scheduler::sleep::wake_up,
 	signal::{sig_flag::SigFlag, sig_handler::SigHandler, sig_num::SigNum},
 	sync::locked::Locked,
 };
@@ -263,6 +268,30 @@ pub unsafe fn poll_signal_queue() -> Result<(), Errno> {
 		pr_debug!("poll_signal_queue: there is signal!");
 		Err(Errno::EINTR)
 	}
+}
+
+pub fn send_signal_to(task: &Arc<Task>, sig_info: &SigInfo) -> Result<(), Errno> {
+	task.get_user_ext()
+		.ok_or_else(|| Errno::EPERM)?
+		.signal
+		.as_ref()
+		.recv_signal(sig_info.clone());
+	wake_up(task);
+	Ok(())
+}
+
+pub fn send_signal_to_foreground(
+	sess: &Arc<Locked<Session>>,
+	sig_info: &SigInfo,
+) -> Result<(), Errno> {
+	if let Some(fg) = sess.lock().foreground() {
+		for pid in fg.lock().members() {
+			let ptree = PROCESS_TREE.lock();
+			let task = ptree.get(pid).expect("task in process group.");
+			let _ = send_signal_to(task, sig_info);
+		}
+	}
+	Ok(())
 }
 
 #[inline(always)]

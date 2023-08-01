@@ -48,7 +48,7 @@ pub unsafe extern "fastcall" fn switch_task_finish(curr: *const Task, next: *con
 
 	{
 		let state_lock = curr.lock_state();
-		if *state_lock != State::Exited {
+		if *state_lock == State::Running {
 			mem::drop(state_lock);
 			TASK_QUEUE.lock().push_back(curr);
 		};

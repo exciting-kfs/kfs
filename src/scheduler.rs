@@ -1,8 +1,9 @@
+pub mod sleep;
+pub mod work;
+
 use alloc::sync::Arc;
 
 use crate::process::task::{Task, TASK_QUEUE};
-
-pub mod work;
 
 pub type SyncTask = Arc<Task>;
 
