@@ -1,42 +1,44 @@
 pub mod family;
+pub mod pgroup;
+pub mod session;
+pub mod syscall;
+
 mod id;
-pub mod job;
 
-use core::mem;
-
-use alloc::sync::Arc;
 pub use id::*;
 
+use alloc::sync::{Arc, Weak};
+
+use crate::interrupt::syscall::errno::Errno;
 use crate::sync::locked::Locked;
-use crate::{interrupt::syscall::errno::Errno, process::task::CURRENT};
 
 use self::family::{zombie::Zombie, Family};
-use self::job::session::Session;
-use self::job::JobGroup;
+use self::pgroup::ProcessGroup;
+use self::session::Session;
 
 use super::exit::ExitStatus;
-use super::task::PROCESS_TREE;
+use super::task::Task;
 use super::wait::Who;
 
 pub struct Relation {
 	family: Family,
-	jobgroup: JobGroup,
+	pub pgroup: Arc<ProcessGroup>,
 }
 
 impl Relation {
-	pub fn new_init() -> Self {
+	pub fn new_init(w: &Weak<Task>) -> Self {
 		Self {
 			family: Family::new(Pid::from_raw(0)),
-			jobgroup: JobGroup::new_init(),
+			pgroup: ProcessGroup::new_init(w),
 		}
 	}
 
-	pub fn clone_for_fork(&mut self, pid: Pid, ppid: Pid) -> Self {
+	pub fn clone_for_fork(&mut self, pid: Pid, ppid: Pid, weak: Weak<Task>) -> Self {
 		self.family.insert_child(pid);
 
 		Self {
 			family: Family::new(ppid),
-			jobgroup: self.jobgroup.clone_for_fork(pid),
+			pgroup: self.pgroup.clone_for_fork(pid, weak),
 		}
 	}
 
@@ -44,24 +46,12 @@ impl Relation {
 		self.family.get_ppid()
 	}
 
-	pub fn get_pgid(&self) -> Pgid {
-		self.jobgroup.get_pgid()
-	}
-
-	pub fn set_pgid(&mut self, pid: Pid, pgid: Pgid) -> Result<(), Errno> {
-		self.jobgroup.set_pgid(pid, pgid)
-	}
-
-	pub fn get_sid(&self) -> Sid {
-		self.jobgroup.get_sid()
+	pub fn get_pgroup(&self) -> Arc<ProcessGroup> {
+		self.pgroup.clone()
 	}
 
 	pub fn get_session(&self) -> Arc<Locked<Session>> {
-		self.jobgroup.session.clone()
-	}
-
-	pub fn set_sid(&mut self, pid: Pid) -> Result<usize, Errno> {
-		self.jobgroup.set_sid(pid)
+		self.pgroup.sess.clone()
 	}
 
 	pub fn waitpid(&mut self, who: Who) -> Result<Zombie, Errno> {
@@ -75,10 +65,8 @@ impl Relation {
 	}
 
 	pub fn exit(&mut self, pid: Pid, status: ExitStatus) {
-		let zombie = Zombie::new(pid, self.get_pgid(), status);
-
+		let zombie = Zombie::new(pid, self.pgroup.get_pgid(), status);
 		self.family.exit(zombie);
-		self.jobgroup.exit(pid);
 	}
 
 	pub fn update_child_to_zombie(&mut self, zombie: Zombie) {
@@ -88,68 +76,22 @@ impl Relation {
 	pub fn update_parent_to_init(&mut self) {
 		self.family.update_parent_to_init();
 	}
-}
 
-pub fn sys_getpid() -> Result<usize, Errno> {
-	let current = unsafe { CURRENT.get_mut() };
+	pub fn enter_new_pgroup(&mut self, pid: Pid, new: Arc<ProcessGroup>) {
+		let weak = self
+			.pgroup
+			.lock_members()
+			.remove(&pid)
+			.expect("task in pgroup.");
+		new.lock_members().insert(pid, weak);
+		self.pgroup = new;
+	}
 
-	Ok(current.get_pid().as_raw())
-}
+	pub fn enter_new_session(&mut self, pid: Pid) {
+		let pgid = Pgid::from(pid);
 
-pub fn sys_setpgid(pid: usize, pgid: usize) -> Result<usize, Errno> {
-	let task = if pid == 0 {
-		unsafe { CURRENT.get_mut().clone() }
-	} else {
-		let ptree = PROCESS_TREE.lock();
-
-		ptree
-			.get(&Pid::from_raw(pid))
-			.ok_or_else(|| Errno::ESRCH)?
-			.clone()
-	};
-
-	let pgid = if pgid == 0 {
-		task.get_pid().as_raw()
-	} else {
-		pgid
-	};
-
-	task.set_pgid(Pgid::from_raw(pgid)).map(|_| 0)
-}
-
-pub fn sys_getppid() -> Result<usize, Errno> {
-	let current = unsafe { CURRENT.get_mut() };
-
-	Ok(current.get_ppid().as_raw())
-}
-
-pub fn sys_getpgrp() -> Result<usize, Errno> {
-	let current = unsafe { CURRENT.get_mut() };
-
-	Ok(current.get_pgid().as_raw())
-}
-
-pub fn sys_setsid() -> Result<usize, Errno> {
-	let current = unsafe { CURRENT.get_mut() };
-
-	current.set_sid()
-}
-
-pub fn sys_getpgid(pid: usize) -> Result<usize, Errno> {
-	let ptree = PROCESS_TREE.lock();
-
-	let task = ptree
-		.get(&Pid::from_raw(pid))
-		.ok_or_else(|| Errno::ESRCH)?
-		.clone();
-
-	mem::drop(ptree);
-
-	Ok(task.get_pgid().as_raw())
-}
-
-pub fn sys_getsid() -> Result<usize, Errno> {
-	let current = unsafe { CURRENT.get_mut() };
-
-	Ok(current.get_sid().as_raw())
+		let sess = Arc::new(Locked::new(Session::new(Sid::from(pid))));
+		let pgrp = Session::new_pgroup(&sess, pgid);
+		self.enter_new_pgroup(pid, pgrp)
+	}
 }

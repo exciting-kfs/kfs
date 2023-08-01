@@ -51,6 +51,18 @@ impl Pgid {
 	}
 }
 
+impl Default for Pgid {
+	fn default() -> Self {
+		Self::from_raw(0)
+	}
+}
+
+impl From<Pid> for Pgid {
+	fn from(value: Pid) -> Self {
+		Self::from_raw(value.as_raw())
+	}
+}
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct Sid(usize);
 
@@ -65,5 +77,17 @@ impl Sid {
 
 	pub fn from_raw(raw: usize) -> Self {
 		Sid(raw)
+	}
+}
+
+impl Default for Sid {
+	fn default() -> Self {
+		Self::from_raw(0) // 0?
+	}
+}
+
+impl From<Pid> for Sid {
+	fn from(value: Pid) -> Self {
+		Self::from_raw(value.as_raw())
 	}
 }

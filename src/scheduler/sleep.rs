@@ -3,8 +3,8 @@ use alloc::sync::Arc;
 use crate::{
 	process::{
 		context::yield_now,
-		relation::job::session::Session,
-		task::{State, Task, CURRENT, PROCESS_TREE, TASK_QUEUE},
+		relation::session::Session,
+		task::{State, Task, CURRENT, TASK_QUEUE},
 	},
 	sync::locked::Locked,
 };
@@ -27,12 +27,14 @@ pub fn wake_up(task: &Arc<Task>) {
 	}
 }
 
-pub fn wake_up_foreground(sess: &Arc<Locked<Session>>) {
-	if let Some(fg) = sess.lock().foreground() {
-		for pid in fg.lock().members() {
-			let ptree = PROCESS_TREE.lock();
-			let task = ptree.get(pid).expect("task in process group.");
-			wake_up(task);
+pub fn wake_up_foreground(sess: &Arc<Locked<Session>>) -> Option<()> {
+	let sess_lock = sess.lock();
+	let fg = sess_lock.foreground()?.upgrade()?;
+
+	for (_, weak) in fg.lock_members().iter() {
+		if let Some(task) = weak.upgrade() {
+			wake_up(&task);
 		}
 	}
+	None
 }

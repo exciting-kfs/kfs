@@ -9,10 +9,13 @@ use crate::mm::alloc::Zone;
 use crate::mm::util::*;
 
 use super::kthread::kthread_entry;
-use super::task::return_from_interrupt;
 
 const KSTACK_SIZE: usize = rank_to_size(KSTACK_RANK);
 type StackStorage = [u8; KSTACK_SIZE];
+
+extern "C" {
+	pub fn return_from_interrupt();
+}
 
 #[derive(Debug)]
 pub struct StackOverFlow;
