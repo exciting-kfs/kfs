@@ -5,13 +5,12 @@ use kfs_macro::interrupt_handler;
 
 use super::task::{State, Task, CURRENT, TASK_QUEUE};
 
-use crate::{sync::spinlock::get_lock_depth, x86::CPU_TASK_STATE};
+use crate::x86::CPU_TASK_STATE;
 
 /// yield control from current task to next task
 ///  call flow: yield_now -> switch_stack -> switch_task_finish
 #[interrupt_handler]
 pub fn yield_now() {
-	assert_eq!(get_lock_depth(), 0);
 	let next = {
 		let mut task_q = TASK_QUEUE.lock();
 
