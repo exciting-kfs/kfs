@@ -137,12 +137,4 @@ impl JobGroup {
 		let session = self.session.lock();
 		session.get_sid()
 	}
-
-	pub fn get_session(&self) -> Arc<Locked<Session>> {
-		self.session.clone()
-	}
-
-	pub fn get_process_group(&self) -> Arc<Locked<ProcessGroup>> {
-		self.pgroup.clone()
-	}
 }
