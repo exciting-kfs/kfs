@@ -53,12 +53,9 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> Result<usize, Errno> {
 	let task = if pid == 0 {
 		unsafe { CURRENT.get_mut().clone() }
 	} else {
-		let ptree = PROCESS_TREE.lock();
-
-		ptree
-			.get(&Pid::from_raw(pid))
+		PROCESS_TREE
+			.get_task(Pid::from_raw(pid))
 			.ok_or_else(|| Errno::ESRCH)?
-			.clone()
 	};
 
 	let pgid = if pgid == 0 {
