@@ -4,11 +4,14 @@ pub mod job;
 
 use core::mem;
 
+use alloc::sync::Arc;
 pub use id::*;
 
+use crate::sync::locked::Locked;
 use crate::{interrupt::syscall::errno::Errno, process::task::CURRENT};
 
 use self::family::{zombie::Zombie, Family};
+use self::job::session::Session;
 use self::job::JobGroup;
 
 use super::exit::ExitStatus;
@@ -51,6 +54,10 @@ impl Relation {
 
 	pub fn get_sid(&self) -> Sid {
 		self.jobgroup.get_sid()
+	}
+
+	pub fn get_session(&self) -> Arc<Locked<Session>> {
+		self.jobgroup.session.clone()
 	}
 
 	pub fn set_sid(&mut self, pid: Pid) -> Result<usize, Errno> {

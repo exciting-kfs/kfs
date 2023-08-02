@@ -18,7 +18,7 @@ pub static SESSION_TREE: Locked<SessionTree> = Locked::new(SessionTree::new());
 
 #[derive(Clone)]
 pub struct JobGroup {
-	session: Arc<Locked<Session>>,
+	pub session: Arc<Locked<Session>>,
 	pgroup: Arc<Locked<ProcessGroup>>,
 }
 

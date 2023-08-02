@@ -9,6 +9,7 @@ type Shared<T> = Arc<Locked<T>>;
 
 pub struct Session {
 	sid: Sid,
+	foreground: Option<Shared<ProcessGroup>>,
 	members: ProcessGroupTree,
 }
 
@@ -16,6 +17,7 @@ impl Session {
 	pub fn new(sid: Sid) -> Self {
 		Self {
 			sid,
+			foreground: None,
 			members: ProcessGroupTree::new(),
 		}
 	}
@@ -29,7 +31,22 @@ impl Session {
 	}
 
 	pub fn get_or_insert(&mut self, pgid: Pgid) -> &Shared<ProcessGroup> {
-		self.members.get_or_insert(pgid)
+		let ret = self.members.get_or_insert(pgid);
+
+		if let None = self.foreground {
+			self.foreground = Some(ret.clone());
+		}
+
+		ret
+	}
+
+	pub fn foreground(&self) -> Option<Shared<ProcessGroup>> {
+		self.foreground.clone()
+	}
+
+	pub fn change_foreground(&mut self, pgid: Pgid) {
+		self.foreground = None;
+		self.get_or_insert(pgid);
 	}
 
 	pub fn remove(&mut self, pgid: &Pgid) {

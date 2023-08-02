@@ -14,7 +14,11 @@ use crate::input::key_event::*;
 use crate::input::keyboard::KEYBOARD;
 use crate::interrupt::syscall::errno::Errno;
 use crate::io::{BlkRead, BlkWrite, ChRead, ChWrite, NoSpace};
-use crate::process::task::{Task, CURRENT};
+use crate::pr_debug;
+use crate::process::relation::job::session::Session;
+use crate::process::task::CURRENT;
+use crate::scheduler::sleep::{sleep_and_yield, wake_up_foreground};
+use crate::signal::{poll_signal_queue, send_signal_to_foreground};
 use crate::sync::locked::Locked;
 
 #[rustfmt::skip]
@@ -159,7 +163,7 @@ pub struct TTY {
 	console: SyncConsole,
 	line_buffer: LineBuffer<4096>,
 	into_process: VecDeque<u8>,
-	owner: Option<Arc<Task>>, // instead of session.
+	owner: Option<Arc<Locked<Session>>>,
 }
 
 struct ControlChars {
@@ -217,8 +221,8 @@ impl TTY {
 	}
 
 	/// Temporal method for signal development.
-	pub fn set_owner(&mut self, task: Arc<Task>) {
-		self.owner = Some(task)
+	pub fn set_owner(&mut self, sess: Arc<Locked<Session>>) {
+		self.owner = Some(sess)
 	}
 
 	fn input_convert<'a>(&self, data: Code, buf: &'a mut [u8]) -> Option<&'a [u8]> {
@@ -338,7 +342,6 @@ impl TTY {
 	}
 
 	fn send_signal(&self, c: u8) {
-		use crate::pr_debug;
 		use crate::signal::sig_code::SigCode;
 		use crate::signal::sig_info::SigInfo;
 		use crate::signal::sig_num::SigNum;
@@ -363,14 +366,8 @@ impl TTY {
 			code: SigCode::SI_KERNEL,
 		};
 
-		match self.owner {
-			Some(ref task) => task
-				.get_user_ext()
-				.expect("user task")
-				.signal
-				.as_ref()
-				.recv_signal(sig_info),
-			None => {}
+		if let Some(ref owner) = self.owner {
+			send_signal_to_foreground(owner, &sig_info).expect("user task");
 		}
 	}
 
@@ -428,6 +425,11 @@ impl ChWrite<Code> for TTY {
 			self.do_echo(iter)?
 		}
 
+		// wake_up on event
+		if let Some(ref owner) = self.owner {
+			wake_up_foreground(owner)
+		}
+
 		Ok(())
 	}
 }
@@ -458,35 +460,25 @@ impl ChRead<u8> for TTY {
 impl BlkWrite for TTY {}
 impl BlkRead for TTY {}
 
-use crate::signal::poll_signal_queue;
-
 impl FileOps for Locked<TTY> {
 	fn read(&self, file: &Arc<File>, buf: &mut [u8]) -> Result<usize, Errno> {
-		fn __read(tty: &Locked<TTY>, buf: &mut [u8]) -> usize {
-			let mut tty = tty.lock();
-			tty.read(buf)
-		}
-
 		let block = !file.open_flag.contains(OpenFlag::O_NONBLOCK);
-		let mut count = __read(self, buf);
+		let mut count = self.lock().read(buf);
 		while block && count == 0 {
 			unsafe { poll_signal_queue()? };
-			count += __read(self, buf);
+			sleep_and_yield();
+			count += self.lock().read(buf);
 		}
 		Ok(count)
 	}
 
 	fn write(&self, file: &Arc<File>, buf: &[u8]) -> Result<usize, Errno> {
-		fn __write(tty: &Locked<TTY>, buf: &[u8]) -> usize {
-			let mut tty = tty.lock();
-			tty.write(buf)
-		}
-
 		let block = !file.open_flag.contains(OpenFlag::O_NONBLOCK);
-		let mut count = __write(self, buf);
+		let mut count = self.lock().write(buf);
 		while block && count == 0 {
 			unsafe { poll_signal_queue()? };
-			count += __write(self, buf);
+			sleep_and_yield();
+			count += self.lock().write(buf);
 		}
 		Ok(count)
 	}

@@ -30,36 +30,13 @@ void do_something(void) {
 }
 
 int main(void) {
-	for (int i = 0; i < 5; i++) {
-		for (int j = 0; j < 5; j++) {
-			pid_t *child = &childs[i][j];
-			*child = fork();
-
-			if (*child == 0) {
-				// no_return
-				setuid(1000 + i);
-				do_something();
-			}
-
-			fortytwo(*child);
-			setpgid(*child, childs[i][0]);
-		}
+	int pid = fork();
+	if (pid == 0) {
+		exec("shell.bin");
 	}
 
-	fortytwo(1111111111);
-	fortytwo(1111111111);
-
-	kill_all_by_pid();
-	// kill_all_by_pgroup();
-	// kill_all_by_wildcard();
-
-	pid_t child;
-	int status;
-	for (;;) {
-		while ((child = waitpid(-1, &status, 0)) > 0) {
-			fortytwo(WTERMSIG(status));
-			fortytwo(child);
-		}
+	while (1) {
+		sched_yield();
 	}
 	return 0;
 }

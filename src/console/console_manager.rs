@@ -60,7 +60,6 @@ impl ConsoleManager {
 		}
 	}
 
-	// #[context(irq_disabled)]
 	pub fn update(&self, code: Code) {
 		let foreground = self.foreground.lock();
 		let mut tty = self.ttys[*foreground].lock();
