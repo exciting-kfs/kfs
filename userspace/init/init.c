@@ -36,6 +36,7 @@ int main(void) {
 	}
 
 	while (1) {
+		sched_yield();
 	}
 	return 0;
 }

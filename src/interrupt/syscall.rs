@@ -13,6 +13,7 @@ use crate::process::relation::{
 use crate::process::uid::{sys_getuid, sys_setuid};
 use crate::process::wait::sys_waitpid;
 use crate::process::{exit::sys_exit, fork::sys_fork, task::CURRENT};
+use crate::scheduler::sys_sched_yield;
 use crate::signal::sig_handler::SigAction;
 use crate::signal::{sys_kill, sys_sigaction, sys_signal, sys_sigreturn};
 
@@ -105,6 +106,7 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 		}
 		132 => sys_getpgid(frame.ebx),
 		147 => sys_getsid(),
+		158 => sys_sched_yield(),
 		199 => sys_getuid(),
 		213 => sys_setuid(frame.ebx),
 		_ => {

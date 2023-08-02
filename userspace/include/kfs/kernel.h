@@ -26,8 +26,8 @@ pid_t waitpid(pid_t pid, int *stat_loc, int options);
 #define _W_EXITED 0x03000000
 #define _W_CORE_DUMPED 0x04000000
 
-#define _W_GET_FLAG(x) ((x) & _W_FLAG_MASK)
-#define _W_GET_STATUS(x) ((x) & _W_STATUS_MASK)
+#define _W_GET_FLAG(x) ((x)&_W_FLAG_MASK)
+#define _W_GET_STATUS(x) ((x)&_W_STATUS_MASK)
 
 #define WIFEXITED(x) (_W_GET_FLAG(x) == _W_EXITED)
 #define WIFSIGNALED(x) (_W_GET_FLAG(x) == _W_SIGNALED)
@@ -38,8 +38,8 @@ pid_t waitpid(pid_t pid, int *stat_loc, int options);
 #define WTERMSIG(x) _W_GET_STATUS(x)
 #define WSTOPSIG(x) _W_GET_STATUS(x)
 
-#define WNOHANG (1<<0);
-#define WUNTRACED (1<<1);
+#define WNOHANG (1 << 0);
+#define WUNTRACED (1 << 1);
 
 pid_t getpid(void);
 pid_t getppid(void);
@@ -145,5 +145,7 @@ int kill(pid_t pid, int sig);
 
 uid_t getuid(void);
 int setuid(uid_t uid);
+
+int sched_yield(void);
 
 #endif
