@@ -58,4 +58,12 @@ impl Session {
 	pub fn is_empty(&self) -> bool {
 		self.members.is_empty()
 	}
+
+	pub fn new_pgroup(sess: &Arc<Locked<Session>>, pgid: Pgid) -> Arc<ProcessGroup> {
+		let pgrp = Arc::new(ProcessGroup::new(pgid, sess.clone()));
+		let weak = Arc::downgrade(&pgrp);
+
+		sess.lock().insert(pgid, weak);
+		pgrp
+	}
 }

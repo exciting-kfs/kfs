@@ -197,13 +197,13 @@ impl Task {
 
 	pub fn get_pgid(&self) -> Pgid {
 		self.get_user_ext()
-			.map(|ext| ext.lock_relation().jobgroup.pgroup.get_pgid())
+			.map(|ext| ext.lock_relation().pgroup.get_pgid())
 			.unwrap_or_default()
 	}
 
 	pub fn get_sid(&self) -> Sid {
 		self.get_user_ext()
-			.map(|ext| ext.lock_relation().jobgroup.get_sid())
+			.map(|ext| ext.lock_relation().pgroup.get_sid())
 			.unwrap_or_default()
 	}
 
@@ -252,7 +252,7 @@ impl Drop for Task {
 	fn drop(&mut self) {
 		if let Some(ref ext) = self.user_ext {
 			let mut rel = ext.lock_relation();
-			let pgrp = &mut rel.jobgroup.pgroup;
+			let pgrp = &mut rel.pgroup;
 
 			pgrp.lock_members().remove(&self.pid);
 		}

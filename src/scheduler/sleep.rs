@@ -3,7 +3,7 @@ use alloc::sync::Arc;
 use crate::{
 	process::{
 		context::yield_now,
-		relation::job::session::Session,
+		relation::session::Session,
 		task::{State, Task, CURRENT, TASK_QUEUE},
 	},
 	sync::locked::Locked,

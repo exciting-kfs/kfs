@@ -25,7 +25,7 @@ use crate::{
 	pr_debug,
 	process::{
 		exit::exit_with_signal,
-		relation::job::session::Session,
+		relation::session::Session,
 		task::{Task, CURRENT},
 	},
 	scheduler::sleep::wake_up,

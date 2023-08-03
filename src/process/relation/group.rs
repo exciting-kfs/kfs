@@ -5,7 +5,7 @@ use alloc::{
 
 use crate::{
 	process::{
-		relation::{Pgid, Pid},
+		relation::{Pgid, Pid, Sid},
 		task::Task,
 	},
 	sync::locked::{Locked, LockedGuard},
@@ -28,12 +28,40 @@ impl ProcessGroup {
 		}
 	}
 
+	pub fn new_init(w: &Weak<Task>) -> Arc<Self> {
+		let pid = Pid::from_raw(1);
+		let sid = Sid::from(pid);
+		let pgid = Pgid::from(pid);
+
+		let sess = Arc::new(Locked::new(Session::new(sid)));
+		let pgrp = Arc::new(ProcessGroup::new(pgid, sess.clone()));
+		let weak = Arc::downgrade(&pgrp);
+
+		sess.lock().insert(pgid, weak);
+		pgrp.lock_members().insert(pid, w.clone());
+
+		pgrp
+	}
+
+	pub fn clone_for_fork(self: &Arc<Self>, pid: Pid, weak: Weak<Task>) -> Arc<Self> {
+		let pgroup = self.clone();
+
+		pgroup.lock_members().insert(pid, weak);
+
+		pgroup
+	}
+
 	pub fn lock_members(&self) -> LockedGuard<'_, BTreeMap<Pid, Weak<Task>>> {
 		self.members.lock()
 	}
 
 	pub fn get_pgid(&self) -> Pgid {
 		self.pgid
+	}
+
+	pub fn get_sid(&self) -> Sid {
+		let session = self.sess.lock();
+		session.get_sid()
 	}
 
 	pub fn cleanup(&mut self) {

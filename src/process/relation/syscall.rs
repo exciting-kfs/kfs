@@ -8,13 +8,12 @@ use crate::{
 	},
 };
 
-use super::{job::JobGroup, Pgid, Pid, Sid};
+use super::{session::Session, Pgid, Pid, Sid};
 
 fn __set_pgid(task: &Arc<Task>, new_pgid: Pgid) -> Result<(), Errno> {
 	let ext = task.user_ext(Errno::EINVAL)?;
 	let mut relation = ext.lock_relation();
-	let jgrp = &mut relation.jobgroup;
-	let pgrp = &mut jgrp.pgroup;
+	let pgrp = &mut relation.pgroup;
 	let sess = pgrp.sess.clone();
 	let pid = task.get_pid();
 
@@ -34,7 +33,7 @@ fn __set_pgid(task: &Arc<Task>, new_pgid: Pgid) -> Result<(), Errno> {
 		.or_else(|| {
 			drop(sess_lock);
 			if pid.as_raw() == new_pgid.as_raw() {
-				Some(JobGroup::new_pgroup_in_session(new_pgid, &sess))
+				Some(Session::new_pgroup(&sess, new_pgid))
 			} else {
 				None
 			}
@@ -42,7 +41,7 @@ fn __set_pgid(task: &Arc<Task>, new_pgid: Pgid) -> Result<(), Errno> {
 
 	match new_pgrp {
 		Some(g) => {
-			jgrp.enter_new_pgroup(pid, g);
+			relation.enter_new_pgroup(pid, g);
 			Ok(())
 		}
 		None => Err(Errno::EPERM),
@@ -78,13 +77,13 @@ pub fn sys_setsid() -> Result<usize, Errno> {
 	let pid = current.get_pid();
 	let ext = current.user_ext(Errno::EINVAL)?;
 	let mut rel = ext.lock_relation();
-	let jgrp = &mut rel.jobgroup;
+	let pgrp = &mut rel.pgroup;
 
-	if jgrp.get_sid() == Sid::from(pid) {
+	if pgrp.get_sid() == Sid::from(pid) {
 		return Err(Errno::EPERM);
 	}
 
-	jgrp.enter_new_session(pid);
+	rel.enter_new_session(pid);
 
 	Ok(pid.as_raw())
 }

@@ -15,7 +15,7 @@ use crate::input::keyboard::KEYBOARD;
 use crate::interrupt::syscall::errno::Errno;
 use crate::io::{BlkRead, BlkWrite, ChRead, ChWrite, NoSpace};
 use crate::pr_debug;
-use crate::process::relation::job::session::Session;
+use crate::process::relation::session::Session;
 use crate::process::task::CURRENT;
 use crate::scheduler::sleep::{sleep_and_yield, wake_up_foreground};
 use crate::signal::{poll_signal_queue, send_signal_to_foreground};

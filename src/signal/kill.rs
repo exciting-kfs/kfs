@@ -2,7 +2,7 @@ use alloc::sync::Arc;
 
 use crate::interrupt::syscall::errno::Errno;
 use crate::process::process_tree::PROCESS_TREE;
-use crate::process::relation::job::group::ProcessGroup;
+use crate::process::relation::group::ProcessGroup;
 use crate::process::relation::{Pgid, Pid};
 use crate::process::task::{Task, CURRENT};
 use crate::signal::sig_code::SigCode;
