@@ -1,6 +1,6 @@
 use core::alloc::AllocError;
-use core::array;
 use core::ops::{Deref, DerefMut};
+use core::ptr::addr_of_mut;
 
 use crate::mm::alloc::{page, Zone};
 use crate::mm::constant::*;
@@ -29,9 +29,11 @@ impl PT {
 				.as_mut_ptr()
 				.cast::<PT>();
 
-			page_table.write(Self {
-				entries: array::from_fn(|i| PTE::new(addr + PAGE_SIZE * i, flag)),
-			});
+			let base = addr_of_mut!((*page_table).entries).cast::<PTE>();
+
+			for i in 0..PT_ENTRIES {
+				base.add(i).write(PTE::new(addr + PAGE_SIZE * i, flag));
+			}
 
 			return Ok(page_table.as_mut().unwrap());
 		}

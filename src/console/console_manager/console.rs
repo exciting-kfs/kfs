@@ -52,14 +52,10 @@ pub struct Console {
 }
 
 impl Console {
-	pub fn new() -> Self {
-		Self::buffer_reserved(0)
-	}
-
 	/// construct new console with buffer reserved.
 	pub fn buffer_reserved(n: usize) -> Self {
-		let mut buf = WrapQueue::from_fn(|_| VGAChar::new(b' '));
-		buf.reserve(n);
+		let mut buf = WrapQueue::new();
+		buf.push_defaults(n);
 
 		Console {
 			buf,
@@ -78,7 +74,7 @@ impl Console {
 			.buf
 			.window(self.window_start, WINDOW_SIZE)
 			.expect("buffer overflow");
-		text_vga::put_slice_iter(window);
+		text_vga::put_slice_iter(window.as_slices());
 		text_vga::put_cursor(self.cursor.into_flat());
 	}
 
@@ -124,7 +120,7 @@ impl Console {
 			.unwrap_or_default();
 
 		self.buf
-			.push_n(VGAChar::styled(self.attr, b' '), extend_size);
+			.push_copies(VGAChar::styled(self.attr, b' '), extend_size);
 		self.window_start =
 			(self.window_start + BUFFER_WIDTH * lines).min(BUFFER_SIZE - WINDOW_SIZE);
 	}

@@ -1,14 +1,16 @@
 //! Editable line buffer
+
+use alloc::boxed::Box;
 pub struct LineBuffer<const CAP: usize> {
-	buf: [u8; CAP],
+	buf: Box<[u8; CAP]>,
 	cursor: usize,
 	tail: usize,
 }
 
 impl<const CAP: usize> LineBuffer<CAP> {
-	pub const fn new() -> Self {
+	pub fn new() -> Self {
 		Self {
-			buf: [0; CAP],
+			buf: unsafe { Box::new_zeroed().assume_init() },
 			tail: 0,
 			cursor: 0,
 		}

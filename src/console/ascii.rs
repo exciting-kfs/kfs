@@ -74,10 +74,10 @@ fn is_ctlseq_terminator(c: u8) -> bool {
 ///  - Control: c0 or maybe 8bit c1
 ///  - CtlSeq: escape sequence started by `CSI`("\x1b[") with single parameter.
 impl AsciiParser {
-	pub const fn new() -> Self {
+	pub fn new() -> Self {
 		Self {
 			state: State::Start,
-			buf: WrapQueue::with(0),
+			buf: WrapQueue::new(),
 			param: 0,
 		}
 	}

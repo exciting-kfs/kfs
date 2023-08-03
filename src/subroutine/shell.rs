@@ -19,7 +19,7 @@ enum State {
 	Normal,
 }
 
-pub static mut SHELL: Shell = Shell::new();
+// pub static mut SHELL: Shell = Shell::new();
 pub struct Shell {
 	state: State,
 	line_buffer: LineBuffer,
@@ -30,11 +30,11 @@ pub struct Shell {
 const PROMPT: &[u8] = b"sh=> ";
 
 impl Shell {
-	pub const fn new() -> Self {
+	pub fn new() -> Self {
 		Self {
 			state: State::Prompt,
 			line_buffer: LineBuffer::new(),
-			write_queue: WrapQueue::with(0),
+			write_queue: WrapQueue::new(),
 			parser: AsciiParser::new(),
 		}
 	}

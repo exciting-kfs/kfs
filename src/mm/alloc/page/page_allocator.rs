@@ -185,7 +185,7 @@ mod test {
 	}
 
 	fn free_all() {
-		for (i, is_alloced) in unsafe { PAGE_STATE }.iter().enumerate() {
+		for (i, is_alloced) in unsafe { &mut PAGE_STATE }.iter().enumerate() {
 			if *is_alloced {
 				free(AllocInfo {
 					ptr: NonNull::new((i << PAGE_SHIFT) as *mut u8).unwrap(),

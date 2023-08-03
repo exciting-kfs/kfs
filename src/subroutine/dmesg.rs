@@ -11,13 +11,13 @@ pub struct Dmesg {
 	kern_buf: WrapQueue<u8, 65536>,
 }
 
-pub static mut DMESG: Dmesg = Dmesg::new();
+// pub static mut DMESG: Dmesg = Dmesg::new();
 
 impl Dmesg {
-	pub const fn new() -> Self {
+	pub fn new() -> Self {
 		Self {
 			parser: AsciiParser::new(),
-			kern_buf: WrapQueue::with(0),
+			kern_buf: WrapQueue::new(),
 		}
 	}
 
