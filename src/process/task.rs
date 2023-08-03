@@ -261,7 +261,7 @@ impl Drop for Task {
 
 			// deallocate `pgid` allocated implicitly.
 			let own_pgid = Pgid::from(self.pid);
-			if let None = sess_lock.find(own_pgid) {
+			if let None = sess_lock.get(&own_pgid) {
 				Pgid::deallocate(own_pgid)
 			}
 

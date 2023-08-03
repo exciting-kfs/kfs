@@ -1,4 +1,4 @@
-use alloc::sync::Arc;
+use alloc::sync::{Arc, Weak};
 
 use crate::{
 	process::{
@@ -21,13 +21,14 @@ pub fn sleep_and_yield() {
 pub fn wake_up(task: &Arc<Task>) {
 	let mut state_lock = task.lock_state();
 	if *state_lock == State::Sleeping {
-		// pr_debug!("pid[{}] wake up!", task.get_pid().as_raw());
+		// pr_debug!("{:?} wake up!", task.get_pid());
 		*state_lock = State::Running;
 		TASK_QUEUE.lock().push_back(task.clone());
 	}
 }
 
-pub fn wake_up_foreground(sess: &Arc<Locked<Session>>) -> Option<()> {
+pub fn wake_up_foreground(sess: &Weak<Locked<Session>>) -> Option<()> {
+	let sess = sess.upgrade()?;
 	let sess_lock = sess.lock();
 	let fg = sess_lock.foreground()?.upgrade()?;
 

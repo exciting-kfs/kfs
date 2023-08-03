@@ -14,6 +14,9 @@ pid_t fork(void);
 ssize_t read(int fildes, void *buf, size_t nbyte);
 ssize_t write(int fildes, const void *buf, size_t nbyte);
 
+// FIXME
+int open();
+
 int exec(const char *name);
 
 pid_t waitpid(pid_t pid, int *stat_loc, int options);

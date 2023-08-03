@@ -21,6 +21,8 @@ pub struct ProcessGroup {
 
 impl ProcessGroup {
 	pub fn new(pgid: Pgid, sess: Arc<Locked<Session>>) -> Self {
+		use crate::pr_debug;
+		pr_debug!("NEW: ProcessGroup[{}]", pgid.as_raw());
 		Self {
 			pgid,
 			sess,

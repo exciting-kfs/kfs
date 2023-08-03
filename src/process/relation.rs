@@ -10,6 +10,7 @@ pub use id::*;
 use alloc::sync::{Arc, Weak};
 
 use crate::interrupt::syscall::errno::Errno;
+use crate::pr_debug;
 use crate::sync::locked::Locked;
 
 use self::family::{zombie::Zombie, Family};
@@ -84,6 +85,8 @@ impl Relation {
 			.remove(&pid)
 			.expect("task in pgroup.");
 		new.lock_members().insert(pid, weak);
+
+		pr_debug!("MOVE: {:?} is now in {:?}", pid, new.get_pgid());
 		self.pgroup = new;
 	}
 

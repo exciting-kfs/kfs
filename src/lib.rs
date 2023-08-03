@@ -104,10 +104,12 @@ fn halt() {
 fn open_default_fd(task: &mut Arc<Task>) {
 	let tty = tty::open(0).unwrap();
 	let ext = task.get_user_ext().expect("user task");
+	let sess = &ext.lock_relation().get_session();
 
-	tty.lock().set_owner(ext.lock_relation().get_session());
+	tty.lock().connect(Arc::downgrade(sess));
+	sess.lock().set_ctty(tty.clone());
+
 	let mut fd_table = ext.lock_fd_table();
-
 	let file = Arc::new(File {
 		ops: tty.clone(),
 		open_flag: OpenFlag::O_RDWR,

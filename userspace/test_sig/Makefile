@@ -1,4 +1,4 @@
-NAME = sig_test.bin
+NAME = test_sig.bin
 SRCS = sig_test.c
 
 -include $(COMMON)

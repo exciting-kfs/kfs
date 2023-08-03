@@ -2,7 +2,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::collections::BTreeSet;
 
-use crate::sync::locked::Locked;
+use crate::{pr_debug, sync::locked::Locked};
 
 static PID_ALLOC: Locked<PidAlloc> = Locked::new(PidAlloc::new());
 
@@ -117,6 +117,8 @@ impl PidAlloc {
 	}
 
 	pub fn dealloc_pid(&mut self, pid: Pid) {
+		pr_debug!("DEALLOC: {:?}", pid);
+
 		let pid = pid.as_raw();
 		let end = self.end.load(Ordering::Relaxed);
 
@@ -131,17 +133,15 @@ impl PidAlloc {
 	}
 
 	pub fn dealloc_pgid(&mut self, pgid: Pgid) {
+		pr_debug!("DEALLOC: {:?}", pgid);
 		let pgid = pgid.as_raw();
 		let end = self.end.load(Ordering::Relaxed);
 
 		debug_assert!(pgid < end, "invalid pgid deallocation.");
-		debug_assert!(
-			match self.free_pid.remove(&pgid) {
-				true => self.allocatable.insert(pgid),
-				false => self.free_pgid.insert(pgid),
-			},
-			"invalid pgid deallocation"
-		);
+		match self.free_pid.remove(&pgid) {
+			true => self.allocatable.insert(pgid),
+			false => self.free_pgid.insert(pgid),
+		};
 	}
 
 	pub fn stat(&self) -> PidAllocStat {

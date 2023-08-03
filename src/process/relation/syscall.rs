@@ -12,8 +12,8 @@ use super::{session::Session, Pgid, Pid, Sid};
 
 fn __set_pgid(task: &Arc<Task>, new_pgid: Pgid) -> Result<(), Errno> {
 	let ext = task.user_ext_ok_or(Errno::EINVAL)?;
-	let mut relation = ext.lock_relation();
-	let pgrp = &mut relation.pgroup;
+	let mut rel = ext.lock_relation();
+	let pgrp = &mut rel.pgroup;
 	let sess = pgrp.sess.clone();
 	let pid = task.get_pid();
 
@@ -41,7 +41,7 @@ fn __set_pgid(task: &Arc<Task>, new_pgid: Pgid) -> Result<(), Errno> {
 
 	match new_pgrp {
 		Some(g) => {
-			relation.enter_new_pgroup(pid, g);
+			rel.enter_new_pgroup(pid, g);
 			Ok(())
 		}
 		None => Err(Errno::EPERM),
@@ -69,15 +69,15 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> Result<usize, Errno> {
 pub fn sys_setsid() -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };
 	let pid = current.get_pid();
-	let ext = current.user_ext_ok_or(Errno::EINVAL)?;
-	let mut rel = ext.lock_relation();
-	let pgrp = &mut rel.pgroup;
 
-	if pgrp.get_sid() == Sid::from(pid) {
+	if current.get_sid() == Sid::from(pid) {
 		return Err(Errno::EPERM);
 	}
 
-	rel.enter_new_session(pid);
+	let ext = current.user_ext_ok_or(Errno::EINVAL)?;
+
+	ext.lock_relation().enter_new_session(pid);
+	ext.lock_fd_table().clear();
 
 	Ok(pid.as_raw())
 }

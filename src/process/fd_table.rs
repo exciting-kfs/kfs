@@ -45,4 +45,12 @@ impl FdTable {
 
 		Some(Fd(fd))
 	}
+
+	pub fn close(&mut self, fd: Fd) {
+		self.0[fd.index()] = None;
+	}
+
+	pub fn clear(&mut self) {
+		self.0.iter_mut().for_each(|e| *e = None);
+	}
 }
