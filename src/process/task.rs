@@ -255,6 +255,17 @@ impl Drop for Task {
 			let pgrp = &mut rel.pgroup;
 
 			pgrp.lock_members().remove(&self.pid);
+
+			let sess = pgrp.sess.clone();
+			let sess_lock = sess.lock();
+
+			// deallocate `pgid` allocated implicitly.
+			let own_pgid = Pgid::from(self.pid);
+			if let None = sess_lock.find(own_pgid) {
+				Pgid::deallocate(own_pgid)
+			}
+
+			Pid::deallocate(self.pid);
 		}
 	}
 }

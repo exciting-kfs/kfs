@@ -66,12 +66,6 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> Result<usize, Errno> {
 	__set_pgid(&task, pgid).map(|_| 0)
 }
 
-pub fn sys_getpgrp() -> Result<usize, Errno> {
-	let current = unsafe { CURRENT.get_mut() };
-
-	Ok(current.get_pgid().as_raw())
-}
-
 pub fn sys_setsid() -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };
 	let pid = current.get_pid();
@@ -100,6 +94,12 @@ pub fn sys_getppid() -> Result<usize, Errno> {
 	Ok(current.get_ppid().as_raw())
 }
 
+pub fn sys_getsid() -> Result<usize, Errno> {
+	let current = unsafe { CURRENT.get_mut() };
+
+	Ok(current.get_sid().as_raw())
+}
+
 pub fn sys_getpgid(pid: usize) -> Result<usize, Errno> {
 	let task = PROCESS_TREE
 		.get_task(Pid::from_raw(pid))
@@ -108,8 +108,8 @@ pub fn sys_getpgid(pid: usize) -> Result<usize, Errno> {
 	Ok(task.get_pgid().as_raw())
 }
 
-pub fn sys_getsid() -> Result<usize, Errno> {
+pub fn sys_getpgrp() -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };
 
-	Ok(current.get_sid().as_raw())
+	Ok(current.get_pgid().as_raw())
 }

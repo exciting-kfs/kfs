@@ -29,6 +29,10 @@ impl Session {
 		self.sid.as_raw() == pid.as_raw()
 	}
 
+	pub fn find(&self, pgid: Pgid) -> Option<&Weak<ProcessGroup>> {
+		self.members.get(&pgid)
+	}
+
 	pub fn insert(&mut self, pgid: Pgid, w: Weak<ProcessGroup>) {
 		if let None = self.foreground {
 			self.foreground = Some(w.clone());
