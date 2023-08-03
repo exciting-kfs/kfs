@@ -1,6 +1,6 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use alloc::collections::LinkedList;
+use alloc::collections::{BTreeSet, LinkedList};
 
 use crate::sync::locked::Locked;
 
@@ -89,5 +89,48 @@ impl Default for Sid {
 impl From<Pid> for Sid {
 	fn from(value: Pid) -> Self {
 		Self::from_raw(value.as_raw())
+	}
+}
+
+pub struct PidAlloc {
+	end: AtomicUsize,
+	allocatable: BTreeSet<usize>,
+	free_pid: BTreeSet<usize>,
+	free_pgid: BTreeSet<usize>,
+}
+
+impl PidAlloc {
+	pub const fn new() -> Self {
+		Self {
+			end: AtomicUsize::new(2),
+			allocatable: BTreeSet::new(),
+			free_pid: BTreeSet::new(),
+			free_pgid: BTreeSet::new(),
+		}
+	}
+
+	pub fn alloc_pid(&mut self) -> Pid {
+		let pid = match self.allocatable.pop_first() {
+			Some(s) => s,
+			None => self.end.fetch_add(1, Ordering::Relaxed),
+		};
+
+		Pid(pid)
+	}
+
+	pub fn dealloc_pid(&mut self, pid: Pid) {
+		let pid = pid.as_raw();
+		match self.free_pgid.remove(&pid) {
+			true => self.allocatable.insert(pid),
+			false => self.free_pid.insert(pid),
+		};
+	}
+
+	pub fn dealloc_pgid(&mut self, pgid: Pgid) {
+		let pgid = pgid.as_raw();
+		match self.free_pid.remove(&pgid) {
+			true => self.allocatable.insert(pgid),
+			false => self.free_pgid.insert(pgid),
+		};
 	}
 }
