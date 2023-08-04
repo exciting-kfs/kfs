@@ -27,11 +27,11 @@ static mut IDLE_TASK: MaybeUninit<Arc<Task>> = MaybeUninit::uninit();
 
 pub fn init() {
 	let idle_kstack = unsafe { Stack::from_raw(kernel_stack_top as usize as *mut _) };
-	let idle_task = Task::new_kernel_from_raw(Pid::from_raw(0), idle_kstack);
+	let idle_task = Task::new_kernel_from_raw(Pid::allocate(), idle_kstack);
 	CURRENT.init(idle_task.clone());
 	unsafe { IDLE_TASK.write(idle_task) };
 
-	let init_task = Task::new_init_task(user_bin::INIT).expect("OOM");
+	let init_task = Task::new_init_task(Pid::allocate(), user_bin::INIT).expect("OOM");
 	unsafe { INIT_TASK.write(init_task) };
 }
 

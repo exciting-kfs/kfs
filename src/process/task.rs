@@ -80,14 +80,16 @@ impl UserTaskExt {
 impl Task {
 	/// create new init (pid 1) process.
 	/// this must be called only once!!
-	pub(super) fn new_init_task(code: &[u8]) -> Result<Arc<Self>, AllocError> {
+	pub(super) fn new_init_task(pid: Pid, code: &[u8]) -> Result<Arc<Self>, AllocError> {
+		debug_assert!(pid.as_raw() == 1, "invalid init pid");
+
 		let kstack = Stack::new_user(USER_CODE_BASE, USTACK_BASE)?;
 		let memory = Memory::new(USTACK_BASE, USTACK_PAGES, USER_CODE_BASE, code)?;
 
 		let task = Arc::new_cyclic(|w| Task {
 			kstack,
 			state: Locked::new(State::Running),
-			pid: Pid::from_raw(1),
+			pid,
 			uid: Uid::from_raw(0),
 			user_ext: Some(UserTaskExt {
 				exec_called: AtomicBool::new(false),
@@ -255,15 +257,6 @@ impl Drop for Task {
 			let pgrp = &mut rel.pgroup;
 
 			pgrp.lock_members().remove(&self.pid);
-
-			let sess = pgrp.sess.clone();
-			let sess_lock = sess.lock();
-
-			// deallocate `pgid` allocated implicitly.
-			let own_pgid = Pgid::from(self.pid);
-			if let None = sess_lock.get(&own_pgid) {
-				Pgid::deallocate(own_pgid)
-			}
 
 			Pid::deallocate(self.pid);
 		}

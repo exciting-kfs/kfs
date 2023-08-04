@@ -75,7 +75,6 @@ impl Drop for ProcessGroup {
 
 		self.sess.lock().remove(&self.pgid);
 
-		// deallocate `pgid` allocate explicitly.
 		Pgid::deallocate(self.pgid);
 	}
 }

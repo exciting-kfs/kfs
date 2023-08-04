@@ -81,5 +81,7 @@ impl Drop for Session {
 		if let Some(ref tty) = self.ctty {
 			tty.lock().disconnect();
 		}
+
+		Sid::deallocate(self.sid)
 	}
 }
