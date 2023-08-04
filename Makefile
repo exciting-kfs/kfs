@@ -13,7 +13,7 @@ endif
 
 RELEASE_MODE := n
 DEBUG_WITH_VSCODE := y
-TEST_CASE := pid
+TEST_CASE := all
 # LOG_LEVEL := debug # ALL = debug > info > warn > error
 
 I386_GRUB2_PREFIX := $(I386_GRUB2_PREFIX)
