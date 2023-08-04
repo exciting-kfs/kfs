@@ -32,7 +32,7 @@ void do_something(void) {
 int main(void) {
 	int pid = fork();
 	if (pid == 0) {
-		exec("shell.bin");
+		exec("test_setXid.bin");
 	}
 
 	while (1) {

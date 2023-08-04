@@ -23,6 +23,7 @@ define_user_bin![
 	(INIT, "init.bin"),
 	(SHELL, "shell.bin"),
 	(FORTYTWO, "fortytwo.bin"),
-	(SIGTEST, "sig_test.bin"),
+	(TEST_SIG, "test_sig.bin"),
+	(TEST_SETXID, "test_setXid.bin"),
 	(TEST_RELATION, "test_relation.bin")
 ];

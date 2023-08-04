@@ -2,7 +2,7 @@
 //! and do basic line discipline.
 
 use alloc::collections::VecDeque;
-use alloc::sync::Arc;
+use alloc::sync::{Arc, Weak};
 use bitflags::bitflags;
 
 use crate::collection::LineBuffer;
@@ -14,9 +14,7 @@ use crate::input::key_event::*;
 use crate::input::keyboard::KEYBOARD;
 use crate::interrupt::syscall::errno::Errno;
 use crate::io::{BlkRead, BlkWrite, ChRead, ChWrite, NoSpace};
-use crate::pr_debug;
-use crate::process::relation::job::session::Session;
-use crate::process::task::CURRENT;
+use crate::process::relation::session::Session;
 use crate::scheduler::sleep::{sleep_and_yield, wake_up_foreground};
 use crate::signal::{poll_signal_queue, send_signal_to_foreground};
 use crate::sync::locked::Locked;
@@ -163,7 +161,7 @@ pub struct TTY {
 	console: SyncConsole,
 	line_buffer: LineBuffer<4096>,
 	into_process: VecDeque<u8>,
-	owner: Option<Arc<Locked<Session>>>,
+	owner: Option<Weak<Locked<Session>>>,
 }
 
 struct ControlChars {
@@ -172,6 +170,18 @@ struct ControlChars {
 	icanon_kill: u8,
 	icanon_erase: u8,
 	eof: u8,
+}
+
+impl Default for ControlChars {
+	fn default() -> Self {
+		ControlChars {
+			sig_intr: ETX,     // '^C'
+			sig_quit: FS,      // '^\'
+			icanon_kill: 0x15, // '^U'
+			icanon_erase: DEL, // '^?'
+			eof: EOF,          // '^D'
+		}
+	}
 }
 
 bitflags! {
@@ -206,13 +216,7 @@ impl TTY {
 	pub fn new(console: SyncConsole, flag: TTYFlag) -> Self {
 		Self {
 			flag,
-			control: ControlChars {
-				sig_intr: ETX,     // '^C'
-				sig_quit: FS,      // '^\'
-				icanon_kill: 0x15, // '^U'
-				icanon_erase: DEL, // '^?'
-				eof: EOF,          // '^D'
-			},
+			control: ControlChars::default(),
 			console,
 			line_buffer: LineBuffer::new(),
 			into_process: VecDeque::new(),
@@ -220,9 +224,14 @@ impl TTY {
 		}
 	}
 
-	/// Temporal method for signal development.
-	pub fn set_owner(&mut self, sess: Arc<Locked<Session>>) {
+	pub fn connect(&mut self, sess: Weak<Locked<Session>>) {
 		self.owner = Some(sess)
+	}
+
+	pub fn disconnect(&mut self) {
+		self.owner = None;
+		self.line_buffer.clear();
+		self.into_process.clear();
 	}
 
 	fn input_convert<'a>(&self, data: Code, buf: &'a mut [u8]) -> Option<&'a [u8]> {
@@ -343,10 +352,9 @@ impl TTY {
 
 	fn send_signal(&self, c: u8) {
 		use crate::signal::sig_code::SigCode;
-		use crate::signal::sig_info::SigInfo;
 		use crate::signal::sig_num::SigNum;
 
-		pr_debug!("tty: send signal: {}", c);
+		// pr_debug!("tty: send signal: {}", c);
 
 		let num = match c {
 			x if x == self.control.sig_intr => SigNum::INT,
@@ -354,20 +362,8 @@ impl TTY {
 			_ => unreachable!(),
 		};
 
-		let (pid, uid) = unsafe {
-			let task = CURRENT.get_mut();
-			(task.get_pid(), task.get_uid())
-		};
-
-		let sig_info = SigInfo {
-			num,
-			pid: pid.as_raw(),
-			uid,
-			code: SigCode::SI_KERNEL,
-		};
-
 		if let Some(ref owner) = self.owner {
-			send_signal_to_foreground(owner, &sig_info).expect("user task");
+			send_signal_to_foreground(owner, num, SigCode::SI_KERNEL).expect("invalid session.");
 		}
 	}
 
@@ -427,7 +423,7 @@ impl ChWrite<Code> for TTY {
 
 		// wake_up on event
 		if let Some(ref owner) = self.owner {
-			wake_up_foreground(owner)
+			wake_up_foreground(owner);
 		}
 
 		Ok(())
@@ -492,6 +488,18 @@ pub fn open(id: usize) -> Option<SyncTTY> {
 	} else {
 		Some(unsafe { CONSOLE_MANAGER.assume_init_ref().get_tty(id) })
 	}
+}
+
+pub fn alloc() -> Option<SyncTTY> {
+	for id in 0..CONSOLE_COUNTS {
+		let tty = unsafe { CONSOLE_MANAGER.assume_init_ref().get_tty(id) };
+		let tty_lock = tty.lock();
+		if let None = tty_lock.owner {
+			drop(tty_lock);
+			return Some(tty);
+		}
+	}
+	None
 }
 
 fn is_printable(c: u8) -> bool {

@@ -17,7 +17,10 @@ use core::{
 	ptr::copy_nonoverlapping,
 };
 
-use alloc::{collections::LinkedList, sync::Arc};
+use alloc::{
+	collections::LinkedList,
+	sync::{Arc, Weak},
+};
 
 use crate::{
 	config::TRAMPOLINE_BASE,
@@ -25,15 +28,18 @@ use crate::{
 	pr_debug,
 	process::{
 		exit::exit_with_signal,
-		relation::job::session::Session,
-		task::{Task, CURRENT, PROCESS_TREE},
+		relation::session::Session,
+		task::{Task, CURRENT},
 	},
 	scheduler::sleep::wake_up,
 	signal::{sig_flag::SigFlag, sig_handler::SigHandler, sig_num::SigNum},
 	sync::locked::Locked,
 };
 
-use self::{sig_ctx::SigCtx, sig_handler::SigAction, sig_info::SigInfo, sig_mask::SigMask};
+use self::{
+	sig_code::SigCode, sig_ctx::SigCtx, sig_handler::SigAction, sig_info::SigInfo,
+	sig_mask::SigMask,
+};
 
 extern "C" {
 	fn signal_trampoline();
@@ -82,7 +88,6 @@ impl Signal {
 			return;
 		}
 
-		pr_debug!("received [{:?}] from pid[{}]", info.num, info.pid);
 		let mut queue = self.queue.lock();
 
 		match info.num {
@@ -159,8 +164,7 @@ impl Signal {
 			func_frame.as_ptr().cast(),
 			func_frame.len() * size_of::<usize>(),
 		);
-		pr_debug!("sig_action: go_to_signal_handler: esp {:x}", esp);
-		// pr_debug!("{}", ctx.intr_frame);
+		// pr_debug!("sig_action: go_to_signal_handler: esp {:x}", esp);
 		go_to_signal_handler(&ctx.intr_frame as *const InterruptFrame, esp, act.handler());
 	}
 
@@ -183,12 +187,12 @@ impl Signal {
 			&trampoline as *const usize as *const u8,
 			size_of::<usize>(),
 		);
-		pr_debug!("sig_action_repeat: go_to_signal_handler: esp {:x}", esp);
+		// pr_debug!("sig_action_repeat: go_to_signal_handler: esp {:x}", esp);
 		go_to_signal_handler(frame as *const InterruptFrame, esp, act.handler());
 	}
 
 	fn replace_mask(&self, act: &SigAction, info: &SigInfo) -> SigMask {
-		let lock = self.mask.lock();
+		let mut lock = self.mask.lock();
 		let o_mask = *lock;
 		let n_mask = if act.flag().contains(SigFlag::NoDefer) {
 			o_mask | act.mask() - info.num.into()
@@ -196,7 +200,7 @@ impl Signal {
 			o_mask | act.mask() | info.num.into()
 		};
 
-		mem::replace(&mut *self.mask.lock(), n_mask)
+		mem::replace(&mut *lock, n_mask)
 	}
 
 	fn get_signal_event(&self) -> Option<SigInfo> {
@@ -265,14 +269,24 @@ pub unsafe fn poll_signal_queue() -> Result<(), Errno> {
 	if count == 0 {
 		Ok(())
 	} else {
-		pr_debug!("poll_signal_queue: there is signal!");
+		// pr_debug!("poll_signal_queue: there is signal!");
 		Err(Errno::EINTR)
 	}
 }
 
 pub fn send_signal_to(task: &Arc<Task>, sig_info: &SigInfo) -> Result<(), Errno> {
-	task.get_user_ext()
-		.ok_or_else(|| Errno::EPERM)?
+	if task.get_pid().as_raw() == 1 {
+		return Ok(()); // ignore signal
+	}
+
+	pr_debug!(
+		"{:?} received SIG{:?} from pid[{}]",
+		task.get_pid(),
+		sig_info.num,
+		sig_info.pid
+	);
+
+	task.user_ext_ok_or(Errno::EPERM)?
 		.signal
 		.as_ref()
 		.recv_signal(sig_info.clone());
@@ -281,14 +295,33 @@ pub fn send_signal_to(task: &Arc<Task>, sig_info: &SigInfo) -> Result<(), Errno>
 }
 
 pub fn send_signal_to_foreground(
-	sess: &Arc<Locked<Session>>,
-	sig_info: &SigInfo,
+	sess: &Weak<Locked<Session>>,
+	num: SigNum,
+	code: SigCode,
 ) -> Result<(), Errno> {
-	if let Some(fg) = sess.lock().foreground() {
-		for pid in fg.lock().members() {
-			let ptree = PROCESS_TREE.lock();
-			let task = ptree.get(pid).expect("task in process group.");
-			let _ = send_signal_to(task, sig_info);
+	let sess = sess.upgrade().ok_or(Errno::EPERM)?;
+	let sess_lock = sess.lock();
+	let fg = sess_lock
+		.foreground()
+		.and_then(|w| w.upgrade())
+		.ok_or(Errno::ESRCH)?;
+
+	pr_debug!(
+		"SIG{:?}: foreground: {:?}, {:?}",
+		num,
+		sess_lock.get_sid(),
+		fg.get_pgid()
+	);
+
+	for (_, weak) in fg.lock_members().iter() {
+		if let Some(task) = weak.upgrade() {
+			let sig_info = SigInfo {
+				num,
+				pid: task.get_pid().as_raw(),
+				uid: task.get_uid(),
+				code,
+			};
+			let _ = send_signal_to(&task, &sig_info);
 		}
 	}
 	Ok(())

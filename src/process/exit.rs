@@ -1,4 +1,4 @@
-use crate::signal::sig_num::SigNum;
+use crate::{pr_debug, signal::sig_num::SigNum};
 
 use super::{context::yield_now, task::CURRENT};
 
@@ -38,9 +38,9 @@ pub fn sys_exit(status: usize) -> ! {
 }
 
 pub fn exit_with_signal(sig: SigNum) -> ! {
-	// context_switch(InContext::IrqDisabled);
 	let current = unsafe { CURRENT.get_mut() };
 
+	pr_debug!("{:?} exit with SIG{:?}", current.get_pid(), sig);
 	current.exit(ExitStatus::new(ExitFlag::Signaled, sig as usize as u8));
 
 	yield_now();

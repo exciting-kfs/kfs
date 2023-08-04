@@ -1,13 +1,17 @@
 use core::mem::transmute;
 
+use alloc::sync::Arc;
+
+use crate::driver::tty;
 use crate::file::read::sys_read;
 use crate::file::write::sys_write;
+use crate::file::{File, OpenFlag};
 use crate::interrupt::InterruptFrame;
 
 pub mod errno;
 use crate::pr_info;
 use crate::process::exec::sys_exec;
-use crate::process::relation::{
+use crate::process::relation::syscall::{
 	sys_getpgid, sys_getpgrp, sys_getpid, sys_getppid, sys_getsid, sys_setpgid, sys_setsid,
 };
 use crate::process::uid::{sys_getuid, sys_setuid};
@@ -60,21 +64,22 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 		}
 		2 => sys_fork(frame),
 		3 => {
-			// pr_info!("syscall: read");
+			// pr_debug!("syscall: read");
 			sys_read(frame.ebx as isize, frame.ecx as *mut u8, frame.edx)
 		}
 		4 => {
-			// pr_info!("syscall: write");
+			// pr_debug!("syscall: write");
 			sys_write(frame.ebx as isize, frame.ecx as *mut u8, frame.edx)
 		}
+		5 => sys_open(),
 		7 => sys_waitpid(frame.ebx as isize, frame.ecx as *mut isize, frame.edx),
 		11 => sys_exec(frame, frame.ebx),
 		20 => sys_getpid(),
 		37 => sys_kill(frame.ebx as isize, frame.ecx as isize),
 		42 => {
 			pr_info!(
-				"PID[{}]: DEBUG syscall called({})",
-				current.get_pid().as_raw(),
+				"{:?}: DEBUG syscall called({})",
+				current.get_pid(),
 				frame.ebx as isize
 			);
 			Ok(0)
@@ -88,12 +93,12 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 		65 => sys_getpgrp(),
 		66 => sys_setsid(),
 		67 => {
-			pr_info!(
-				"syscall: sigaction: {}, {:x}, {:x}",
-				frame.ebx,
-				frame.ecx,
-				frame.edx
-			);
+			// pr_info!(
+			// 	"syscall: sigaction: {}, {:x}, {:x}",
+			// 	frame.ebx,
+			// 	frame.ecx,
+			// 	frame.edx
+			// );
 			sys_sigaction(
 				frame.ebx,
 				frame.ecx as *const SigAction,
@@ -101,7 +106,7 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 			)
 		}
 		119 => {
-			pr_info!("syscall: sigreturn: {:p}", &frame);
+			// pr_info!("syscall: sigreturn: {:p}", &frame);
 			sys_sigreturn(frame, restart)
 		}
 		132 => sys_getpgid(frame.ebx),
@@ -129,4 +134,20 @@ pub fn restore_syscall_return(result: isize) -> Result<usize, Errno> {
 	} else {
 		Ok(result as usize)
 	}
+}
+
+// FIXME Rough implementation for test.
+pub fn sys_open() -> Result<usize, Errno> {
+	let ext = unsafe { CURRENT.get_mut() }.user_ext_ok_or(Errno::EPERM)?;
+	let tty = tty::alloc().ok_or(Errno::UnknownErrno)?;
+	let sess = &ext.lock_relation().get_session();
+
+	tty.lock().connect(Arc::downgrade(sess));
+	sess.lock().set_ctty(tty.clone());
+
+	let file = Arc::new(File::new(tty, OpenFlag::O_RDWR));
+	let mut fd_table = ext.lock_fd_table();
+	let fd = fd_table.alloc_fd(file).ok_or(Errno::ENFILE)?;
+
+	Ok(fd.index())
 }

@@ -11,6 +11,12 @@ pub struct File {
 	pub ops: Arc<dyn FileOps>,
 }
 
+impl File {
+	pub fn new(ops: Arc<dyn FileOps>, open_flag: OpenFlag) -> Self {
+		Self { open_flag, ops }
+	}
+}
+
 pub trait FileOps {
 	fn read(&self, file: &Arc<File>, buf: &mut [u8]) -> Result<usize, Errno>;
 	fn write(&self, file: &Arc<File>, buf: &[u8]) -> Result<usize, Errno>;
@@ -21,7 +27,6 @@ bitflags! {
 		const O_RDONLY = 0x0000;
 		const O_WRONLY = 0x0001;
 		const O_RDWR = 0x0002;
-		const O_ACCMODE = 0x0003;
 		const O_NONBLOCK = 0x0004;
 		const O_APPEND = 0x0008;
 		const O_SHLOCK = 0x0010;
@@ -46,4 +51,5 @@ bitflags! {
 
 impl OpenFlag {
 	const O_SYNC: Self = Self::__O_SYNC.union(Self::O_DSYNC);
+	const O_ACCMODE: Self = Self::O_WRONLY.union(Self::O_RDWR);
 }
