@@ -29,7 +29,6 @@
 section .text
 
 ;         name           vector number   arguments
-SYSCALL fortytwo,       42,             1
 SYSCALL _exit,          1,              1
 SYSCALL fork,           2,              0
 SYSCALL read,           3,              3
@@ -39,6 +38,7 @@ SYSCALL waitpid,        7,              3
 SYSCALL exec,           11,             1
 SYSCALL getpid,         20,             0
 SYSCALL kill,           37,             2
+SYSCALL pipe,           42,             1
 SYSCALL signal,         48,             2
 SYSCALL setpgid,        57,             2
 SYSCALL getppid,        64,             0

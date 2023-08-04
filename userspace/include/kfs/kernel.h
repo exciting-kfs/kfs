@@ -54,7 +54,7 @@ pid_t setpgid(pid_t pid, pid_t pgid);
 pid_t setsid(void);
 pid_t getsid(void);
 
-void fortytwo(int number);
+int pipe(int pipe_pair[2]);
 
 #define SIGHUP 1
 #define SIGINT 2
