@@ -64,7 +64,6 @@ impl FileOps for Pipe<WriteEnd> {
 	}
 }
 
-const PIPE_BUFFER_SIZE: usize = 16384;
 
 pub fn get_pipe() -> (Arc<File>, Arc<File>) {
 	let buffer = Arc::new(Locked::new(PipeBuffer::new()));
