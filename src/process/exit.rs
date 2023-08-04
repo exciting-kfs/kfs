@@ -38,7 +38,6 @@ pub fn sys_exit(status: usize) -> ! {
 }
 
 pub fn exit_with_signal(sig: SigNum) -> ! {
-	// context_switch(InContext::IrqDisabled);
 	let current = unsafe { CURRENT.get_mut() };
 
 	pr_debug!("{:?} exit with SIG{:?}", current.get_pid(), sig);
