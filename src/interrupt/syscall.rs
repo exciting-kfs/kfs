@@ -2,6 +2,7 @@ use core::mem::transmute;
 
 use alloc::sync::Arc;
 
+use crate::driver::pipe::sys_pipe;
 use crate::driver::tty;
 use crate::file::read::sys_read;
 use crate::file::write::sys_write;
@@ -56,7 +57,7 @@ pub extern "C" fn handle_syscall_impl(mut frame: InterruptFrame) {
 }
 
 fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errno> {
-	let current = unsafe { CURRENT.get_mut() };
+	// let current = unsafe { CURRENT.get_mut() };
 	match frame.eax {
 		1 => {
 			// pr_info!("PID[{}]: exited({})", current.get_pid().as_raw(), frame.ebx);
@@ -76,14 +77,7 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 		11 => sys_exec(frame, frame.ebx),
 		20 => sys_getpid(),
 		37 => sys_kill(frame.ebx as isize, frame.ecx as isize),
-		42 => {
-			pr_info!(
-				"{:?}: DEBUG syscall called({})",
-				current.get_pid(),
-				frame.ebx as isize
-			);
-			Ok(0)
-		}
+		42 => sys_pipe(frame.ebx),
 		48 => {
 			pr_info!("syscall: signal: {}, {:x}", frame.ebx, frame.ecx);
 			sys_signal(frame.ebx, frame.ecx)
