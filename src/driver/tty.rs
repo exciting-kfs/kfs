@@ -15,6 +15,7 @@ use crate::input::keyboard::KEYBOARD;
 use crate::interrupt::syscall::errno::Errno;
 use crate::io::{BlkRead, BlkWrite, ChRead, ChWrite, NoSpace};
 use crate::process::relation::session::Session;
+use crate::process::task::State;
 use crate::scheduler::sleep::{sleep_and_yield, wake_up_foreground};
 use crate::signal::{poll_signal_queue, send_signal_to_foreground};
 use crate::sync::locked::Locked;
@@ -423,7 +424,7 @@ impl ChWrite<Code> for TTY {
 
 		// wake_up on event
 		if let Some(ref owner) = self.owner {
-			wake_up_foreground(owner);
+			wake_up_foreground(owner, State::Sleeping);
 		}
 
 		Ok(())
@@ -462,7 +463,7 @@ impl FileOps for Locked<TTY> {
 		let mut count = self.lock().read(buf);
 		while block && count == 0 {
 			unsafe { poll_signal_queue()? };
-			sleep_and_yield();
+			sleep_and_yield(State::Sleeping);
 			count += self.lock().read(buf);
 		}
 		Ok(count)
@@ -473,7 +474,7 @@ impl FileOps for Locked<TTY> {
 		let mut count = self.lock().write(buf);
 		while block && count == 0 {
 			unsafe { poll_signal_queue()? };
-			sleep_and_yield();
+			sleep_and_yield(State::Sleeping);
 			count += self.lock().write(buf);
 		}
 		Ok(count)

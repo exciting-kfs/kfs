@@ -7,6 +7,7 @@
 #![feature(new_uninit)]
 #![feature(asm_const)]
 #![feature(variant_count)]
+#![feature(extract_if)]
 
 extern crate alloc;
 

@@ -102,6 +102,13 @@ impl SigHandler {
 		}
 	}
 
+	pub fn is_default(&self) -> bool {
+		match self {
+			SigHandler::Some(_) => false,
+			_ => true,
+		}
+	}
+
 	pub fn get_flag(&self) -> SigFlag {
 		match self {
 			SigHandler::Some(act) => act.flag,

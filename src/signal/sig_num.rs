@@ -1,7 +1,7 @@
 use core::mem::transmute;
 
 #[repr(usize)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SigNum {
 	HUP = 1,
 	INT,
@@ -48,5 +48,11 @@ impl SigNum {
 
 	pub const fn index(&self) -> usize {
 		*self as usize - 1
+	}
+
+	#[inline(always)]
+	pub fn is_stop(&self) -> bool {
+		use SigNum::*;
+		*self == STOP || *self == TSTP || *self == TTIN || *self == TTOU
 	}
 }

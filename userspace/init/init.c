@@ -12,16 +12,11 @@ int main(void) {
 	int pid = fork();
 
 	if (pid == 0) {
-		char c[] = "A\n";
-		for (;;)
-			write(pipe_pair[1], c, 2);
+		exec("test_sig_stop_cont.bin");
 	}
 
-	char buf[32];
-
 	for (;;) {
-		read(pipe_pair[0], buf, 2);
-		write(1, buf, 2);
+		sched_yield();
 	}
 
 	return 0;
