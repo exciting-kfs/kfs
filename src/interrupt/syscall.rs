@@ -10,6 +10,7 @@ use crate::file::{File, OpenFlag};
 use crate::interrupt::InterruptFrame;
 
 pub mod errno;
+use crate::mm::user::mmap::sys_mmap;
 use crate::pr_info;
 use crate::process::exec::sys_exec;
 use crate::process::relation::syscall::{
@@ -106,6 +107,15 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 		132 => sys_getpgid(frame.ebx),
 		147 => sys_getsid(),
 		158 => sys_sched_yield(),
+		192 => sys_mmap(
+			frame.ebx,
+			frame.ecx,
+			frame.edx as i32,
+			frame.esi as i32,
+			frame.edi as i32,
+			frame.ebp as isize,
+		)
+		.map_err(|_| Errno::UnknownErrno), // FIXME: proper return type
 		199 => sys_getuid(),
 		213 => sys_setuid(frame.ebx),
 		_ => {

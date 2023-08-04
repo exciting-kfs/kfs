@@ -151,4 +151,13 @@ int setuid(uid_t uid);
 
 int sched_yield(void);
 
+typedef int off_t;
+
+#define MMAP_PRIVATE 0x02
+
+#define PROT_READ 1
+#define PROT_WRITE 2
+
+void *mmap(void *addr, size_t len, int prot, int flags, int fd, off_t offset);
+
 #endif

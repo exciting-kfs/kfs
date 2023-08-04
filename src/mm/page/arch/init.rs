@@ -18,7 +18,6 @@ unsafe fn init_kernel_map() {
 		} else {
 			PageFlag::empty() // not present
 		};
-
 		GLOBAL_PD_VIRT[vaddr / PT_COVER_SIZE] = PDE::new_4m(paddr, flags);
 	}
 }
@@ -62,6 +61,14 @@ unsafe fn map_kmap_memory() {
 			PageFlag::Global | PageFlag::Present | PageFlag::Write,
 		);
 	}
+}
+
+#[repr(align(4096))]
+struct ZeroPage([u8; PAGE_SIZE]);
+static ZERO_PAGE: ZeroPage = ZeroPage([0; PAGE_SIZE]);
+
+pub fn get_zero_page_phys() -> usize {
+	virt_to_phys(&ZERO_PAGE as *const _ as usize)
 }
 
 pub unsafe fn init_fixed_map() {
