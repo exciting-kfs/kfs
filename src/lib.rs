@@ -106,8 +106,10 @@ fn open_default_fd(task: &mut Arc<Task>) {
 	let ext = task.get_user_ext().expect("user task");
 	let sess = &ext.lock_relation().get_session();
 
-	tty.lock().connect(Arc::downgrade(sess));
-	sess.lock().set_ctty(tty.clone());
+	atomic_operation! {
+		tty.lock().connect(Arc::downgrade(sess));
+		sess.lock().set_ctty(tty.clone());
+	}
 
 	let mut fd_table = ext.lock_fd_table();
 	let file = Arc::new(File {

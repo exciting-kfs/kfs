@@ -2,6 +2,7 @@ use core::arch::asm;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 
+use crate::interrupt::get_interrupt_flag;
 use crate::interrupt::in_interrupt_context;
 use crate::interrupt::irq_disable;
 use crate::interrupt::irq_enable;
@@ -79,5 +80,28 @@ impl SpinLock {
 		if get_lock_depth() == 0 && !in_interrupt_context() {
 			irq_enable();
 		}
+	}
+}
+
+pub fn irq_save() -> IrqSave {
+	let ret = get_interrupt_flag();
+	irq_disable();
+	inc_lock_depth();
+	IrqSave(ret)
+}
+
+fn irq_restore(backup: bool) {
+	dec_lock_depth();
+	match backup {
+		true => irq_enable(),
+		false => irq_disable(),
+	}
+}
+
+pub struct IrqSave(bool);
+
+impl Drop for IrqSave {
+	fn drop(&mut self) {
+		irq_restore(self.0);
 	}
 }

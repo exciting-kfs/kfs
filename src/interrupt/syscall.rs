@@ -10,7 +10,6 @@ use crate::file::{File, OpenFlag};
 use crate::interrupt::InterruptFrame;
 
 pub mod errno;
-use crate::pr_info;
 use crate::process::exec::sys_exec;
 use crate::process::relation::syscall::{
 	sys_getpgid, sys_getpgrp, sys_getpid, sys_getppid, sys_getsid, sys_setpgid, sys_setsid,
@@ -21,6 +20,7 @@ use crate::process::{exit::sys_exit, fork::sys_fork, task::CURRENT};
 use crate::scheduler::sys_sched_yield;
 use crate::signal::sig_handler::SigAction;
 use crate::signal::{sys_kill, sys_sigaction, sys_signal, sys_sigreturn};
+use crate::{atomic_operation, pr_info};
 
 use self::errno::Errno;
 
@@ -136,8 +136,10 @@ pub fn sys_open() -> Result<usize, Errno> {
 	let tty = tty::alloc().ok_or(Errno::UnknownErrno)?;
 	let sess = &ext.lock_relation().get_session();
 
-	tty.lock().connect(Arc::downgrade(sess));
-	sess.lock().set_ctty(tty.clone());
+	atomic_operation! {
+		tty.lock().connect(Arc::downgrade(sess));
+		sess.lock().set_ctty(tty.clone());
+	}
 
 	let file = Arc::new(File::new(tty, OpenFlag::O_RDWR));
 	let mut fd_table = ext.lock_fd_table();
