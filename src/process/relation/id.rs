@@ -1,6 +1,6 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use alloc::collections::BTreeSet;
+use alloc::collections::{BTreeMap, BTreeSet};
 
 use crate::{pr_debug, sync::locked::Locked};
 
@@ -31,10 +31,6 @@ impl Pid {
 pub struct Pgid(usize);
 
 impl Pgid {
-	pub fn new(pid: Pid) -> Self {
-		Pgid(pid.as_raw())
-	}
-
 	pub fn as_raw(&self) -> usize {
 		self.0
 	}
@@ -50,13 +46,15 @@ impl Pgid {
 
 impl Default for Pgid {
 	fn default() -> Self {
-		Self::from_raw(0)
+		Pgid(0)
 	}
 }
 
 impl From<Pid> for Pgid {
-	fn from(value: Pid) -> Self {
-		Self::from_raw(value.as_raw())
+	fn from(pid: Pid) -> Self {
+		let id = pid.as_raw();
+		PID_ALLOC.lock().alloc_id(id, IdKind::Pgid);
+		Pgid(id)
 	}
 }
 
@@ -64,10 +62,6 @@ impl From<Pid> for Pgid {
 pub struct Sid(usize);
 
 impl Sid {
-	pub fn new(pid: Pid) -> Self {
-		Sid(pid.as_raw())
-	}
-
 	pub fn as_raw(&self) -> usize {
 		self.0
 	}
@@ -75,81 +69,111 @@ impl Sid {
 	pub fn from_raw(raw: usize) -> Self {
 		Sid(raw)
 	}
+
+	pub fn deallocate(self) {
+		PID_ALLOC.lock().dealloc_sid(self)
+	}
 }
 
 impl Default for Sid {
 	fn default() -> Self {
-		Self::from_raw(0) // 0?
+		Sid(0)
 	}
 }
 
 impl From<Pid> for Sid {
-	fn from(value: Pid) -> Self {
-		Self::from_raw(value.as_raw())
+	fn from(pid: Pid) -> Self {
+		let id = pid.as_raw();
+		PID_ALLOC.lock().alloc_id(id, IdKind::Sid);
+		Sid(id)
 	}
 }
 
 struct PidAlloc {
 	end: AtomicUsize,
-	allocatable: BTreeSet<usize>,
-	free_pid: BTreeSet<usize>,
-	free_pgid: BTreeSet<usize>,
+	free: BTreeSet<usize>,
+	allocated: BTreeMap<usize, [bool; 3]>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+#[repr(u8)]
+enum IdKind {
+	Pid,
+	Pgid,
+	Sid,
 }
 
 impl PidAlloc {
 	pub const fn new() -> Self {
 		Self {
-			end: AtomicUsize::new(2),
-			allocatable: BTreeSet::new(),
-			free_pid: BTreeSet::new(),
-			free_pgid: BTreeSet::new(),
+			end: AtomicUsize::new(0),
+			free: BTreeSet::new(),
+			allocated: BTreeMap::new(),
 		}
 	}
 
-	/// the `pgid` equal to `pid` is also allocated implicitly.
 	pub fn alloc_pid(&mut self) -> Pid {
-		let pid = match self.allocatable.pop_first() {
+		let pid = match self.free.pop_first() {
 			Some(s) => s,
 			None => self.end.fetch_add(1, Ordering::Relaxed),
 		};
 
+		self.allocated.insert(pid, [true, false, false]);
 		Pid(pid)
+	}
+
+	fn alloc_id(&mut self, id: usize, kind: IdKind) {
+		debug_assert!(kind != IdKind::Pid, "invalid id allocation.");
+		self.allocated
+			.entry(id)
+			.and_modify(|info| info[kind as usize] = true);
+	}
+
+	fn is_less_than_end(&self, id: usize) -> bool {
+		let end = self.end.load(Ordering::Relaxed);
+		id < end
+	}
+
+	fn free_id(&mut self, id: usize) {
+		self.allocated.remove(&id);
+		self.free.insert(id);
+	}
+
+	fn dealloc_id(&mut self, id: usize, kind: IdKind) {
+		debug_assert!(
+			self.is_less_than_end(id),
+			"invalid {:?} deallocation.",
+			kind
+		);
+
+		let info = self.allocated.get_mut(&id).expect("allocation info");
+		info[kind as usize] = false;
+
+		if info.iter().filter(|e| **e).count() == 0 {
+			self.free_id(id);
+		}
 	}
 
 	pub fn dealloc_pid(&mut self, pid: Pid) {
 		pr_debug!("DEALLOC: {:?}", pid);
-
-		let pid = pid.as_raw();
-		let end = self.end.load(Ordering::Relaxed);
-
-		debug_assert!(pid < end, "invalid pgid deallocation.");
-		debug_assert!(
-			match self.free_pgid.remove(&pid) {
-				true => self.allocatable.insert(pid),
-				false => self.free_pid.insert(pid),
-			},
-			"invalid pid deallcation"
-		);
+		self.dealloc_id(pid.as_raw(), IdKind::Pid);
 	}
 
 	pub fn dealloc_pgid(&mut self, pgid: Pgid) {
 		pr_debug!("DEALLOC: {:?}", pgid);
-		let pgid = pgid.as_raw();
-		let end = self.end.load(Ordering::Relaxed);
-
-		debug_assert!(pgid < end, "invalid pgid deallocation.");
-		match self.free_pid.remove(&pgid) {
-			true => self.allocatable.insert(pgid),
-			false => self.free_pgid.insert(pgid),
-		};
+		self.dealloc_id(pgid.as_raw(), IdKind::Pgid);
 	}
 
-	pub fn stat(&self) -> PidAllocStat {
+	pub fn dealloc_sid(&mut self, sid: Sid) {
+		pr_debug!("DEALLOC: {:?}", sid);
+		self.dealloc_id(sid.as_raw(), IdKind::Sid);
+	}
+
+	fn stat(&self) -> PidAllocStat {
 		PidAllocStat {
 			end: self.end.load(Ordering::Relaxed) as isize,
-			allocatable_cnt: self.allocatable.iter().count() as isize,
-			free_pid_cnt: self.free_pid.iter().count() as isize,
-			free_pgid_cnt: self.free_pgid.iter().count() as isize,
+			allocated_cnt: self.allocated.iter().count() as isize,
+			free_cnt: self.free.iter().count() as isize,
 		}
 	}
 }
@@ -157,111 +181,104 @@ impl PidAlloc {
 #[derive(PartialEq, Eq, Debug)]
 struct PidAllocStat {
 	end: isize,
-	allocatable_cnt: isize,
-	free_pid_cnt: isize,
-	free_pgid_cnt: isize,
+	allocated_cnt: isize,
+	free_cnt: isize,
 }
 
 impl PidAllocStat {
-	fn hand_made(
-		end: isize,
-		allocatable_cnt: isize,
-		free_pid_cnt: isize,
-		free_pgid_cnt: isize,
-	) -> Self {
+	fn hand_made(end: isize, allocated_cnt: isize, free_cnt: isize) -> Self {
 		Self {
 			end,
-			allocatable_cnt,
-			free_pid_cnt,
-			free_pgid_cnt,
-		}
-	}
-
-	fn delta(
-		&self,
-		end: isize,
-		allocatable_cnt: isize,
-		free_pid_cnt: isize,
-		free_pgid_cnt: isize,
-	) -> Self {
-		Self {
-			end: self.end + end,
-			allocatable_cnt: self.allocatable_cnt + allocatable_cnt,
-			free_pid_cnt: self.free_pid_cnt + free_pid_cnt,
-			free_pgid_cnt: self.free_pgid_cnt + free_pgid_cnt,
+			allocated_cnt,
+			free_cnt,
 		}
 	}
 }
 
 mod test {
+
 	use super::*;
 	use kfs_macro::ktest;
 
-	#[ktest(pid)]
-	fn test_allocate() {
-		let mut alloc = PidAlloc::new();
-		let prev = alloc.stat();
-		let end = prev.end as usize;
+	#[ktest(pid_alloc)]
+	fn test_alloc_pid() {
+		let mut pa = PidAlloc::new();
 
-		assert_eq!(Pid(end), alloc.alloc_pid());
-		assert_eq!(Pid(end + 1), alloc.alloc_pid());
-		assert_eq!(Pid(end + 2), alloc.alloc_pid());
+		assert_eq!(pa.alloc_pid(), Pid::from_raw(0));
+		assert_eq!(pa.alloc_pid(), Pid::from_raw(1));
 
-		assert_eq!(alloc.stat(), prev.delta(3, 0, 0, 0));
+		assert_eq!(*pa.allocated.get(&0).unwrap(), [true, false, false]);
+		assert_eq!(*pa.allocated.get(&1).unwrap(), [true, false, false]);
+
+		assert_eq!(pa.stat(), PidAllocStat::hand_made(2, 2, 0));
 	}
 
-	#[ktest(pid)]
-	fn test_pid_deallocate() {
-		let mut alloc = PidAlloc::new();
-		let prev = alloc.stat();
-		let end = prev.end as usize;
+	#[ktest(pid_alloc)]
+	fn test_dealloc_pid() {
+		let mut pa = PidAlloc::new();
 
-		assert_eq!(Pid(end), alloc.alloc_pid());
-		assert_eq!(Pid(end + 1), alloc.alloc_pid());
-		assert_eq!(Pid(end + 2), alloc.alloc_pid());
+		assert_eq!(pa.alloc_pid(), Pid::from_raw(0));
+		assert_eq!(*pa.allocated.get(&0).unwrap(), [true, false, false]);
+		pa.dealloc_pid(Pid::from_raw(0));
 
-		alloc.dealloc_pid(Pid(end));
-		alloc.dealloc_pid(Pid(end + 1));
-		alloc.dealloc_pid(Pid(end + 2));
-
-		assert_eq!(alloc.stat(), prev.delta(3, 0, 3, 0));
+		assert_eq!(pa.stat(), PidAllocStat::hand_made(1, 0, 1));
 	}
 
-	#[ktest(pid)]
-	fn test_pgid_deallocate() {
-		let mut alloc = PidAlloc::new();
-		let prev = alloc.stat();
-		let end = prev.end as usize;
+	#[ktest(pid_alloc)]
+	fn test_pgid() {
+		let pid = PID_ALLOC.lock().alloc_pid();
+		let pgid = Pgid::from(pid);
 
-		assert_eq!(Pid(end), alloc.alloc_pid());
-		assert_eq!(Pid(end + 1), alloc.alloc_pid());
-		assert_eq!(Pid(end + 2), alloc.alloc_pid());
+		let mut pa = PID_ALLOC.lock();
+		assert_eq!(
+			*pa.allocated.get(&pgid.as_raw()).unwrap(),
+			[true, true, false]
+		);
 
-		alloc.dealloc_pgid(Pgid(end));
-		alloc.dealloc_pgid(Pgid(end + 1));
-		alloc.dealloc_pgid(Pgid(end + 2));
+		pa.dealloc_pid(pid);
 
-		assert_eq!(alloc.stat(), prev.delta(3, 0, 0, 3));
+		assert_eq!(
+			*pa.allocated.get(&pgid.as_raw()).unwrap(),
+			[false, true, false]
+		);
 
-		alloc.dealloc_pid(Pid(end));
-		alloc.dealloc_pid(Pid(end + 1));
-		alloc.dealloc_pid(Pid(end + 2));
-		assert_eq!(alloc.stat(), prev.delta(3, 3, 0, 0));
+		pa.dealloc_pgid(pgid);
+
+		pa.free.get(&pgid.as_raw()).expect("id freed");
 	}
 
-	#[ktest(pid)]
-	fn test_reallocate() {
-		let mut alloc = PidAlloc::new();
-		let prev = alloc.stat();
-		let end = prev.end as usize;
+	#[ktest(pid_alloc)]
+	fn test_sid() {
+		let pid = PID_ALLOC.lock().alloc_pid();
+		let sid = Sid::from(pid);
 
-		assert_eq!(Pid(end), alloc.alloc_pid());
+		let mut pa = PID_ALLOC.lock();
+		assert_eq!(
+			*pa.allocated.get(&sid.as_raw()).unwrap(),
+			[true, false, true]
+		);
 
-		alloc.dealloc_pgid(Pgid(end));
-		alloc.dealloc_pid(Pid(end));
-		assert_eq!(alloc.stat(), prev.delta(1, 1, 0, 0));
+		pa.dealloc_pid(pid);
 
-		assert_eq!(Pid(end), alloc.alloc_pid());
-		assert_eq!(alloc.stat(), prev.delta(1, 0, 0, 0));
+		assert_eq!(
+			*pa.allocated.get(&sid.as_raw()).unwrap(),
+			[false, false, true]
+		);
+
+		pa.dealloc_sid(sid);
+
+		pa.free.get(&sid.as_raw()).expect("id freed");
+	}
+
+	#[ktest(pid_alloc)]
+	fn test_realloc() {
+		let mut pa = PID_ALLOC.lock();
+		let pid = pa.alloc_pid();
+		pa.dealloc_pid(pid);
+		pa.free.get(&pid.as_raw()).expect("id freed");
+
+		let pid2 = pa.alloc_pid();
+
+		assert_eq!(pid, pid2);
 	}
 }
