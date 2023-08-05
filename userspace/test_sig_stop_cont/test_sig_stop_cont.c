@@ -76,8 +76,8 @@ int main(void) {
 
 	// TEST 3: DeepSleep
 	// - step1: check that child process is stopped. (it doesn't print 'c')
-	// - step2: check that child process receives and does SIGINT signal twice.
-	// - step3: check that child process is running. (it prints 'c')
+	// - step2: check that child process is running. (it prints 'c')
+	// - step3: check that child process receives and does SIGINT signal twice.
 	title(3);
 	kill(pid, SIGSTOP);
 	kill(pid, SIGINT);
