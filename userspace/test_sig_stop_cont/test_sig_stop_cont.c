@@ -3,6 +3,38 @@
 const char *base_10 = "0123456789";
 const char *base_16 = "0123456789abcdef";
 
+static int convert_to_str(char *temp, int n, int is_neg) {
+	int start;
+
+	start = 10;
+	if (is_neg) {
+		temp[start--] = '0' - (n % 10);
+		n = -(n / 10);
+	} else {
+		temp[start--] = n % 10 + '0';
+		n /= 10;
+	}
+	while (n) {
+		temp[start--] = n % 10 + '0';
+		n /= 10;
+	}
+	if (is_neg)
+		temp[start--] = '-';
+	return (start + 1);
+}
+
+void ft_putnbr(int n) {
+	char temp[11];
+	int is_neg;
+	int start;
+
+	is_neg = 0;
+	if (n < 0)
+		is_neg = 1;
+	start = convert_to_str(temp, n, is_neg);
+	write(1, temp + start, 11 - start);
+}
+
 size_t ft_strlen(const char *s) {
 	size_t i = 0;
 	while (s[i]) {
