@@ -24,5 +24,6 @@ define_user_bin![
 	(SHELL, "shell.bin"),
 	(FORTYTWO, "fortytwo.bin"),
 	(TEST_SIG, "test_sig.bin"),
-	(TEST_SETXID, "test_setXid.bin")
+	(TEST_SETXID, "test_setXid.bin"),
+	(TEST_SIGSTOPCONT, "test_sig_stop_cont.bin")
 ];

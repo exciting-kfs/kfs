@@ -8,6 +8,9 @@ use crate::interrupt::syscall::errno::Errno;
 use crate::interrupt::InterruptFrame;
 use crate::mm::user::memory::Memory;
 use crate::process::relation::family::zombie::Zombie;
+use crate::scheduler::sleep::wake_up;
+use crate::signal::sig_info::SigInfo;
+use crate::signal::sig_num::SigNum;
 use crate::signal::Signal;
 use crate::sync::cpu_local::CpuLocal;
 use crate::sync::locked::{Locked, LockedGuard};
@@ -28,6 +31,7 @@ pub static TASK_QUEUE: Locked<LinkedList<Arc<Task>>> = Locked::new(LinkedList::n
 pub enum State {
 	Running,
 	Sleeping,
+	DeepSleep,
 	Exited,
 }
 
@@ -247,6 +251,20 @@ impl Task {
 		}
 
 		result
+	}
+
+	pub fn recv_signal(self: &Arc<Self>, info: SigInfo) -> Result<(), Errno> {
+		let signal = &self.user_ext_ok_or(Errno::EPERM)?.signal;
+
+		let kill = info.num == SigNum::KILL;
+		let cont = info.num == SigNum::CONT && signal.is_default(&SigNum::CONT);
+
+		if kill || cont {
+			wake_up(self, State::DeepSleep);
+		}
+
+		signal.recv_signal(info);
+		Ok(())
 	}
 }
 

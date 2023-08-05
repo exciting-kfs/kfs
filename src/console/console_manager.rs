@@ -15,7 +15,7 @@ use super::ascii;
 use crate::config::CONSOLE_COUNTS;
 use crate::driver::tty::{SyncTTY, TTYFlag, TTY};
 use crate::driver::vga::text_vga::WINDOW_SIZE;
-use crate::input::key_event::{Code, KeyEvent, KeyKind};
+use crate::input::key_event::Code;
 use crate::io::ChWrite;
 use crate::sync::locked::Locked;
 
@@ -73,7 +73,7 @@ impl ConsoleManager {
 	}
 
 	/// change foreground console.
-	pub fn set_foreground(&mut self, idx: usize) {
+	pub fn set_foreground(&self, idx: usize) {
 		if idx < CONSOLE_COUNTS {
 			let mut foreground = self.foreground.lock();
 			*foreground = idx;
@@ -85,20 +85,8 @@ impl ConsoleManager {
 	}
 }
 
-pub fn console_manager_work(key_event: &mut KeyEvent) {
-	unsafe {
-		let cm = CONSOLE_MANAGER.assume_init_mut();
-
-		if let KeyKind::Function(v) = key_event.identify() {
-			let idx = v.index() as usize;
-
-			if idx < CONSOLE_COUNTS {
-				cm.set_foreground(idx);
-			}
-		}
-
-		cm.screen_draw();
-	}
+pub fn console_screen_draw(_: &mut ()) {
+	unsafe { CONSOLE_MANAGER.assume_init_mut().screen_draw() };
 }
 
 pub fn init() {

@@ -29,9 +29,9 @@ use crate::{
 	process::{
 		exit::exit_with_signal,
 		relation::session::Session,
-		task::{Task, CURRENT},
+		task::{State, Task, CURRENT},
 	},
-	scheduler::sleep::wake_up,
+	scheduler::sleep::{sleep_and_yield, wake_up},
 	signal::{sig_flag::SigFlag, sig_handler::SigHandler, sig_num::SigNum},
 	sync::locked::Locked,
 };
@@ -90,8 +90,17 @@ impl Signal {
 
 		let mut queue = self.queue.lock();
 
+		use SigNum::*;
 		match info.num {
-			SigNum::KILL | SigNum::STOP => queue.push_front(info),
+			STOP | TSTP | TTIN | TTOU => {
+				let _ = queue.extract_if(|info| info.num == CONT);
+				queue.push_front(info);
+			}
+			CONT => {
+				let _ = queue.extract_if(|info| info.num.is_stop());
+				queue.push_front(info);
+			}
+			KILL => queue.push_front(info),
 			_ => queue.push_back(info),
 		}
 	}
@@ -105,8 +114,7 @@ impl Signal {
 				let sig_ctx = SigCtx::new(frame, o_mask, syscall_ret);
 				self.do_action(act, &info, &sig_ctx)
 			},
-			SigHandler::Terminate | SigHandler::Core => exit_with_signal(info.num),
-			x => self.do_signal_default(x),
+			x => self.do_signal_default(x, info.num),
 		};
 
 		is_syscall_restart(syscall_ret, handler.get_flag()).then_some(Restart)
@@ -120,22 +128,18 @@ impl Signal {
 				self.replace_mask(act, &info);
 				self.do_action_repeat(act, &info, frame);
 			},
-			SigHandler::Terminate | SigHandler::Core => exit_with_signal(info.num),
-			x => self.do_signal_default(x),
+			x => self.do_signal_default(x, info.num),
 		}
 	}
 
-	fn do_signal_default(&self, handler: &SigHandler) -> Option<()> {
-		// TODO stop, cont
+	fn do_signal_default(&self, handler: &SigHandler, num: SigNum) -> Option<()> {
+		use SigHandler::*;
 		match handler {
-			SigHandler::Ignore => Some(()),
-			SigHandler::Continue => {
-				pr_debug!("sig cont!");
-				Some(())
-			}
-			SigHandler::Stop => {
-				pr_debug!("sig stop!");
-				Some(())
+			Terminate | Core => exit_with_signal(num),
+			Ignore | Continue => Option::Some(()),
+			Stop => {
+				sleep_and_yield(State::DeepSleep);
+				Option::Some(())
 			}
 			_ => unreachable!(),
 		}
@@ -222,10 +226,14 @@ impl Signal {
 		ret
 	}
 
-	fn get_handler<'a>(&self, num: &SigNum) -> SigHandler {
+	fn get_handler(&self, num: &SigNum) -> SigHandler {
 		let table = self.table.lock();
 		let handler = &table[num.index()];
 		handler.clone()
+	}
+
+	pub fn is_default(&self, num: &SigNum) -> bool {
+		self.table.lock()[num.index()].is_default()
 	}
 }
 
@@ -286,11 +294,8 @@ pub fn send_signal_to(task: &Arc<Task>, sig_info: &SigInfo) -> Result<(), Errno>
 		sig_info.pid
 	);
 
-	task.user_ext_ok_or(Errno::EPERM)?
-		.signal
-		.as_ref()
-		.recv_signal(sig_info.clone());
-	wake_up(task);
+	task.recv_signal(sig_info.clone())?;
+	wake_up(task, State::Sleeping);
 	Ok(())
 }
 
