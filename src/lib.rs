@@ -80,7 +80,12 @@ fn run_test() -> ! {
 	let n_test = tests.len();
 
 	for (i, test) in tests.iter().enumerate() {
-		pr_info!("Test [{}/{}]: {}", i + 1, n_test, test.get_name());
+		pr_info!(
+			"\x1b[33mTest [{}/{}]\x1b[39m: {}",
+			i + 1,
+			n_test,
+			test.get_name()
+		);
 		test.run();
 		pr_info!("...\x1b[32mPASS\x1b[39m");
 	}

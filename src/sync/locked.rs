@@ -82,6 +82,12 @@ impl<'lock, T> LockedGuard<'lock, T> {
 impl<'lock, T> Drop for LockedGuard<'lock, T> {
 	fn drop(&mut self) {
 		self.locked.inner.unlock();
+
+		#[cfg(ktest = "atomic_op")]
+		{
+			use crate::pr_debug;
+			pr_debug!("{}", core::any::type_name::<T>());
+		}
 	}
 }
 
