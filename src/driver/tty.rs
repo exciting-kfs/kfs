@@ -8,7 +8,7 @@ use bitflags::bitflags;
 use crate::collection::LineBuffer;
 use crate::config::CONSOLE_COUNTS;
 use crate::console::console_manager::console::SyncConsole;
-use crate::console::CONSOLE_MANAGER;
+use crate::console::{console_screen_draw, CONSOLE_MANAGER};
 use crate::file::{File, FileOps, OpenFlag};
 use crate::input::key_event::*;
 use crate::input::keyboard::KEYBOARD;
@@ -17,6 +17,7 @@ use crate::io::{BlkRead, BlkWrite, ChRead, ChWrite, NoSpace};
 use crate::process::relation::session::Session;
 use crate::process::task::State;
 use crate::scheduler::sleep::{sleep_and_yield, wake_up_foreground};
+use crate::scheduler::work::schedule_fast_work;
 use crate::signal::{poll_signal_queue, send_signal_to_foreground};
 use crate::sync::locked::Locked;
 
@@ -441,6 +442,8 @@ impl ChWrite<u8> for TTY {
 			let mut console = self.console.lock();
 			console.write_one(c)?
 		}
+
+		schedule_fast_work(console_screen_draw, ());
 		Ok(())
 	}
 }
