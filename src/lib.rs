@@ -39,6 +39,7 @@ mod x86;
 use alloc::sync::Arc;
 use console::CONSOLE_MANAGER;
 use core::mem;
+use core::sync::atomic::{AtomicBool, Ordering};
 use core::{arch::asm, panic::PanicInfo};
 use driver::tty;
 use file::{File, OpenFlag};
@@ -52,6 +53,8 @@ use crate::config::CONSOLE_COUNTS;
 
 use crate::mm::alloc::page::get_available_pages;
 use crate::mm::constant::{MB, PAGE_SIZE};
+
+pub static RUN_TIME: AtomicBool = AtomicBool::new(false);
 
 /// very simple panic handler.
 /// that just print panic infomation and fall into infinity loop.
@@ -166,7 +169,7 @@ unsafe fn kernel_boot_alloc(bi_header: usize, magic: u32) {
 #[no_mangle]
 pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	driver::vga::text_vga::init();
-	driver::serial::init();
+	driver::serial::init().expect("serial COM1 that will be used at boot time.");
 
 	// caution: order sensitive.
 	unsafe { kernel_boot_alloc(bi_header, magic) };
@@ -180,15 +183,15 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	console::console_manager::init();
 
 	acpi::init();
-	interrupt::apic::io::init().unwrap();
-
-	unsafe { x86::init() };
-
+	interrupt::apic::io::init().expect("io apic init");
 	driver::ps2::init().expect("failed to init PS/2");
 
+	unsafe { x86::init() };
 	process::init();
-
 	scheduler::work::init().expect("worker thread init");
+
+	RUN_TIME.store(true, Ordering::Relaxed);
+	driver::serial::ext_init().expect("serial COM1 that will be used at run time.");
 
 	match cfg!(ktest) {
 		true => run_test(),

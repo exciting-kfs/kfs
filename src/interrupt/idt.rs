@@ -62,6 +62,7 @@ impl IDTR {
 
 extern "C" {
 	fn handle_timer();
+	fn handle_serial();
 	fn handle_syscall();
 	fn handle_keyboard();
 	fn handle_divide_error();
@@ -84,6 +85,7 @@ pub fn init() {
 
 	let keyboard = SystemDesc::new_interrupt(handle_keyboard as usize, GDT::KERNEL_CODE, DPL_USER);
 	let lapic_timer = SystemDesc::new_interrupt(handle_timer as usize, GDT::KERNEL_CODE, DPL_USER);
+	let serial_com1 = SystemDesc::new_interrupt(handle_serial as usize, GDT::KERNEL_CODE, DPL_USER);
 	let syscall = SystemDesc::new_trap(handle_syscall as usize, GDT::KERNEL_CODE, DPL_USER);
 
 	let mut idt = IDT.lock();
@@ -95,6 +97,7 @@ pub fn init() {
 
 	idt.write_interrupt(0x21, keyboard);
 	idt.write_interrupt(0x22, lapic_timer);
+	idt.write_interrupt(0x23, serial_com1);
 	idt.write_interrupt(0x80, syscall);
 
 	idt.load();

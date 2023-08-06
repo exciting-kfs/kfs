@@ -22,7 +22,7 @@ impl Pid {
 		self.0
 	}
 
-	pub fn from_raw(raw: usize) -> Self {
+	pub const fn from_raw(raw: usize) -> Self {
 		Pid(raw)
 	}
 }
