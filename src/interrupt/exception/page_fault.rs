@@ -5,6 +5,7 @@ use kfs_macro::interrupt_handler;
 
 use crate::interrupt::InterruptFrame;
 use crate::mm::alloc::Zone;
+use crate::mm::constant::PAGE_MASK;
 use crate::mm::page::PageFlag;
 use crate::mm::user::vma::{AreaFlag, UserAddressSpace};
 use crate::process::exit::exit_with_signal;
@@ -68,7 +69,7 @@ fn lookup_page_info(
 		return Err(());
 	}
 
-	let base = area.start;
+	let base = vaddr & PAGE_MASK;
 	let extra_flag = if area.flags.contains(AreaFlag::Writable) {
 		PageFlag::Write
 	} else {

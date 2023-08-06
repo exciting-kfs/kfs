@@ -26,12 +26,12 @@ pub fn sys_mmap(
 	let current = unsafe { CURRENT.get_mut() };
 	let user_ext = current.get_user_ext().expect("must be user process");
 
-	let flags = MmapFlag::from_bits(flags as u32).ok_or_else(|| Errno::EINVAL)?;
+	let flags = MmapFlag::from_bits(flags as u32).ok_or(Errno::EINVAL)?;
 	if !flags.is_all() {
 		return Err(Errno::EINVAL);
 	}
 
-	let prot = AreaFlag::from_bits(prot as u32).ok_or_else(|| Errno::EINVAL)?;
+	let prot = AreaFlag::from_bits(prot as u32).ok_or(Errno::EINVAL)?;
 
 	// misaligned address
 	if addr % PAGE_SIZE != 0 || len == 0 {

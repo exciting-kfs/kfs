@@ -92,7 +92,7 @@ impl Memory {
 
 		for i in 0..pages {
 			if let Err(_) = self.page_dir.map_user(
-				start,
+				start + i * PAGE_SIZE,
 				get_zero_page_phys(),
 				PageFlag::Present | PageFlag::User,
 			) {
