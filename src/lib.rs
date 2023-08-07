@@ -142,7 +142,7 @@ extern "C" fn show_page_stat(_: usize) -> ! {
 	loop {
 		let pages = get_available_pages();
 		pr_info!("AVAILABLE PAGES: {} ({} MB)", pages, pages * PAGE_SIZE / MB);
-		unsafe { asm!("hlt") }
+		yield_now();
 	}
 }
 

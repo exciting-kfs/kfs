@@ -36,6 +36,7 @@ SYSCALL fork,           2,              0
 SYSCALL read,           3,              3
 SYSCALL write,          4,              3
 SYSCALL open,           5,              0 ; FIXME
+SYSCALL close,          6,              1
 SYSCALL waitpid,        7,              3
 SYSCALL exec,           11,             1
 SYSCALL getpid,         20,             0

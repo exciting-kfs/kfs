@@ -40,7 +40,7 @@ export LDFLAGS
 
 # targets
 
-MODULES := init shell fortytwo test_sig test_setXid test_sig_stop_cont
+MODULES := init shell test_pipe test_sig test_setXid test_sig_stop_cont
 
 LIBSYSTEM := $(BUILDDIR)/libsystem.a
 

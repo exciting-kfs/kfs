@@ -1,6 +1,6 @@
 use core::{mem::size_of, sync::atomic::Ordering};
 
-use crate::{interrupt::InterruptFrame, pr_debug, process::task::CURRENT, register, RUN_TIME};
+use crate::{interrupt::InterruptFrame, process::task::CURRENT, register, RUN_TIME};
 
 use super::{
 	kernel_stack_bottom,
@@ -65,7 +65,6 @@ impl Iterator for Iter {
 			return None;
 		}
 
-		let before = self.base;
 		let ret = Some(Stackframe::new(self.base));
 		self.base = stackframe::next(self.base);
 		ret

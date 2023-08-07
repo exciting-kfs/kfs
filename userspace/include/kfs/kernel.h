@@ -16,6 +16,7 @@ ssize_t write(int fildes, const void *buf, size_t nbyte);
 
 // FIXME
 int open();
+int close(int fildes);
 
 int exec(const char *name);
 
