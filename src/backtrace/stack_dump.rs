@@ -53,7 +53,6 @@ impl Iter {
 		} else {
 			kernel_stack_bottom as usize
 		};
-		pr_debug!("end: {:x}", end);
 
 		Self { base, end }
 	}
@@ -69,7 +68,6 @@ impl Iterator for Iter {
 		let before = self.base;
 		let ret = Some(Stackframe::new(self.base));
 		self.base = stackframe::next(self.base);
-		pr_debug!("before: {:x}, after: {:x}", before, self.base);
 		ret
 	}
 }
