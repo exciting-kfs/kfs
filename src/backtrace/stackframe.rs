@@ -6,8 +6,8 @@ pub struct Stackframe {
 }
 
 impl Stackframe {
-	pub fn new(base_ptr: *const usize) -> Self {
-		let fa = func_addr_near(base_ptr);
+	pub fn new(base_ptr: usize) -> Self {
+		let fa = func_addr_near(base_ptr as *const usize);
 
 		Stackframe { fn_addr: fa }
 	}
@@ -49,8 +49,8 @@ fn offset_near(ret_addr: *const u8) -> isize {
 }
 
 /// Get the base pointer of the next frame.
-pub fn next(base_ptr: *const usize) -> *const usize {
-	let mut ret: *const usize;
+pub fn next(base_ptr: usize) -> usize {
+	let mut ret;
 	unsafe {
 		asm!(
 			"mov {0}, [{1}]",
