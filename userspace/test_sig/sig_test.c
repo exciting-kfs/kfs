@@ -1,40 +1,5 @@
 #include <kfs/kernel.h>
-
-const char *base_10 = "0123456789";
-const char *base_16 = "0123456789abcdef";
-
-void ft_putnbr_x(size_t num) {
-	if (num / 16) {
-		ft_putnbr_x(num / 16);
-	}
-	write(0, &base_16[num % 16], 1);
-}
-
-void ft_putnbr(int num) {
-
-	if (num < 0) {
-		write(0, "-", 1);
-		num = -num;
-	}
-
-	if (num / 10) {
-		ft_putnbr(num / 10);
-	}
-	write(0, &base_10[num % 10], 1);
-}
-
-size_t ft_strlen(const char *s) {
-	size_t i = 0;
-	while (s[i]) {
-		i++;
-	}
-	return i;
-}
-
-void ft_putstr_fd(int fd, const char *s) {
-	size_t n = ft_strlen(s);
-	write(fd, s, n);
-}
+#include <kfs/ft.h>
 
 void sig_int(int num) {
 	(void)num;
@@ -64,64 +29,64 @@ void sig_action(int num, siginfo_t *info, void *sig_ctx) {
 	(void)num;
 	(void)sig_ctx;
 
-	write(0, "sig action!\n", 13);
+	ft_putstr("sig action!\n");
 
-	ft_putstr_fd(0, "==== sig info ====\n");
+	ft_putstr("==== sig info ====\n");
 
-	ft_putstr_fd(0, "num: ");
+	ft_putstr("num: ");
 	ft_putnbr_x(info->num);
 
-	ft_putstr_fd(0, "  pid: "); // TODO '\t' not working.
+	ft_putstr("  pid: "); // TODO '\t' not working.
 	ft_putnbr_x(info->pid);
 
-	ft_putstr_fd(0, "\nuid: ");
+	ft_putstr("\nuid: ");
 	ft_putnbr_x(info->uid);
 
-	ft_putstr_fd(0, "  code: ");
+	ft_putstr("  code: ");
 	ft_putnbr_x(info->code);
 
 	ucontext_t *u = sig_ctx;
-	ft_putstr_fd(0, "\n==== sig context ====");
+	ft_putstr("\n==== sig context ====");
 
-	ft_putstr_fd(0, "\nebp: ");
+	ft_putstr("\nebp: ");
 	ft_putnbr_x(u->ebp);
-	ft_putstr_fd(0, "  edi: ");
+	ft_putstr("  edi: ");
 	ft_putnbr_x(u->edi);
-	ft_putstr_fd(0, "\nesi: ");
+	ft_putstr("\nesi: ");
 	ft_putnbr_x(u->esi);
-	ft_putstr_fd(0, "  edx: ");
+	ft_putstr("  edx: ");
 	ft_putnbr_x(u->edx);
-	ft_putstr_fd(0, "\necx: ");
+	ft_putstr("\necx: ");
 	ft_putnbr_x(u->ecx);
-	ft_putstr_fd(0, "  ebx: ");
+	ft_putstr("  ebx: ");
 	ft_putnbr_x(u->ebx);
-	ft_putstr_fd(0, "\neax: ");
+	ft_putstr("\neax: ");
 	ft_putnbr_x(u->eax);
-	ft_putstr_fd(0, "  ds: ");
+	ft_putstr("  ds: ");
 	ft_putnbr_x(u->ds);
-	ft_putstr_fd(0, "\nes: ");
+	ft_putstr("\nes: ");
 	ft_putnbr_x(u->es);
-	ft_putstr_fd(0, "  fs: ");
+	ft_putstr("  fs: ");
 	ft_putnbr_x(u->fs);
-	ft_putstr_fd(0, "\ngs: ");
+	ft_putstr("\ngs: ");
 	ft_putnbr_x(u->gs);
-	ft_putstr_fd(0, "  handler: ");
+	ft_putstr("  handler: ");
 	ft_putnbr_x(u->handler);
-	ft_putstr_fd(0, "\nerror_code: ");
+	ft_putstr("\nerror_code: ");
 	ft_putnbr_x(u->error_code);
-	ft_putstr_fd(0, "  eip: ");
+	ft_putstr("  eip: ");
 	ft_putnbr_x(u->eip);
-	ft_putstr_fd(0, "\ncs: ");
+	ft_putstr("\ncs: ");
 	ft_putnbr_x(u->cs);
-	ft_putstr_fd(0, "  eflags: ");
+	ft_putstr("  eflags: ");
 	ft_putnbr_x(u->eflags);
-	ft_putstr_fd(0, "\nesp: ");
+	ft_putstr("\nesp: ");
 	ft_putnbr_x(u->esp);
-	ft_putstr_fd(0, "  ss: ");
+	ft_putstr("  ss: ");
 	ft_putnbr_x(u->ss);
-	ft_putstr_fd(0, "\nmask: ");
+	ft_putstr("\nmask: ");
 	ft_putnbr_x(u->mask);
-	ft_putstr_fd(0, "  syscall_ret: ");
+	ft_putstr("  syscall_ret: ");
 	ft_putnbr(u->syscall_ret);
 
 	write(0, "\nsig action done\n", 17);
@@ -221,8 +186,5 @@ int main(void) {
 	sigaction(SIGINT, &g, NULL);
 	next_test(10);
 
-	write(0, "loop\n", 5);
-	while (1) {
-	}
 	return 0;
 }
