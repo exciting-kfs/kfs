@@ -9,6 +9,9 @@ use crate::sync::cpu_local::CpuLocal;
 
 use super::TryLockFail;
 
+/// ## Caution
+///
+/// - In `SpinLock` implementation, we can't use `printk` function.
 #[derive(Debug)]
 pub struct SpinLock {
 	lock_atomic: AtomicBool,

@@ -8,8 +8,8 @@ use crate::sync::locked::Locked;
 use crate::util::bitrange::{BitData, BitRange};
 
 pub const KEYBOARD_IRQ: usize = 1;
-pub const SERIAL_PORT1: usize = 3;
-pub const SERIAL_PORT2: usize = 4;
+pub const SERIAL_COM1_IRQ: usize = 4;
+pub const SERIAL_COM2_IRQ: usize = 3;
 
 pub static IO_APIC: Locked<MaybeUninit<IOAPIC>> = Locked::uninit();
 
@@ -17,6 +17,7 @@ pub static IO_APIC: Locked<MaybeUninit<IOAPIC>> = Locked::uninit();
 pub enum IOAPICError {
 	UnknownLayout,
 	InvalidBaseAddr,
+	IndexOutOfRange,
 }
 
 pub fn init() -> Result<(), IOAPICError> {
@@ -40,52 +41,26 @@ pub fn init() -> Result<(), IOAPICError> {
 
 	let apic = unsafe { apic.assume_init_mut() };
 
-	let mut keyboard_redir = apic.read_redir(KEYBOARD_IRQ).expect("IRQ number too high.");
+	let mut keyboard_redir = apic.read_redir(KEYBOARD_IRQ)?;
+	let mut serial_com1 = apic.read_redir(SERIAL_COM1_IRQ)?;
 
-	keyboard_redir
-		.set_vector(0x21)
-		.set_delivery_mode(DeliveryMode::Fixed)
-		.set_dest_mode(DestMode::Physical)
-		.set_trigger_mode(TriggerMode::Edge)
-		.set_mask(false)
-		.set_destination(0);
+	keyboard_redir.set_default(0x21);
+	serial_com1.set_default(0x23);
 
-	apic.write_redir(KEYBOARD_IRQ, keyboard_redir)
-		.expect("IRQ number too high.");
+	apic.write_redir(KEYBOARD_IRQ, keyboard_redir)?;
+	apic.write_redir(SERIAL_COM1_IRQ, serial_com1)?;
 
-	remap_irq();
 	disable_8259_pic();
 
 	Ok(())
 }
 
-// TODO wait? study... keyboard interrupt handling
 fn disable_8259_pic() {
-	let pic_master_data: Port = Port::new(0x21);
-	let pic_slave_data: Port = Port::new(0xa1);
+	let master_data: Port = Port::new(0x21);
+	let slave_data: Port = Port::new(0xa1);
 
-	pic_master_data.write_byte(0xff);
-	pic_slave_data.write_byte(0xff);
-}
-
-// TODO wait? study... keyboard interrupt handling
-fn remap_irq() {
-	let pic_master_command: Port = Port::new(0x20);
-	let pic_slave_command: Port = Port::new(0xa0);
-	let pic_master_data: Port = Port::new(0x21);
-	let pic_slave_data: Port = Port::new(0xa1);
-
-	pic_master_command.write_byte(0x11);
-	pic_slave_command.write_byte(0x11);
-
-	pic_master_data.write_byte(0x20);
-	pic_slave_data.write_byte(0x28);
-
-	pic_master_data.write_byte(0x4);
-	pic_slave_data.write_byte(0x2);
-
-	pic_master_data.write_byte(0x1);
-	pic_slave_data.write_byte(0x1);
+	master_data.write_byte(0xff);
+	slave_data.write_byte(0xff);
 }
 
 pub struct IOAPIC {
@@ -140,9 +115,13 @@ impl IOAPIC {
 		unsafe { self.read_indirect_reg(Self::VERSION_INDEX) }
 	}
 
-	pub fn write_redir(&mut self, irq_number: usize, entry: RedirectionTable) -> Result<(), ()> {
+	pub fn write_redir(
+		&mut self,
+		irq_number: usize,
+		entry: RedirectionTable,
+	) -> Result<(), IOAPICError> {
 		if irq_number >= Self::REDIR_TABLE_COUNT {
-			return Err(());
+			return Err(IOAPICError::IndexOutOfRange);
 		}
 
 		let (low_idx, high_idx) = Self::redir_table_index(irq_number);
@@ -155,9 +134,9 @@ impl IOAPIC {
 		Ok(())
 	}
 
-	pub fn read_redir(&mut self, irq_number: usize) -> Result<RedirectionTable, ()> {
+	pub fn read_redir(&mut self, irq_number: usize) -> Result<RedirectionTable, IOAPICError> {
 		if irq_number >= Self::REDIR_TABLE_COUNT {
-			return Err(());
+			return Err(IOAPICError::IndexOutOfRange);
 		}
 
 		let (low_idx, high_idx) = Self::redir_table_index(irq_number);
@@ -174,6 +153,16 @@ impl IOAPIC {
 			high: BitData::new(high as usize),
 		})
 	}
+}
+
+pub fn set_irq_mask(irq_number: usize, mask: bool) -> Result<(), IOAPICError> {
+	let mut lock = IO_APIC.lock();
+	let ioapic = unsafe { lock.assume_init_mut() };
+
+	let mut irq = ioapic.read_redir(irq_number)?;
+	irq.set_mask(mask);
+	ioapic.write_redir(irq_number, irq)?;
+	Ok(())
 }
 
 #[repr(packed)]
@@ -217,6 +206,15 @@ impl RedirectionTable {
 			low: BitData::new(low),
 			high: BitData::new(high),
 		}
+	}
+
+	pub fn set_default(&mut self, vector: usize) -> &mut Self {
+		self.set_vector(vector)
+			.set_delivery_mode(DeliveryMode::Fixed)
+			.set_dest_mode(DestMode::Physical)
+			.set_trigger_mode(TriggerMode::Edge)
+			.set_mask(false)
+			.set_destination(0)
 	}
 
 	pub fn set_vector(&mut self, vector: usize) -> &mut Self {

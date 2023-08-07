@@ -108,17 +108,24 @@ macro_rules! fmt_with {
     };
 }
 
-use crate::driver::serial;
-use core::fmt::{Arguments, Result, Write};
+use crate::{driver::serial, sync::spinlock::SpinLock, RUN_TIME};
+use core::{
+	fmt::{Arguments, Result, Write},
+	sync::atomic::Ordering,
+};
+
+static PRINTK_LOCK: SpinLock = SpinLock::new();
 
 pub fn __printk(arg: Arguments) -> Result {
 	let result;
-	unsafe {
-		result = match cfg!(ktest) {
-			true => Ok(()),
-			false => Ok(()), //DMESG.lock().write_fmt(arg),
-		}
-		.and_then(|_| serial::COM1.write_fmt(arg));
+	if RUN_TIME.load(Ordering::Relaxed) {
+		PRINTK_LOCK.lock();
+
+		result = unsafe { serial::SERIAL_EXT_COM1.write_fmt(arg) };
+
+		PRINTK_LOCK.unlock();
+	} else {
+		result = unsafe { serial::SERIAL_COM1.write_fmt(arg) };
 	}
 
 	result

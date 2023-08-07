@@ -1,6 +1,22 @@
 //! serial (COM1) driver
 //! - see also <https://en.wikibooks.org/w/index.php?title=Serial_Programming/8250_UART_Programming>
-use crate::io::pmio::Port;
+
+use alloc::sync::Arc;
+use kfs_macro::interrupt_handler;
+
+use crate::{
+	interrupt::{
+		apic::{
+			io::{set_irq_mask, SERIAL_COM1_IRQ},
+			local::LOCAL_APIC,
+		},
+		InterruptFrame,
+	},
+	io::pmio::Port,
+	pr_warn,
+	process::task::{State, Task, CURRENT},
+	scheduler::sleep::{sleep_and_yield, wake_up},
+};
 
 #[derive(Debug)]
 pub enum Error {
@@ -12,8 +28,8 @@ type Result = core::result::Result<(), Error>;
 const COM1_PORT: u16 = 0x3f8;
 const COM2_PORT: u16 = 0x2f8;
 
-pub static mut COM1: Serial = Serial::new(COM1_PORT);
-// pub static mut COM2: Serial = Serial::new(COM2_PORT);
+pub static mut SERIAL_COM1: Serial = Serial::new(COM1_PORT);
+pub static mut SERIAL_EXT_COM1: SerialExt = SerialExt::new(COM1_PORT, SERIAL_COM1_IRQ);
 
 pub struct Serial {
 	data: Port,
@@ -24,6 +40,12 @@ pub struct Serial {
 	line_status: Port,
 	modem_status: Port,
 	scratch: Port,
+}
+
+pub struct SerialExt {
+	serial: Serial,
+	waiting_task: Option<Arc<Task>>,
+	irq_num: usize,
 }
 
 impl Serial {
@@ -78,6 +100,10 @@ impl Serial {
 		self.interrupt_enable.write_byte(0x00);
 	}
 
+	fn enable_interrupts(&self, ier: u8) {
+		self.interrupt_enable.write_byte(ier);
+	}
+
 	fn set_divisor_latch(&self, turn_on: bool) {
 		let old = self.line_control.read_byte();
 
@@ -130,7 +156,30 @@ impl Serial {
 	}
 }
 
-unsafe impl Sync for Serial {}
+impl SerialExt {
+	pub const fn new(base: u16, irq_num: usize) -> Self {
+		Self {
+			serial: Serial::new(base),
+			waiting_task: None,
+			irq_num,
+		}
+	}
+
+	pub fn waiting_task(&mut self) -> Option<Arc<Task>> {
+		core::mem::take(&mut self.waiting_task)
+	}
+
+	pub fn init(&self) -> Result {
+		// enable `Transmitter Holding Resister Empty` interrupt.
+		self.serial.enable_interrupts(1 << 1);
+		// buad rate = 38400
+		self.serial.set_baud_rate_divisor(3);
+		self.serial.init_line_control();
+		self.serial.disable_fifo();
+
+		return self.serial.self_diagnosis();
+	}
+}
 
 impl core::fmt::Write for Serial {
 	fn write_str(&mut self, s: &str) -> core::fmt::Result {
@@ -138,14 +187,44 @@ impl core::fmt::Write for Serial {
 			while !self.write_available() {}
 			self.data.write_byte(ch);
 		}
-
 		Ok(())
 	}
 }
 
-pub fn init() {
-	unsafe {
-		COM1.init().expect("failed to init COM1 serial port");
-		// COM2.init().expect("failed to init COM2 serial port");
+impl core::fmt::Write for SerialExt {
+	fn write_str(&mut self, s: &str) -> core::fmt::Result {
+		let mut i = 0;
+		while i < s.len() {
+			let ch = s.as_bytes()[i];
+			if self.serial.write_available() {
+				self.serial.data.write_byte(ch);
+				i += 1;
+			} else {
+				set_irq_mask(self.irq_num, false).expect("setting mask of IRQ");
+				self.waiting_task = Some(unsafe { CURRENT.get_mut() }.clone());
+				sleep_and_yield(State::Sleeping);
+			}
+		}
+		Ok(())
 	}
+}
+
+pub fn init() -> Result {
+	unsafe { SERIAL_COM1.init() }
+}
+
+pub fn ext_init() -> Result {
+	unsafe { SERIAL_EXT_COM1.init() }
+}
+
+#[interrupt_handler]
+pub extern "C" fn handle_serial_impl(_frame: InterruptFrame) {
+	pr_warn!("serial");
+
+	if let Some(task) = unsafe { SERIAL_EXT_COM1.waiting_task() } {
+		wake_up(&task, State::Sleeping)
+	}
+
+	set_irq_mask(SERIAL_COM1_IRQ, true).expect("setting mask of IRQ"); // irq num?
+	LOCAL_APIC.end_of_interrupt();
 }
