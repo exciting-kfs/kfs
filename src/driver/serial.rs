@@ -13,7 +13,6 @@ use crate::{
 		InterruptFrame,
 	},
 	io::pmio::Port,
-	pr_warn,
 	process::task::{State, Task, CURRENT},
 	scheduler::sleep::{sleep_and_yield, wake_up},
 };
@@ -219,10 +218,8 @@ pub fn ext_init() -> Result {
 
 #[interrupt_handler]
 pub extern "C" fn handle_serial_impl(_frame: InterruptFrame) {
-	pr_warn!("serial");
-
 	if let Some(task) = unsafe { SERIAL_EXT_COM1.waiting_task() } {
-		wake_up(&task, State::Sleeping)
+		wake_up(&task, State::Sleeping);
 	}
 
 	set_irq_mask(SERIAL_COM1_IRQ, true).expect("setting mask of IRQ"); // irq num?

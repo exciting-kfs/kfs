@@ -68,7 +68,11 @@ extern "C" {
 	fn handle_divide_error();
 	fn handle_invalid_opcode();
 	fn handle_general_protection();
+	fn handle_control_protection();
+	fn handle_not_present();
+	fn handle_tss_fault();
 	fn handle_page_fault();
+	fn handle_stack_fault();
 	fn handle_double_fault();
 }
 
@@ -80,8 +84,16 @@ pub fn init() {
 		GDT::KERNEL_CODE,
 		DPL_USER,
 	);
+	let cp = SystemDesc::new_interrupt(
+		handle_control_protection as usize,
+		GDT::KERNEL_CODE,
+		DPL_USER,
+	);
+	let np = SystemDesc::new_interrupt(handle_not_present as usize, GDT::KERNEL_CODE, DPL_USER);
 	let pf = SystemDesc::new_interrupt(handle_page_fault as usize, GDT::KERNEL_CODE, DPL_USER);
 	let df = SystemDesc::new_interrupt(handle_double_fault as usize, GDT::KERNEL_CODE, DPL_USER);
+	let ss = SystemDesc::new_interrupt(handle_stack_fault as usize, GDT::KERNEL_CODE, DPL_USER);
+	let ts = SystemDesc::new_interrupt(handle_tss_fault as usize, GDT::KERNEL_CODE, DPL_USER);
 
 	let keyboard = SystemDesc::new_interrupt(handle_keyboard as usize, GDT::KERNEL_CODE, DPL_USER);
 	let lapic_timer = SystemDesc::new_interrupt(handle_timer as usize, GDT::KERNEL_CODE, DPL_USER);
@@ -90,10 +102,14 @@ pub fn init() {
 
 	let mut idt = IDT.lock();
 	idt.write_exception(CpuException::DE, de);
+	idt.write_exception(CpuException::UD, ud);
+	idt.write_exception(CpuException::TS, ts);
+	idt.write_exception(CpuException::NP, np);
+	idt.write_exception(CpuException::SS, ss);
+	idt.write_exception(CpuException::GP, gp);
 	idt.write_exception(CpuException::DF, df);
 	idt.write_exception(CpuException::PF, pf);
-	idt.write_exception(CpuException::UD, ud);
-	idt.write_exception(CpuException::GP, gp);
+	idt.write_exception(CpuException::CP, cp);
 
 	idt.write_interrupt(0x21, keyboard);
 	idt.write_interrupt(0x22, lapic_timer);

@@ -1,43 +1,73 @@
-use super::stackframe_iter::StackframeIter;
-use crate::register;
+use core::{mem::size_of, sync::atomic::Ordering};
 
-use super::stackframe::{self, Stackframe};
+use crate::{interrupt::InterruptFrame, pr_debug, process::task::CURRENT, register, RUN_TIME};
+
+use super::{
+	kernel_stack_bottom,
+	stackframe::{self, Stackframe},
+};
 
 /// The type that holds the top most base pointer of the generated context.
 pub struct StackDump {
-	begin: *const usize,
+	begin: usize,
 }
 
 impl StackDump {
 	#[inline(never)]
 	pub fn new() -> StackDump {
-		let bp = register!("ebp") as *const usize;
+		let bp = register!("ebp");
 		let bp = stackframe::next(bp);
 
 		StackDump { begin: bp }
 	}
 
-	pub fn iter(&self) -> StackframeIter {
-		self.into_iter()
+	pub fn iter(&self) -> Iter {
+		Iter::new(self.begin as usize)
 	}
 }
 
 impl IntoIterator for StackDump {
-	type IntoIter = StackframeIter;
 	type Item = Stackframe;
+	type IntoIter = Iter;
 	fn into_iter(self) -> Self::IntoIter {
-		StackframeIter {
-			base_ptr: self.begin,
-		}
+		self.iter()
 	}
 }
 
-impl IntoIterator for &StackDump {
-	type IntoIter = StackframeIter;
+pub struct Iter {
+	base: usize,
+	end: usize,
+}
+
+impl Iter {
+	fn new(base: usize) -> Self {
+		let end = if RUN_TIME.load(Ordering::Relaxed) {
+			let current = unsafe { CURRENT.get_mut() };
+			let stack_base = current.kstack_base();
+			let user = current.get_user_ext().is_some();
+			if user {
+				stack_base - size_of::<InterruptFrame>() - size_of::<usize>() * 2
+			} else {
+				stack_base - size_of::<usize>() * 4
+			}
+		} else {
+			kernel_stack_bottom as usize
+		};
+
+		Self { base, end }
+	}
+}
+
+impl Iterator for Iter {
 	type Item = Stackframe;
-	fn into_iter(self) -> Self::IntoIter {
-		StackframeIter {
-			base_ptr: self.begin,
+	fn next(&mut self) -> Option<Self::Item> {
+		if self.base == self.end {
+			return None;
 		}
+
+		let before = self.base;
+		let ret = Some(Stackframe::new(self.base));
+		self.base = stackframe::next(self.base);
+		ret
 	}
 }

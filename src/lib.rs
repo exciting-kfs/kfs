@@ -37,7 +37,6 @@ mod util;
 mod x86;
 
 use alloc::sync::Arc;
-use console::CONSOLE_MANAGER;
 use core::mem;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::{arch::asm, panic::PanicInfo};
@@ -49,8 +48,7 @@ use process::task::{Task, TASK_QUEUE};
 use scheduler::work::slow_worker;
 use test::{exit_qemu_with, TEST_ARRAY};
 
-use crate::config::CONSOLE_COUNTS;
-
+use crate::interrupt::irq_disable;
 use crate::mm::alloc::page::get_available_pages;
 use crate::mm::constant::{MB, PAGE_SIZE};
 
@@ -62,15 +60,10 @@ pub static RUN_TIME: AtomicBool = AtomicBool::new(false);
 /// we should make sure no more `panic!()` from here.
 #[panic_handler]
 fn panic_handler_impl(info: &PanicInfo) -> ! {
+	irq_disable();
 	printk_panic!("{}\ncall stack (most recent call first)\n", info);
 
-	unsafe {
-		print_stacktrace!();
-		CONSOLE_MANAGER
-			.assume_init_mut()
-			.set_foreground(CONSOLE_COUNTS - 1);
-		CONSOLE_MANAGER.assume_init_mut().screen_draw();
-	};
+	print_stacktrace!();
 
 	if cfg!(ktest) {
 		exit_qemu_with(1);

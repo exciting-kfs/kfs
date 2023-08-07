@@ -3,16 +3,21 @@
 mod register;
 mod stack_dump;
 mod stackframe;
-mod stackframe_iter;
 
 use rustc_demangle::demangle;
+
+extern "C" {
+	/// Do not __call__ this function. it's not function at all.
+	/// but just pointer, which points bottom of the kernel stack.
+	pub fn kernel_stack_bottom();
+
+	pub fn kernel_stack_top();
+}
 
 use crate::boot;
 use crate::pr_info;
 
 pub use stack_dump::StackDump;
-pub use stackframe_iter::kernel_stack_bottom;
-pub use stackframe_iter::kernel_stack_top;
 
 pub struct Backtrace {
 	stack: StackDump,
@@ -23,7 +28,7 @@ impl Backtrace {
 		Backtrace { stack }
 	}
 
-	/// Print call stack trace of StackDump.
+	/// Print call stack trace of `StackDump`.
 	pub fn print_trace(&self) {
 		for (idx, frame) in self.stack.iter().enumerate() {
 			let ksyms = &boot::get_ksyms();
