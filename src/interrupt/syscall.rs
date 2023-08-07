@@ -4,6 +4,7 @@ use alloc::sync::Arc;
 
 use crate::driver::pipe::sys_pipe;
 use crate::driver::tty;
+use crate::file::close::sys_close;
 use crate::file::read::sys_read;
 use crate::file::write::sys_write;
 use crate::file::{File, OpenFlag};
@@ -74,6 +75,7 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 			sys_write(frame.ebx as isize, frame.ecx as *mut u8, frame.edx)
 		}
 		5 => sys_open(),
+		6 => sys_close(frame.ebx as isize),
 		7 => sys_waitpid(frame.ebx as isize, frame.ecx as *mut isize, frame.edx),
 		11 => sys_exec(frame, frame.ebx),
 		20 => sys_getpid(),

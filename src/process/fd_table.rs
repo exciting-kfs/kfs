@@ -1,7 +1,7 @@
 use alloc::sync::Arc;
-use core::array;
+use core::{array, ops::IndexMut};
 
-use crate::file::File;
+use crate::{file::File, interrupt::syscall::errno::Errno};
 
 const FDTABLE_SIZE: usize = 256;
 
@@ -46,8 +46,15 @@ impl FdTable {
 		Some(Fd(fd))
 	}
 
-	pub fn close(&mut self, fd: Fd) {
-		self.0[fd.index()] = None;
+	pub fn close(&mut self, fd: Fd) -> Result<usize, Errno> {
+		let entry = self.0.index_mut(fd.index());
+
+		if entry.is_none() {
+			Err(Errno::EBADF)
+		} else {
+			*entry = None;
+			Ok(0)
+		}
 	}
 
 	pub fn clear(&mut self) {

@@ -226,7 +226,7 @@ impl Task {
 	}
 
 	pub fn exit(&self, status: ExitStatus) {
-		*self.lock_state() = State::Exited;
+		let mut state = self.lock_state();
 
 		PROCESS_TREE.lock().remove(&self.pid);
 
@@ -235,8 +235,14 @@ impl Task {
 			return;
 		}
 
-		let ext = self.get_user_ext().unwrap();
-		ext.lock_relation().exit(self.pid, status);
+		if let Some(ref ext) = self.user_ext {
+			let mut rel = ext.lock_relation();
+			rel.exit(self.pid, status);
+			let pgrp = &mut rel.pgroup;
+			pgrp.lock_members().remove(&self.pid);
+		}
+
+		*state = State::Exited;
 	}
 
 	pub fn waitpid(&self, who: Who) -> Result<Zombie, Errno> {
@@ -265,18 +271,5 @@ impl Task {
 
 		signal.recv_signal(info);
 		Ok(())
-	}
-}
-
-impl Drop for Task {
-	fn drop(&mut self) {
-		if let Some(ref ext) = self.user_ext {
-			let mut rel = ext.lock_relation();
-			let pgrp = &mut rel.pgroup;
-
-			pgrp.lock_members().remove(&self.pid);
-
-			Pid::deallocate(self.pid);
-		}
 	}
 }
