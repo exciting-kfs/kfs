@@ -108,17 +108,17 @@ macro_rules! fmt_with {
     };
 }
 
-use crate::{driver::serial, sync::spinlock::SpinLock, RUN_TIME};
+use crate::{driver::serial, interrupt::get_interrupt_flag, process::context::yield_now};
 use core::{
 	fmt::{Arguments, Result, Write},
-	sync::atomic::Ordering,
+	sync::atomic::{AtomicBool, Ordering},
 };
 
-static PRINTK_LOCK: SpinLock = SpinLock::new();
+static PRINTK_LOCK: PrintkLock = PrintkLock::new();
 
 pub fn __printk(arg: Arguments) -> Result {
 	let result;
-	if RUN_TIME.load(Ordering::Relaxed) {
+	if get_interrupt_flag() {
 		PRINTK_LOCK.lock();
 
 		result = unsafe { serial::SERIAL_EXT_COM1.write_fmt(arg) };
@@ -129,4 +129,30 @@ pub fn __printk(arg: Arguments) -> Result {
 	}
 
 	result
+}
+
+#[derive(Debug)]
+pub struct PrintkLock {
+	lock_atomic: AtomicBool,
+}
+
+impl PrintkLock {
+	pub const fn new() -> Self {
+		PrintkLock {
+			lock_atomic: AtomicBool::new(false),
+		}
+	}
+
+	pub fn lock(&self) {
+		while let Err(_) =
+			self.lock_atomic
+				.compare_exchange(false, true, Ordering::Acquire, Ordering::Acquire)
+		{
+			yield_now();
+		}
+	}
+
+	pub fn unlock(&self) {
+		self.lock_atomic.store(false, Ordering::Release);
+	}
 }
