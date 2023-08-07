@@ -62,34 +62,33 @@ impl<T: PipeEnd> Pipe<T> {
 
 impl FileOps for Pipe<ReadEnd> {
 	fn read(&self, file: &Arc<File>, buf: &mut [u8]) -> Result<usize, Errno> {
-		let total_len = buf.len();
-
 		let mut out_buf = buf;
-		let mut read = 0;
+		let mut total_read = 0;
 		while out_buf.len() != 0 {
 			let mut pipe_buf = self.lock_buffer();
 
-			read += pipe_buf.data.read(out_buf);
+			let curr_read = pipe_buf.data.read(out_buf);
+			total_read += curr_read;
 
 			if pipe_buf.widowed {
-				return Ok(read);
+				return Ok(total_read);
 			}
 
 			if file.open_flag.contains(OpenFlag::O_NONBLOCK) {
-				match read {
+				match curr_read {
 					0 => return Err(Errno::EAGAIN),
 					x => return Ok(x),
 				}
 			}
 
-			let (_, remain) = out_buf.split_at_mut(read);
+			let (_, remain) = out_buf.split_at_mut(curr_read);
 			out_buf = remain;
 
 			mem::drop(pipe_buf);
 			yield_now();
 		}
 
-		Ok(total_len)
+		Ok(total_read)
 	}
 
 	fn write(&self, _file: &Arc<File>, _buf: &[u8]) -> Result<usize, Errno> {
@@ -103,9 +102,8 @@ impl FileOps for Pipe<WriteEnd> {
 	}
 
 	fn write(&self, file: &Arc<File>, buf: &[u8]) -> Result<usize, Errno> {
-		let total_len = buf.len();
-
 		let mut in_buf = buf;
+		let mut total_write = 0;
 		while in_buf.len() != 0 {
 			let mut pipe_buf = self.lock_buffer();
 
@@ -124,23 +122,24 @@ impl FileOps for Pipe<WriteEnd> {
 				return Err(Errno::EPIPE);
 			}
 
-			let write = pipe_buf.data.write(in_buf);
+			let curr_write = pipe_buf.data.write(in_buf);
+			total_write += curr_write;
 
 			if file.open_flag.contains(OpenFlag::O_NONBLOCK) {
-				match write {
+				match curr_write {
 					0 => return Err(Errno::EAGAIN),
 					x => return Ok(x),
 				}
 			}
 
-			let (_, remain) = in_buf.split_at(write);
+			let (_, remain) = in_buf.split_at(curr_write);
 			in_buf = remain;
 
 			mem::drop(pipe_buf);
 			yield_now();
 		}
 
-		Ok(total_len)
+		Ok(total_write)
 	}
 }
 
