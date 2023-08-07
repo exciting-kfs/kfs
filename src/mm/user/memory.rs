@@ -3,10 +3,11 @@ use core::ptr::NonNull;
 use core::slice::from_raw_parts;
 
 use crate::config::TRAMPOLINE_BASE;
+use crate::interrupt::syscall::errno::Errno;
 use crate::mm::alloc::page::free_pages;
 use crate::mm::alloc::virt::{kmap, kunmap};
 use crate::mm::alloc::Zone;
-use crate::mm::page::{PageFlag, PD};
+use crate::mm::page::{get_zero_page_phys, PageFlag, PD};
 use crate::mm::{constant::*, util::*};
 use crate::ptr::PageBox;
 
@@ -63,20 +64,73 @@ impl Memory {
 		return true;
 	}
 
+	pub fn mmap_private(
+		&mut self,
+		start: usize,
+		pages: usize,
+		flags: AreaFlag,
+	) -> Result<usize, Errno> {
+		fn cleanup(memory: &mut Memory, start: usize, count: usize) {
+			memory.vma.deallocate_area(start);
+			let count = match count.checked_sub(1) {
+				Some(x) => x,
+				None => return,
+			};
+
+			for i in 0..count {
+				memory.page_dir.unmap_user(start + i * PAGE_SIZE);
+			}
+		}
+
+		let start = if start != 0 {
+			self.vma.allocate_fixed_area(start, pages, flags)
+		} else {
+			Err(AllocError)
+		}
+		.or_else(|_| self.vma.allocate_area(pages, flags))
+		.map_err(|_| Errno::ENOMEM)?;
+
+		for i in 0..pages {
+			if let Err(_) = self.page_dir.map_user(
+				start + i * PAGE_SIZE,
+				get_zero_page_phys(),
+				PageFlag::Present | PageFlag::User,
+			) {
+				cleanup(self, start, i);
+				return Err(Errno::ENOMEM);
+			}
+		}
+
+		Ok(start)
+	}
+
 	pub fn clone(&self) -> Result<Self, AllocError> {
+		fn get_copied_page(src_paddr: usize) -> Result<usize, AllocError> {
+			let page = PageBox::new(Zone::High)?;
+
+			unsafe { copy_user_to_user_page(src_paddr, page.as_phys_addr())? };
+
+			let paddr = page.as_phys_addr();
+
+			page.forget();
+
+			Ok(paddr)
+		}
+
 		let vma = self.vma.clone();
 		let mut page_dir = PD::new()?;
 
 		for area in vma.get_areas() {
 			for vaddr in (area.start..area.end).step_by(PAGE_SIZE) {
 				let src_paddr = self.page_dir.lookup(vaddr).unwrap();
-				let dst_page = PageBox::new(Zone::High)?;
 
-				unsafe { copy_user_to_user_page(src_paddr, dst_page.as_phys_addr())? };
+				let paddr = if src_paddr != get_zero_page_phys() {
+					get_copied_page(src_paddr)?
+				} else {
+					get_zero_page_phys()
+				};
 
-				page_dir.map_user(vaddr, dst_page.as_phys_addr(), PageFlag::USER_RDWR)?;
-
-				dst_page.forget();
+				page_dir.map_user(vaddr, paddr, PageFlag::USER_RDWR)?;
 			}
 		}
 
@@ -87,8 +141,8 @@ impl Memory {
 		self.page_dir.pick_up();
 	}
 
-	pub fn get_pd(&self) -> &PD {
-		&self.page_dir
+	pub fn get_pd(&mut self) -> &mut PD {
+		&mut self.page_dir
 	}
 
 	pub fn get_vma(&self) -> &UserAddressSpace {
@@ -159,11 +213,19 @@ impl Memory {
 
 impl Drop for Memory {
 	fn drop(&mut self) {
+		fn free_page_if_allocated(pd: &PD, vaddr: usize) -> Option<()> {
+			let paddr = pd.lookup(vaddr)?;
+
+			if get_zero_page_phys() != paddr {
+				free_pages(unsafe { NonNull::new_unchecked(phys_to_virt(paddr) as *mut u8) })
+			}
+
+			Some(())
+		}
+
 		for area in self.vma.get_areas() {
 			for vaddr in area.iter_pages() {
-				if let Some(paddr) = self.page_dir.lookup(vaddr) {
-					free_pages(unsafe { NonNull::new_unchecked(phys_to_virt(paddr) as *mut u8) })
-				}
+				free_page_if_allocated(&self.page_dir, vaddr);
 			}
 		}
 	}
