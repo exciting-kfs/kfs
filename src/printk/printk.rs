@@ -108,7 +108,11 @@ macro_rules! fmt_with {
     };
 }
 
-use crate::{driver::serial, interrupt::get_interrupt_flag, process::context::yield_now};
+use crate::{
+	driver::serial,
+	interrupt::{get_interrupt_flag, in_interrupt_context},
+	process::context::yield_now,
+};
 use core::{
 	fmt::{Arguments, Result, Write},
 	sync::atomic::{AtomicBool, Ordering},
@@ -118,7 +122,7 @@ static PRINTK_LOCK: PrintkLock = PrintkLock::new();
 
 pub fn __printk(arg: Arguments) -> Result {
 	let result;
-	if get_interrupt_flag() {
+	if get_interrupt_flag() && !in_interrupt_context() {
 		PRINTK_LOCK.lock();
 
 		result = unsafe { serial::SERIAL_EXT_COM1.write_fmt(arg) };
