@@ -75,9 +75,7 @@ pub fn sys_setsid() -> Result<usize, Errno> {
 	}
 
 	let ext = current.user_ext_ok_or(Errno::EINVAL)?;
-
 	ext.lock_relation().enter_new_session(pid);
-	ext.lock_fd_table().clear();
 
 	Ok(pid.as_raw())
 }

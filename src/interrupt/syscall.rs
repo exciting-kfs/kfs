@@ -148,11 +148,13 @@ pub fn sys_open() -> Result<usize, Errno> {
 	let tty = tty::alloc().ok_or(Errno::UnknownErrno)?;
 	let sess = &ext.lock_relation().get_session();
 
+	// TODO Atomic
 	tty.lock().connect(Arc::downgrade(sess));
 	sess.lock().set_ctty(tty.clone());
 
 	let file = Arc::new(File::new(tty, OpenFlag::O_RDWR));
 	let mut fd_table = ext.lock_fd_table();
+	let _ = fd_table.alloc_fd(file.clone()).ok_or(Errno::ENFILE)?;
 	let fd = fd_table.alloc_fd(file).ok_or(Errno::ENFILE)?;
 
 	Ok(fd.index())
