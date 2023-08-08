@@ -1,52 +1,24 @@
 #include <kfs/kernel.h>
-
-const char *base_10 = "0123456789";
-
-size_t ft_strlen(const char *s) {
-	size_t i = 0;
-	while (s[i]) {
-		i++;
-	}
-	return i;
-}
-
-void ft_putnbr(int num) {
-
-	if (num < 0) {
-		write(0, "-", 1);
-		num = -num;
-	}
-
-	if (num / 10) {
-		ft_putnbr(num / 10);
-	}
-	write(0, &base_10[num % 10], 1);
-}
-
-void ft_putstr_fd(int fd, const char *s) {
-	size_t n = ft_strlen(s);
-	write(fd, s, n);
-}
+#include <kfs/ft.h>
 
 void print_id(const char *s) {
-
-	ft_putstr_fd(0, "\n");
-	ft_putstr_fd(0, s);
-	ft_putstr_fd(0, "\npid: ");
+	ft_putstr("\n");
+	ft_putstr(s);
+	ft_putstr("\npid: ");
 	ft_putnbr(getpid());
-	ft_putstr_fd(0, "\nppid: ");
+	ft_putstr("\nppid: ");
 	ft_putnbr(getppid());
-	ft_putstr_fd(0, "\npgid: ");
+	ft_putstr("\npgid: ");
 	ft_putnbr(getpgrp());
-	ft_putstr_fd(0, "\nsid: ");
+	ft_putstr("\nsid: ");
 	ft_putnbr(getsid());
-	ft_putstr_fd(0, "\n");
+	ft_putstr("\n");
 }
 
 void wait_newline() {
 	char c = 0;
 
-	ft_putstr_fd(0, "\nPRESS A NEW LINE TO CONTINUE.....");
+	ft_putstr("\nPRESS A NEW LINE TO CONTINUE.....");
 	while (c != '\n') {
 		read(0, &c, 1);
 	}
@@ -69,7 +41,7 @@ void sig_int(int sig) {
 
 void sig_quit(int sig) {
 	(void)sig;
-	ft_putstr_fd(0, "\nsig quit\n");
+	ft_putstr("\nsig quit\n");
 }
 
 void child() {
@@ -108,9 +80,9 @@ int main(void) {
 	// - check that the session leader can not make a new session.
 	title(2);
 	ret = setsid();
-	ft_putstr_fd(0, "\n");
+	ft_putstr("\n");
 	ft_putnbr(ret);
-	ft_putstr_fd(0, "\n");
+	ft_putstr("\n");
 	next_test();
 
 	// TEST 3: fork()
@@ -151,7 +123,7 @@ int main(void) {
 	// - check errno::EPERM (-1).
 	title(6);
 	ret = setpgid(0, 42);
-	ft_putstr_fd(0, "\n");
+	ft_putstr("\n");
 	ft_putnbr(ret);
 	next_test();
 
@@ -159,7 +131,7 @@ int main(void) {
 	// - check errno::ESRCH (-3).
 	title(7);
 	ret = setpgid(42, 0);
-	ft_putstr_fd(0, "\n");
+	ft_putstr("\n");
 	ft_putnbr(ret);
 	next_test();
 

@@ -43,6 +43,7 @@ export LDFLAGS
 MODULES := init shell test_pipe test_sig test_setXid test_sig_stop_cont
 
 LIBSYSTEM := $(BUILDDIR)/libsystem.a
+LIBFT := $(BUILDDIR)/libft.a
 
 # recipes
 
@@ -50,7 +51,7 @@ LIBSYSTEM := $(BUILDDIR)/libsystem.a
 all : $(MODULES)
 
 .PHONY : $(MODULES)
-$(MODULES) : $(LIBSYSTEM) | $(BUILDDIR)
+$(MODULES) : $(LIBSYSTEM) $(LIBFT) | $(BUILDDIR)
 	@echo BUILD $@.bin
 	@$(MAKE) -s -C $@
 
@@ -58,6 +59,11 @@ $(MODULES) : $(LIBSYSTEM) | $(BUILDDIR)
 $(LIBSYSTEM) : | $(BUILDDIR)
 	@echo BUILD libsystem.a
 	@$(MAKE) -s -C libsystem $@ 
+
+.PHONY : $(LIBFT)
+$(LIBFT) : | $(BUILDDIR)
+	@echo BUILD libft.a
+	@$(MAKE) -s -C libft $@ 
 
 $(BUILDDIR) :
 	@mkdir $@

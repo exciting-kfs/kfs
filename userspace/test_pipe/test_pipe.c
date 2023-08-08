@@ -58,7 +58,7 @@ void test_sigpipe() {
 }
 
 int main(void) {
-	test_eof();
-	// test_sigpipe();
+	// test_eof();
+	test_sigpipe();
 	return 0;	
 }
