@@ -1,5 +1,5 @@
-#include <kfs/kernel.h>
 #include <kfs/ft.h>
+#include <kfs/kernel.h>
 
 void sig_int(int num) {
 	(void)num;
@@ -15,14 +15,16 @@ void wait_newline() {
 	}
 }
 
-void title(int num) {
-	write(0, "\ntest", 5);
-	ft_putnbr(num);
-}
-
 void next_test() {
 	wait_newline();
 	write(0, "****done****\n", 13);
+}
+
+void title(int num, const char *s) {
+	ft_putstr("\n TEST");
+	ft_putnbr(num);
+	ft_putstr(": ");
+	ft_putstr(s);
 }
 
 void child() {
@@ -47,29 +49,27 @@ int main(void) {
 	}
 	sched_yield();
 
-	// TEST 1: SIGSTOP
-	// - check that child process is stopped. (it doesn't print 'c')
-	title(1);
+	title(1, "SIGSTOP\n");
+	ft_putstr("- check that child process is stopped. (it doesn't print 'c')\n");
 	kill(pid, SIGSTOP);
 	wait_newline();
 
-	// TEST 2: SIGCONT
-	// - check that child process is running. (it prints 'c')
-	title(2);
+	title(2, "SIGCONT\n");
+	ft_putstr("- check that child process is running. (it prints 'c')\n");
 	kill(pid, SIGCONT);
 	wait_newline();
 
-	// TEST 3: DeepSleep
-	// - step1: check that child process is stopped. (it doesn't print 'c')
-	// - step2: check that child process is running. (it prints 'c')
-	// - step3: check that child process receives and does SIGINT signal twice.
-	title(3);
+	title(3, "DeelSleep\n");
+	ft_putstr("- step1: check that child process is stopped. (it doesn't print 'c')\n");
 	kill(pid, SIGSTOP);
 	kill(pid, SIGINT);
 	kill(pid, SIGINT);
 	wait_newline();
+	ft_putstr("- step2: check that child process is running. (it prints 'c')\n");
+	ft_putstr("- step3: check that child process receives and does SIGINT signal twice.\n");
 	kill(pid, SIGCONT);
 	wait_newline();
+	kill(pid, SIGKILL);
 
 	return 0;
 }

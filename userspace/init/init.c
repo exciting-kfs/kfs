@@ -2,14 +2,15 @@
 #include <kfs/kernel.h>
 
 const char *tests[] = {
-    "test_pipe.bin", "test_setXid.bin", "test_sig.bin", "test_sig_stop_cont.bin", NULL,
+    "test_sig_stop_cont.bin", "test_sig.bin", "test_pipe.bin", "test_setXid.bin", NULL,
 };
 
-void waitpid_verbose(pid_t pid) {
+void waitpid_verbose(pid_t pid, const char *test_name) {
 	int status;
 	pid_t real_pid;
 
 	real_pid = waitpid(pid, &status, 0);
+	ft_putstr("\n");
 	if (real_pid < 0) {
 		ft_putstr("init: waitpid: err=");
 		ft_putnbr(real_pid);
@@ -26,6 +27,9 @@ void waitpid_verbose(pid_t pid) {
 		}
 		ft_putstr("\n");
 	}
+	ft_putstr("DONE: ");
+	ft_putstr(test_name);
+	ft_putstr("\n\n");
 }
 
 int main(void) {
@@ -33,19 +37,19 @@ int main(void) {
 	for (const char **p = tests; *p; p++) {
 		int pid = fork();
 		if (pid == 0) {
-			ft_putstr("run ");
+			ft_putstr("\x1b[32mRUN: ");
 			ft_putstr(*p);
-			ft_putstr("\n");
+			ft_putstr("\x1b[39m\n");
 			exec(*p);
 			_exit(128);
 		}
-		waitpid_verbose(pid);
+		waitpid_verbose(pid, *p);
 	}
 
 	ft_putstr("====TEST FINISHED.====\n");
 
 	for (;;) {
-		waitpid_verbose(-1);
+		waitpid_verbose(-1, "");
 	}
 
 	return 0;
