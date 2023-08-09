@@ -8,7 +8,7 @@ LINKER_SCRIPT = $(realpath .)/userspace.ld
 LDFLAGS := -n --script=$(LINKER_SCRIPT) --oformat=binary -nostdlib
 else
 PREFIX := i686-elf-
-CFLAGS =
+CFLAGS :=
 LDFLAGS := -n --oformat=binary -nostdlib
 endif
 
@@ -26,8 +26,10 @@ export LD
 
 # common flags
 
+CFLAGS += $(EXTRA_CFLAGS)
 CFLAGS += -Wall -Wextra -nostdlib
 CFLAGS += -I$(realpath include)
+
 export CFLAGS
 
 BUILDDIR := $(realpath .)/build

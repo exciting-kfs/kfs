@@ -2,10 +2,10 @@
 
 OS := $(shell uname -s)
 ifeq ($(OS), Linux)
-UTIL := linux-gnu
+PREFIX := i686-linux-gnu-
 LDFLAG = -n --script=$(LINKER_SCRIPT) --gc-sections
 else
-UTIL := elf
+PREFIX := i686-elf-
 LDFLAG = -n --no-warn-rwx-segments --no-warn-execstack --script=$(LINKER_SCRIPT) --gc-sections
 endif
 
@@ -18,15 +18,15 @@ TEST_CASE := all
 
 I386_GRUB2_PREFIX := $(I386_GRUB2_PREFIX)
 
-OBJCOPY := i686-$(UTIL)-objcopy
+OBJCOPY := $(PREFIX)objcopy
 
-OBJDUMP := i686-$(UTIL)-objdump
+OBJDUMP := $(PREFIX)objdump
 OBJDUMP_FLAG := --demangle                                  \
                 --disassembler-options=intel,intel-mnemonic \
 
-LD := i686-$(UTIL)-ld
+LD := $(PREFIX)ld
 
-ADDR2LINE := i686-$(UTIL)-addr2line
+ADDR2LINE := $(PREFIX)addr2line
 
 PAGER := vim -
 
@@ -203,4 +203,9 @@ $(RESCUE_IMG) : $(KERNEL_BIN) $(shell find $(RESUCE_SRC_ROOT) -type f) $(KERNEL_
 .PHONY : userspace
 userspace :
 	@echo "[-] build userspace binaries"
-	@$(MAKE) -s -C $(USERSPACE_SRC_ROOT)
+	@$(MAKE) EXTRA_CFLAGS=$(CFLAGS) -s -C $(USERSPACE_SRC_ROOT)
+
+.PHONY : ci
+ci : CFLAGS := -Werror
+ci : RUSTC_FLAG += -D warnings
+ci : test

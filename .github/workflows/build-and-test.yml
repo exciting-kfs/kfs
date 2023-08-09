@@ -1,0 +1,32 @@
+name: Build and test
+
+on: [push]
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Clone KFS repository
+        uses: actions/checkout@v3
+
+      - name: Setup Rust 
+        uses: actions-rs/toolchain@v1.0.6
+        with:
+          override: true
+          profile: minimal
+          toolchain: nightly
+          components: rust-src
+
+      - name: Setup extra tools
+        run: |
+          sudo apt update && sudo apt install -y \
+            gcc-i686-linux-gnu \
+            qemu-system \
+            build-essential \
+            xorriso \
+            grub-pc \
+            nasm
+
+      - name: build and test
+        run: make ci
