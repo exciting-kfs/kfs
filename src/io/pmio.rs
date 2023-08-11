@@ -37,13 +37,26 @@ impl Port {
 		};
 	}
 
-	/// write 4 byte into port
-	pub fn write_u32(&self, data: u32) {
+	pub fn read_u16(&self) -> u16 {
+		let data: u16;
+
 		unsafe {
 			asm!(
-				"out dx, eax",
+				"in ax, dx",
 				in("dx") self.port,
-				in("eax") data,
+				out("ax") data,
+			)
+		};
+
+		data
+	}
+
+	pub fn write_u16(&self, data: u16) {
+		unsafe {
+			asm!(
+				"out dx, ax",
+				in("dx") self.port,
+				in("ax") data,
 			)
 		};
 	}
@@ -61,5 +74,16 @@ impl Port {
 		};
 
 		data
+	}
+
+	/// write 4 byte into port
+	pub fn write_u32(&self, data: u32) {
+		unsafe {
+			asm!(
+				"out dx, eax",
+				in("dx") self.port,
+				in("eax") data,
+			)
+		};
 	}
 }
