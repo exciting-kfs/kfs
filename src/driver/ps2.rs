@@ -6,12 +6,15 @@ use kfs_macro::interrupt_handler;
 use crate::config::CONSOLE_COUNTS;
 use crate::driver::apic::local::LOCAL_APIC;
 use crate::driver::console::{console_screen_draw, CONSOLE_MANAGER};
+use crate::driver::ide::test::DMA_CHECK;
 use crate::driver::ps2::keyboard::{get_raw_scancode, into_key_event};
 use crate::input::{
 	self,
 	key_event::{Code, KeyKind},
 };
 use crate::interrupt::InterruptFrame;
+use crate::mm::constant::PAGE_SIZE;
+use crate::printk;
 use crate::scheduler::work::{schedule_fast_work, wakeup_fast_woker};
 use crate::{acpi::IAPC_BOOT_ARCH, io::pmio::Port};
 
@@ -101,6 +104,15 @@ pub extern "C" fn handle_keyboard_impl(_frame: InterruptFrame) {
 
 	into_key_event(code as u8).map(|ev| {
 		if ev.key == Code::Backtick && ev.pressed() {
+			// TODO DELETE
+			{
+				let buf = unsafe { DMA_CHECK.assume_init_mut().as_mut() };
+				for i in 0..PAGE_SIZE {
+					printk!("{:x} ", buf[i]);
+				}
+				printk!("\n");
+			}
+
 			panic!("BACKTICK PRESSED!!");
 		}
 		input::keyboard::change_state(ev);

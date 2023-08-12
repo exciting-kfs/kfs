@@ -10,6 +10,8 @@ use crate::util::bitrange::{BitData, BitRange};
 pub const KEYBOARD_IRQ: usize = 1;
 pub const SERIAL_COM1_IRQ: usize = 4;
 pub const SERIAL_COM2_IRQ: usize = 3;
+pub const IDE_PRIMARY_IRQ: usize = 14;
+pub const IDE_SECONDARY_IRQ: usize = 15;
 
 pub static IO_APIC: Locked<MaybeUninit<IOAPIC>> = Locked::uninit();
 
@@ -43,12 +45,15 @@ pub fn init() -> Result<(), IOAPICError> {
 
 	let mut keyboard_redir = apic.read_redir(KEYBOARD_IRQ)?;
 	let mut serial_com1 = apic.read_redir(SERIAL_COM1_IRQ)?;
+	let mut ide_primary = apic.read_redir(IDE_PRIMARY_IRQ)?;
 
 	keyboard_redir.set_default(0x21);
 	serial_com1.set_default(0x23);
+	ide_primary.set_default(0x24);
 
 	apic.write_redir(KEYBOARD_IRQ, keyboard_redir)?;
 	apic.write_redir(SERIAL_COM1_IRQ, serial_com1)?;
+	apic.write_redir(IDE_PRIMARY_IRQ, ide_primary)?;
 
 	disable_8259_pic();
 
@@ -179,6 +184,7 @@ struct DirectRegister {
 	eoi: u32,
 }
 
+#[derive(Debug)]
 pub struct RedirectionTable {
 	low: BitData,
 	high: BitData,

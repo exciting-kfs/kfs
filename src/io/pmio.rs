@@ -2,6 +2,7 @@
 
 use core::arch::asm;
 
+#[derive(Debug)]
 pub struct Port {
 	port: u16,
 }

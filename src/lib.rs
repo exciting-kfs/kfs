@@ -37,7 +37,6 @@ use alloc::sync::Arc;
 use core::mem;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::{arch::asm, panic::PanicInfo};
-use driver::pci::dump_pci;
 use driver::tty;
 use file::{File, OpenFlag};
 use interrupt::enter_interrupt_context;
@@ -173,10 +172,13 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	mm::alloc::virt::init();
 
 	driver::console::console_manager::init();
+	driver::bus::pci::enumerate();
 
 	acpi::init();
+
 	driver::apic::io::init().expect("io apic init");
 	driver::ps2::init().expect("failed to init PS/2");
+	driver::ide::init().expect("IDE controller initialization.");
 
 	unsafe { x86::init() };
 	process::init();
@@ -184,9 +186,6 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 
 	RUN_TIME.store(true, Ordering::Relaxed);
 	driver::serial::ext_init().expect("serial COM1 that will be used at run time.");
-
-	dump_pci();
-	driver::ata::test();
 
 	match cfg!(ktest) {
 		true => run_test(),

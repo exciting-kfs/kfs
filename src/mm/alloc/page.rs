@@ -6,6 +6,9 @@ use super::Zone;
 use core::{alloc::AllocError, ptr::NonNull};
 use page_allocator::{PageAlloc, PAGE_ALLOC};
 
+/// # CAUTION
+///
+/// - Zone::High allocation is unmapped, but return a virtual address that is a physical address shifted by VM_OFFSET.
 pub fn alloc_pages(rank: usize, zone: Zone) -> Result<NonNull<[u8]>, AllocError> {
 	let mut page_alloc = PAGE_ALLOC.lock();
 

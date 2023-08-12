@@ -23,6 +23,7 @@ pub const fn rank_to_pages(rank: usize) -> usize {
 
 #[inline]
 pub const fn rank_to_size(rank: usize) -> usize {
+	debug_assert!(rank <= MAX_RANK, "rank_to_size: invalid rank");
 	rank_to_pages(rank) * PAGE_SIZE
 }
 
