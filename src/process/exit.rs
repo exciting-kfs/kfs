@@ -1,4 +1,4 @@
-use crate::{pr_debug, signal::sig_num::SigNum};
+use crate::{pr_debug, process::signal::sig_num::SigNum};
 
 use super::{context::yield_now, task::CURRENT};
 

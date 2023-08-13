@@ -2,8 +2,9 @@ use core::{ffi::CStr, mem, slice};
 
 use crate::{
 	config::{USER_CODE_BASE, USTACK_BASE, USTACK_PAGES},
-	interrupt::{syscall::errno::Errno, InterruptFrame},
+	interrupt::InterruptFrame,
 	mm::user::{memory::Memory, vma::AreaFlag},
+	syscall::errno::Errno,
 	user_bin,
 };
 

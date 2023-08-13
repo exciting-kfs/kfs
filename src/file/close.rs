@@ -1,5 +1,5 @@
-use crate::interrupt::syscall::errno::Errno;
 use crate::process::{fd_table::Fd, task::CURRENT};
+use crate::syscall::errno::Errno;
 
 pub fn sys_close(fildes: isize) -> Result<usize, Errno> {
 	let ext = unsafe { CURRENT.get_mut() }.user_ext_ok_or(Errno::EPERM)?;

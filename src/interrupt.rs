@@ -1,14 +1,10 @@
 mod exception;
-mod hw;
 mod interrupt_frame;
 
-pub mod apic;
 pub mod idt;
-pub mod syscall;
 
 use core::arch::asm;
 
-pub use hw::apic_timer::jiffies;
 pub use interrupt_frame::InterruptFrame;
 
 use crate::sync::cpu_local::CpuLocal;

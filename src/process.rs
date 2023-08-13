@@ -2,14 +2,13 @@ pub mod context;
 pub mod exec;
 pub mod exit;
 pub mod fd_table;
-pub mod fork;
 pub mod kstack;
 pub mod kthread;
 pub mod process_tree;
 pub mod relation;
+pub mod signal;
 pub mod task;
 pub mod uid;
-pub mod wait;
 
 use core::mem::MaybeUninit;
 

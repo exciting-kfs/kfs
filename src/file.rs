@@ -5,7 +5,7 @@ pub mod write;
 use alloc::sync::Arc;
 use bitflags::bitflags;
 
-use crate::interrupt::syscall::errno::Errno;
+use crate::syscall::errno::Errno;
 
 pub struct File {
 	pub open_flag: OpenFlag,

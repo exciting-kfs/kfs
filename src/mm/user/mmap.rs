@@ -1,7 +1,7 @@
 use crate::{
-	interrupt::syscall::errno::Errno,
 	mm::{constant::PAGE_SIZE, util::next_align},
 	process::task::CURRENT,
+	syscall::errno::Errno,
 };
 use bitflags::bitflags;
 

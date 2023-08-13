@@ -5,7 +5,7 @@ use core::mem;
 use alloc::collections::BTreeSet;
 
 use crate::process::get_init_task;
-use crate::{interrupt::syscall::errno::Errno, process::process_tree::PROCESS_TREE};
+use crate::{process::process_tree::PROCESS_TREE, syscall::errno::Errno};
 
 use self::zombie::{Zombie, ZombieMap};
 use super::{Pgid, Pid};

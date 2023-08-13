@@ -1,6 +1,7 @@
 use kfs_macro::interrupt_handler;
 
-use crate::interrupt::{apic::local::LOCAL_APIC, InterruptFrame};
+use crate::driver::apic::local::LOCAL_APIC;
+use crate::interrupt::InterruptFrame;
 use crate::process::context::yield_now;
 use crate::process::task::CURRENT;
 use crate::sync::cpu_local::CpuLocal;

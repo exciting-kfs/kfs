@@ -1,12 +1,14 @@
 use core::mem::size_of;
 
 use crate::{
-	interrupt::syscall::errno::Errno,
 	mm::user::vma::AreaFlag,
-	process::{context::yield_now, task::CURRENT},
+	process::{
+		context::yield_now,
+		relation::{Pgid, Pid},
+		task::CURRENT,
+	},
+	syscall::errno::Errno,
 };
-
-use super::relation::{Pgid, Pid};
 
 #[derive(Clone, Copy)]
 pub enum Who {

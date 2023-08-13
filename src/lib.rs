@@ -27,10 +27,9 @@ mod printk;
 mod process;
 mod ptr;
 mod scheduler;
-mod signal;
 mod smp;
-mod subroutine;
 mod sync;
+mod syscall;
 mod test;
 mod user_bin;
 mod util;
@@ -152,7 +151,7 @@ unsafe fn kernel_boot_alloc(bi_header: usize, magic: u32) {
 	bootalloc.deinit();
 
 	mm::page::init_fixed_map();
-	interrupt::apic::local::init().unwrap();
+	driver::apic::local::init().unwrap();
 	mm::page::init_arbitrary_map();
 	mm::page::init_kernel_pd();
 
@@ -176,7 +175,7 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	console::console_manager::init();
 
 	acpi::init();
-	interrupt::apic::io::init().expect("io apic init");
+	driver::apic::io::init().expect("io apic init");
 	driver::ps2::init().expect("failed to init PS/2");
 
 	unsafe { x86::init() };

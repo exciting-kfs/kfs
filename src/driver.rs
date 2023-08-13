@@ -1,3 +1,4 @@
+pub mod apic;
 pub mod pipe;
 pub mod ps2;
 pub mod serial;

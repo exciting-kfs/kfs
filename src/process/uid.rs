@@ -1,4 +1,4 @@
-use crate::{interrupt::syscall::errno::Errno, process::task::CURRENT};
+use crate::{process::task::CURRENT, syscall::errno::Errno};
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 #[derive(Debug)]

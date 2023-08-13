@@ -5,13 +5,11 @@ use alloc::sync::Arc;
 use kfs_macro::interrupt_handler;
 
 use crate::{
-	interrupt::{
-		apic::{
-			io::{set_irq_mask, SERIAL_COM1_IRQ},
-			local::LOCAL_APIC,
-		},
-		InterruptFrame,
+	driver::apic::{
+		io::{set_irq_mask, SERIAL_COM1_IRQ},
+		local::LOCAL_APIC,
 	},
+	interrupt::InterruptFrame,
 	io::pmio::Port,
 	process::task::{State, Task, CURRENT},
 	scheduler::sleep::{sleep_and_yield, wake_up},

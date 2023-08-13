@@ -1,15 +1,14 @@
 use alloc::sync::Arc;
 
-use crate::interrupt::syscall::errno::Errno;
 use crate::process::process_tree::PROCESS_TREE;
 use crate::process::relation::pgroup::ProcessGroup;
 use crate::process::relation::{Pgid, Pid};
+use crate::process::signal::send_signal_to;
+use crate::process::signal::sig_code::SigCode;
+use crate::process::signal::sig_info::SigInfo;
+use crate::process::signal::sig_num::SigNum;
 use crate::process::task::{Task, CURRENT};
-use crate::signal::sig_code::SigCode;
-use crate::signal::sig_info::SigInfo;
-
-use super::send_signal_to;
-use super::sig_num::SigNum;
+use crate::syscall::errno::Errno;
 
 pub fn sys_kill(pid: isize, sig: isize) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };

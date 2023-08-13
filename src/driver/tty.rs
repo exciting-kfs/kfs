@@ -12,14 +12,14 @@ use crate::console::{console_screen_draw, CONSOLE_MANAGER};
 use crate::file::{File, FileOps, OpenFlag};
 use crate::input::key_event::*;
 use crate::input::keyboard::KEYBOARD;
-use crate::interrupt::syscall::errno::Errno;
 use crate::io::{BlkRead, BlkWrite, ChRead, ChWrite, NoSpace};
 use crate::process::relation::session::Session;
+use crate::process::signal::{poll_signal_queue, send_signal_to_foreground};
 use crate::process::task::State;
 use crate::scheduler::sleep::{sleep_and_yield, wake_up_foreground};
 use crate::scheduler::work::schedule_fast_work;
-use crate::signal::{poll_signal_queue, send_signal_to_foreground};
 use crate::sync::locked::Locked;
+use crate::syscall::errno::Errno;
 
 #[rustfmt::skip]
 static ALPHA_LOWER: [u8; 26] = [
@@ -353,8 +353,8 @@ impl TTY {
 	}
 
 	fn send_signal(&self, c: u8) {
-		use crate::signal::sig_code::SigCode;
-		use crate::signal::sig_num::SigNum;
+		use crate::process::signal::sig_code::SigCode;
+		use crate::process::signal::sig_num::SigNum;
 
 		// pr_debug!("tty: send signal: {}", c);
 

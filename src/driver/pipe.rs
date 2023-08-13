@@ -3,15 +3,15 @@ use core::mem::{self, size_of};
 
 use crate::collection::WrapQueue;
 use crate::file::{File, FileOps, OpenFlag};
-use crate::interrupt::syscall::errno::Errno;
 use crate::mm::user::vma::AreaFlag;
 use crate::process::context::yield_now;
+use crate::process::signal::send_signal_to;
+use crate::process::signal::sig_code::SigCode;
+use crate::process::signal::sig_info::SigInfo;
+use crate::process::signal::sig_num::SigNum;
 use crate::process::task::CURRENT;
-use crate::signal::send_signal_to;
-use crate::signal::sig_code::SigCode;
-use crate::signal::sig_info::SigInfo;
-use crate::signal::sig_num::SigNum;
 use crate::sync::locked::{Locked, LockedGuard};
+use crate::syscall::errno::Errno;
 
 use alloc::sync::Arc;
 

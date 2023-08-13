@@ -1,23 +1,16 @@
 use core::mem::{self, size_of};
 use core::ptr::copy_nonoverlapping;
 
-use crate::{
-	interrupt::{
-		syscall::{errno::Errno, restore_syscall_return},
-		InterruptFrame,
-	},
-	process::task::CURRENT,
-};
+use crate::interrupt::InterruptFrame;
+use crate::process::signal::sig_ctx::SigCtx;
+use crate::process::signal::sig_flag::SigFlag;
+use crate::process::signal::sig_handler::{SigAction, SigHandler};
+use crate::process::signal::sig_info::SigInfo;
+use crate::process::signal::sig_mask::SigMask;
+use crate::process::signal::sig_num::SigNum;
+use crate::{process::task::CURRENT, syscall::errno::Errno};
 
-use super::{
-	is_syscall_restart,
-	sig_ctx::SigCtx,
-	sig_flag::SigFlag,
-	sig_handler::{SigAction, SigHandler},
-	sig_mask::SigMask,
-	sig_num::SigNum,
-	SigInfo,
-};
+use super::*;
 
 pub const SIG_ERR: usize = usize::MAX;
 pub const SIG_DFL: usize = 0;
@@ -142,4 +135,9 @@ fn validate_user_addr(addr: usize) -> Result<(), Errno> {
 		return Err(Errno::EFAULT);
 	}
 	Ok(())
+}
+
+#[inline(always)]
+pub fn is_syscall_restart(syscall_ret: isize, flag: SigFlag) -> bool {
+	syscall_ret == Errno::EINTR.as_ret() && flag.contains(SigFlag::Restart)
 }

@@ -4,11 +4,11 @@ pub mod work;
 use alloc::sync::Arc;
 
 use crate::{
-	interrupt::syscall::errno::Errno,
 	process::{
 		context::yield_now,
 		task::{Task, TASK_QUEUE},
 	},
+	syscall::errno::Errno,
 };
 
 pub type SyncTask = Arc<Task>;
