@@ -2,10 +2,10 @@ use alloc::sync::{Arc, Weak};
 
 use crate::{
 	process::{
-		context::yield_now,
 		relation::session::Session,
-		task::{State, Task, CURRENT, TASK_QUEUE},
+		task::{State, Task, CURRENT},
 	},
+	scheduler::{context::yield_now, TASK_QUEUE},
 	sync::locked::Locked,
 };
 

@@ -3,10 +3,10 @@ use core::mem::size_of;
 use crate::{
 	mm::user::vma::AreaFlag,
 	process::{
-		context::yield_now,
 		relation::{Pgid, Pid},
 		task::CURRENT,
 	},
+	scheduler::context::yield_now,
 	syscall::errno::Errno,
 };
 

@@ -1,6 +1,8 @@
-use crate::{pr_debug, process::signal::sig_num::SigNum};
-
-use super::{context::yield_now, task::CURRENT};
+use crate::{
+	pr_debug,
+	process::{signal::sig_num::SigNum, task::CURRENT},
+	scheduler::context::yield_now,
+};
 
 #[repr(transparent)]
 #[derive(Clone, Copy)]
@@ -29,7 +31,6 @@ impl ExitStatus {
 }
 
 pub fn sys_exit(status: usize) -> ! {
-	// context_switch(InContext::IrqDisabled);
 	let current = unsafe { CURRENT.get_mut() };
 	current.exit(ExitStatus::new(ExitFlag::Exited, status as u8));
 

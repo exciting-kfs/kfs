@@ -1,7 +1,18 @@
 pub mod control;
 pub mod keyboard;
 
+use kfs_macro::interrupt_handler;
+
+use crate::config::CONSOLE_COUNTS;
 use crate::driver::apic::local::LOCAL_APIC;
+use crate::driver::console::{console_screen_draw, CONSOLE_MANAGER};
+use crate::driver::ps2::keyboard::{get_raw_scancode, into_key_event};
+use crate::input::{
+	self,
+	key_event::{Code, KeyKind},
+};
+use crate::interrupt::InterruptFrame;
+use crate::scheduler::work::{schedule_fast_work, wakeup_fast_woker};
 use crate::{acpi::IAPC_BOOT_ARCH, io::pmio::Port};
 
 fn wait_then_write_byte(port: &Port, byte: u8) {
@@ -83,16 +94,6 @@ fn check_ps2_existence() -> Result<(), ()> {
 		Err(())
 	}
 }
-
-use kfs_macro::interrupt_handler;
-
-use crate::config::CONSOLE_COUNTS;
-use crate::console::{console_screen_draw, CONSOLE_MANAGER};
-use crate::driver::ps2::keyboard::{get_raw_scancode, into_key_event};
-use crate::input::key_event::KeyKind;
-use crate::input::{self, key_event::Code};
-use crate::interrupt::InterruptFrame;
-use crate::scheduler::work::{schedule_fast_work, wakeup_fast_woker};
 
 #[interrupt_handler]
 pub extern "C" fn handle_keyboard_impl(_frame: InterruptFrame) {

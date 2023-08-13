@@ -1,15 +1,14 @@
+pub mod context;
 pub mod sleep;
 pub mod work;
 
-use alloc::sync::Arc;
+use alloc::{collections::LinkedList, sync::Arc};
 
-use crate::{
-	process::{
-		context::yield_now,
-		task::{Task, TASK_QUEUE},
-	},
-	syscall::errno::Errno,
-};
+use crate::{process::task::Task, sync::locked::Locked, syscall::errno::Errno};
+
+use self::context::yield_now;
+
+pub static TASK_QUEUE: Locked<LinkedList<Arc<Task>>> = Locked::new(LinkedList::new());
 
 pub type SyncTask = Arc<Task>;
 

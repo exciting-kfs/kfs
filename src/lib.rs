@@ -12,11 +12,9 @@
 extern crate alloc;
 
 mod acpi;
-mod backtrace;
 mod boot;
 mod collection;
 mod config;
-mod console;
 mod driver;
 mod file;
 mod input;
@@ -42,9 +40,10 @@ use core::{arch::asm, panic::PanicInfo};
 use driver::tty;
 use file::{File, OpenFlag};
 use interrupt::enter_interrupt_context;
-use process::context::yield_now;
-use process::task::{Task, TASK_QUEUE};
+use process::task::Task;
+use scheduler::context::yield_now;
 use scheduler::work::slow_worker;
+use scheduler::TASK_QUEUE;
 use test::{exit_qemu_with, TEST_ARRAY};
 
 use crate::interrupt::irq_disable;
@@ -172,7 +171,7 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	mm::alloc::phys::init();
 	mm::alloc::virt::init();
 
-	console::console_manager::init();
+	driver::console::console_manager::init();
 
 	acpi::init();
 	driver::apic::io::init().expect("io apic init");

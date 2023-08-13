@@ -1,4 +1,5 @@
 pub mod errno;
+pub mod exec;
 pub mod fork;
 pub mod kill;
 pub mod relation;
@@ -19,20 +20,20 @@ use crate::interrupt::InterruptFrame;
 
 use crate::mm::user::mmap::sys_mmap;
 use crate::pr_info;
-use crate::process::exec::sys_exec;
+use crate::process::exit::sys_exit;
 use crate::process::signal::sig_handler::SigAction;
+use crate::process::task::CURRENT;
 use crate::process::uid::{sys_getuid, sys_setuid};
-use crate::process::{exit::sys_exit, task::CURRENT};
 use crate::scheduler::sys_sched_yield;
-use crate::syscall::signal::sys_signal;
 
 use self::errno::Errno;
+use self::exec::sys_exec;
 use self::fork::sys_fork;
 use self::kill::sys_kill;
 use self::relation::{
 	sys_getpgid, sys_getpgrp, sys_getpid, sys_getppid, sys_getsid, sys_setpgid, sys_setsid,
 };
-use self::signal::{sys_sigaction, sys_sigreturn};
+use self::signal::{sys_sigaction, sys_signal, sys_sigreturn};
 use self::wait::sys_waitpid;
 
 #[no_mangle]

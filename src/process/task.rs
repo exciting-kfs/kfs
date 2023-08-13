@@ -1,7 +1,7 @@
 use core::alloc::AllocError;
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use alloc::{collections::LinkedList, sync::Arc};
+use alloc::sync::Arc;
 
 use crate::config::{USER_CODE_BASE, USTACK_BASE, USTACK_PAGES};
 use crate::interrupt::InterruptFrame;
@@ -24,7 +24,6 @@ use super::relation::{Pgid, Pid, Relation, Sid};
 use super::uid::Uid;
 
 pub static CURRENT: CpuLocal<Arc<Task>> = CpuLocal::uninit();
-pub static TASK_QUEUE: Locked<LinkedList<Arc<Task>>> = Locked::new(LinkedList::new());
 
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

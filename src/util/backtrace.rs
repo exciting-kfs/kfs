@@ -46,8 +46,8 @@ impl Backtrace {
 #[macro_export]
 macro_rules! print_stacktrace {
 	() => {
-		let dump = $crate::backtrace::StackDump::new();
-		let bt = $crate::backtrace::Backtrace::new(dump);
+		let dump = $crate::util::backtrace::StackDump::new();
+		let bt = $crate::util::backtrace::Backtrace::new(dump);
 		bt.print_trace();
 	};
 }

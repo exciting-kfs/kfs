@@ -4,12 +4,12 @@ use core::mem::{self, size_of};
 use crate::collection::WrapQueue;
 use crate::file::{File, FileOps, OpenFlag};
 use crate::mm::user::vma::AreaFlag;
-use crate::process::context::yield_now;
 use crate::process::signal::send_signal_to;
 use crate::process::signal::sig_code::SigCode;
 use crate::process::signal::sig_info::SigInfo;
 use crate::process::signal::sig_num::SigNum;
 use crate::process::task::CURRENT;
+use crate::scheduler::context::yield_now;
 use crate::sync::locked::{Locked, LockedGuard};
 use crate::syscall::errno::Errno;
 

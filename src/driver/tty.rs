@@ -7,8 +7,6 @@ use bitflags::bitflags;
 
 use crate::collection::LineBuffer;
 use crate::config::CONSOLE_COUNTS;
-use crate::console::console_manager::console::SyncConsole;
-use crate::console::{console_screen_draw, CONSOLE_MANAGER};
 use crate::file::{File, FileOps, OpenFlag};
 use crate::input::key_event::*;
 use crate::input::keyboard::KEYBOARD;
@@ -83,7 +81,8 @@ static CURSOR: [&[u8]; 8] = [
 	b"\x1b[H",	b"\x1b[F",
 ];
 
-use crate::console::ascii_constants::*;
+use super::console::console_manager::console::SyncConsole;
+use super::console::{ascii_constants::*, console_screen_draw, CONSOLE_MANAGER};
 #[rustfmt::skip]
 static CONTROL: [u8; 33] = [
 	0x7f, 0x00, 0x01, 0x02,  ETX,  EOF, 0x05, 0x06, 0x07,

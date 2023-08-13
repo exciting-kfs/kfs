@@ -1,5 +1,3 @@
-pub mod context;
-pub mod exec;
 pub mod exit;
 pub mod fd_table;
 pub mod kstack;
@@ -18,7 +16,7 @@ use self::{
 	task::{Task, CURRENT},
 };
 
-use crate::{backtrace::kernel_stack_top, user_bin};
+use crate::{user_bin, util::backtrace::kernel_stack_top};
 use alloc::sync::Arc;
 
 static mut INIT_TASK: MaybeUninit<Arc<Task>> = MaybeUninit::uninit();
