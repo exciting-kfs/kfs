@@ -9,9 +9,10 @@ pub use id::*;
 
 use alloc::sync::{Arc, Weak};
 
-use crate::interrupt::syscall::errno::Errno;
 use crate::pr_debug;
 use crate::sync::locked::Locked;
+use crate::syscall::errno::Errno;
+use crate::syscall::wait::Who;
 
 use self::family::{zombie::Zombie, Family};
 use self::pgroup::ProcessGroup;
@@ -19,7 +20,6 @@ use self::session::Session;
 
 use super::exit::ExitStatus;
 use super::task::Task;
-use super::wait::Who;
 
 pub struct Relation {
 	family: Family,

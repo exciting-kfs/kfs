@@ -9,9 +9,9 @@ use crate::mm::constant::PAGE_MASK;
 use crate::mm::page::PageFlag;
 use crate::mm::user::vma::{AreaFlag, UserAddressSpace};
 use crate::process::exit::exit_with_signal;
+use crate::process::signal::sig_num::SigNum;
 use crate::process::task::CURRENT;
 use crate::ptr::PageBox;
-use crate::signal::sig_num::SigNum;
 use crate::{pr_err, pr_info, register};
 
 bitflags! {

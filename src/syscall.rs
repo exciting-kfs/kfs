@@ -1,3 +1,11 @@
+pub mod errno;
+pub mod exec;
+pub mod fork;
+pub mod kill;
+pub mod relation;
+pub mod signal;
+pub mod wait;
+
 use core::mem::transmute;
 
 use alloc::sync::Arc;
@@ -10,21 +18,23 @@ use crate::file::write::sys_write;
 use crate::file::{File, OpenFlag};
 use crate::interrupt::InterruptFrame;
 
-pub mod errno;
 use crate::mm::user::mmap::sys_mmap;
 use crate::pr_info;
-use crate::process::exec::sys_exec;
-use crate::process::relation::syscall::{
-	sys_getpgid, sys_getpgrp, sys_getpid, sys_getppid, sys_getsid, sys_setpgid, sys_setsid,
-};
+use crate::process::exit::sys_exit;
+use crate::process::signal::sig_handler::SigAction;
+use crate::process::task::CURRENT;
 use crate::process::uid::{sys_getuid, sys_setuid};
-use crate::process::wait::sys_waitpid;
-use crate::process::{exit::sys_exit, fork::sys_fork, task::CURRENT};
 use crate::scheduler::sys_sched_yield;
-use crate::signal::sig_handler::SigAction;
-use crate::signal::{sys_kill, sys_sigaction, sys_signal, sys_sigreturn};
 
 use self::errno::Errno;
+use self::exec::sys_exec;
+use self::fork::sys_fork;
+use self::kill::sys_kill;
+use self::relation::{
+	sys_getpgid, sys_getpgrp, sys_getpid, sys_getppid, sys_getsid, sys_setpgid, sys_setsid,
+};
+use self::signal::{sys_sigaction, sys_signal, sys_sigreturn};
+use self::wait::sys_waitpid;
 
 #[no_mangle]
 pub extern "C" fn handle_syscall_impl(mut frame: InterruptFrame) {

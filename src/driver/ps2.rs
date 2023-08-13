@@ -1,6 +1,18 @@
 pub mod control;
 pub mod keyboard;
 
+use kfs_macro::interrupt_handler;
+
+use crate::config::CONSOLE_COUNTS;
+use crate::driver::apic::local::LOCAL_APIC;
+use crate::driver::console::{console_screen_draw, CONSOLE_MANAGER};
+use crate::driver::ps2::keyboard::{get_raw_scancode, into_key_event};
+use crate::input::{
+	self,
+	key_event::{Code, KeyKind},
+};
+use crate::interrupt::InterruptFrame;
+use crate::scheduler::work::{schedule_fast_work, wakeup_fast_woker};
 use crate::{acpi::IAPC_BOOT_ARCH, io::pmio::Port};
 
 fn wait_then_write_byte(port: &Port, byte: u8) {
@@ -81,4 +93,35 @@ fn check_ps2_existence() -> Result<(), ()> {
 	} else {
 		Err(())
 	}
+}
+
+#[interrupt_handler]
+pub extern "C" fn handle_keyboard_impl(_frame: InterruptFrame) {
+	let code = get_raw_scancode();
+
+	into_key_event(code as u8).map(|ev| {
+		if ev.key == Code::Backtick && ev.pressed() {
+			panic!("BACKTICK PRESSED!!");
+		}
+		input::keyboard::change_state(ev);
+
+		unsafe {
+			if ev.pressed() {
+				let cm = CONSOLE_MANAGER.assume_init_ref();
+				cm.update(ev.key);
+
+				if let KeyKind::Function(v) = ev.identify() {
+					let idx = v.index() as usize;
+
+					if idx < CONSOLE_COUNTS {
+						cm.set_foreground(idx);
+					}
+				}
+			}
+		}
+		schedule_fast_work(console_screen_draw, ());
+		wakeup_fast_woker();
+	});
+
+	LOCAL_APIC.end_of_interrupt();
 }

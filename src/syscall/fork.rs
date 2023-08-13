@@ -1,6 +1,6 @@
-use crate::interrupt::{syscall::errno::Errno, InterruptFrame};
-
-use super::task::{CURRENT, TASK_QUEUE};
+use crate::{
+	interrupt::InterruptFrame, process::task::CURRENT, scheduler::TASK_QUEUE, syscall::errno::Errno,
+};
 
 pub fn sys_fork(frame: *const InterruptFrame) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };

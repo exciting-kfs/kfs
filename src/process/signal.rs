@@ -1,4 +1,3 @@
-mod kill;
 pub mod sig_code;
 pub mod sig_ctx;
 pub mod sig_flag;
@@ -6,10 +5,6 @@ pub mod sig_handler;
 pub mod sig_info;
 pub mod sig_mask;
 pub mod sig_num;
-mod syscall;
-
-pub use kill::sys_kill;
-pub use syscall::{sys_sigaction, sys_signal, sys_sigreturn};
 
 use core::{
 	array,
@@ -24,16 +19,17 @@ use alloc::{
 
 use crate::{
 	config::TRAMPOLINE_BASE,
-	interrupt::{syscall::errno::Errno, InterruptFrame},
+	interrupt::InterruptFrame,
 	pr_debug,
 	process::{
 		exit::exit_with_signal,
 		relation::session::Session,
+		signal::{sig_flag::SigFlag, sig_handler::SigHandler, sig_num::SigNum},
 		task::{State, Task, CURRENT},
 	},
 	scheduler::sleep::{sleep_and_yield, wake_up},
-	signal::{sig_flag::SigFlag, sig_handler::SigHandler, sig_num::SigNum},
 	sync::locked::Locked,
+	syscall::{errno::Errno, signal::is_syscall_restart},
 };
 
 use self::{
@@ -226,7 +222,7 @@ impl Signal {
 		ret
 	}
 
-	fn get_handler(&self, num: &SigNum) -> SigHandler {
+	pub fn get_handler(&self, num: &SigNum) -> SigHandler {
 		let table = self.table.lock();
 		let handler = &table[num.index()];
 		handler.clone()
@@ -330,9 +326,4 @@ pub fn send_signal_to_foreground(
 		}
 	}
 	Ok(())
-}
-
-#[inline(always)]
-fn is_syscall_restart(syscall_ret: isize, flag: SigFlag) -> bool {
-	syscall_ret == Errno::EINTR.as_ret() && flag.contains(SigFlag::Restart)
 }

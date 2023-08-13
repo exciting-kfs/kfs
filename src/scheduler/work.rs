@@ -4,10 +4,10 @@ use core::{alloc::AllocError, mem::MaybeUninit};
 use alloc::{boxed::Box, collections::LinkedList};
 
 use crate::mm::alloc::phys::Atomic;
-use crate::process::context::yield_now;
 use crate::process::task::{State, Task};
 use crate::sync::locked::Locked;
 
+use super::context::yield_now;
 use super::{schedule_first, SyncTask};
 
 pub struct Work<ArgType> {

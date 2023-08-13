@@ -1,7 +1,7 @@
 use alloc::sync::Arc;
 use core::{array, ops::IndexMut};
 
-use crate::{file::File, interrupt::syscall::errno::Errno};
+use crate::{file::File, syscall::errno::Errno};
 
 const FDTABLE_SIZE: usize = 256;
 

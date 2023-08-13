@@ -12,11 +12,9 @@
 extern crate alloc;
 
 mod acpi;
-mod backtrace;
 mod boot;
 mod collection;
 mod config;
-mod console;
 mod driver;
 mod file;
 mod input;
@@ -27,10 +25,9 @@ mod printk;
 mod process;
 mod ptr;
 mod scheduler;
-mod signal;
 mod smp;
-mod subroutine;
 mod sync;
+mod syscall;
 mod test;
 mod user_bin;
 mod util;
@@ -43,9 +40,10 @@ use core::{arch::asm, panic::PanicInfo};
 use driver::tty;
 use file::{File, OpenFlag};
 use interrupt::enter_interrupt_context;
-use process::context::yield_now;
-use process::task::{Task, TASK_QUEUE};
+use process::task::Task;
+use scheduler::context::yield_now;
 use scheduler::work::slow_worker;
+use scheduler::TASK_QUEUE;
 use test::{exit_qemu_with, TEST_ARRAY};
 
 use crate::interrupt::irq_disable;
@@ -152,7 +150,7 @@ unsafe fn kernel_boot_alloc(bi_header: usize, magic: u32) {
 	bootalloc.deinit();
 
 	mm::page::init_fixed_map();
-	interrupt::apic::local::init().unwrap();
+	driver::apic::local::init().unwrap();
 	mm::page::init_arbitrary_map();
 	mm::page::init_kernel_pd();
 
@@ -173,10 +171,10 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	mm::alloc::phys::init();
 	mm::alloc::virt::init();
 
-	console::console_manager::init();
+	driver::console::console_manager::init();
 
 	acpi::init();
-	interrupt::apic::io::init().expect("io apic init");
+	driver::apic::io::init().expect("io apic init");
 	driver::ps2::init().expect("failed to init PS/2");
 
 	unsafe { x86::init() };

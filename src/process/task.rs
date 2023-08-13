@@ -1,19 +1,20 @@
 use core::alloc::AllocError;
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use alloc::{collections::LinkedList, sync::Arc};
+use alloc::sync::Arc;
 
 use crate::config::{USER_CODE_BASE, USTACK_BASE, USTACK_PAGES};
-use crate::interrupt::syscall::errno::Errno;
 use crate::interrupt::InterruptFrame;
 use crate::mm::user::memory::Memory;
 use crate::process::relation::family::zombie::Zombie;
+use crate::process::signal::sig_info::SigInfo;
+use crate::process::signal::sig_num::SigNum;
+use crate::process::signal::Signal;
 use crate::scheduler::sleep::wake_up;
-use crate::signal::sig_info::SigInfo;
-use crate::signal::sig_num::SigNum;
-use crate::signal::Signal;
 use crate::sync::cpu_local::CpuLocal;
 use crate::sync::locked::{Locked, LockedGuard};
+use crate::syscall::errno::Errno;
+use crate::syscall::wait::Who;
 
 use super::exit::ExitStatus;
 use super::fd_table::FdTable;
@@ -21,10 +22,8 @@ use super::kstack::Stack;
 use super::process_tree::PROCESS_TREE;
 use super::relation::{Pgid, Pid, Relation, Sid};
 use super::uid::Uid;
-use super::wait::Who;
 
 pub static CURRENT: CpuLocal<Arc<Task>> = CpuLocal::uninit();
-pub static TASK_QUEUE: Locked<LinkedList<Arc<Task>>> = Locked::new(LinkedList::new());
 
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

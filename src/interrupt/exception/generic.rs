@@ -1,6 +1,6 @@
 use crate::interrupt::InterruptFrame;
 use crate::process::exit::exit_with_signal;
-use crate::signal::sig_num::SigNum;
+use crate::process::signal::sig_num::SigNum;
 use crate::{pr_err, pr_info};
 
 #[no_mangle]

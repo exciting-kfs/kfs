@@ -111,7 +111,7 @@ macro_rules! fmt_with {
 use crate::{
 	driver::serial,
 	interrupt::{get_interrupt_flag, in_interrupt_context},
-	process::context::yield_now,
+	scheduler::context::yield_now,
 };
 use core::{
 	fmt::{Arguments, Result, Write},

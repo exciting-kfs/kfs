@@ -3,13 +3,13 @@ use core::ptr::NonNull;
 use core::slice::from_raw_parts;
 
 use crate::config::TRAMPOLINE_BASE;
-use crate::interrupt::syscall::errno::Errno;
 use crate::mm::alloc::page::free_pages;
 use crate::mm::alloc::virt::{kmap, kunmap};
 use crate::mm::alloc::Zone;
 use crate::mm::page::{get_zero_page_phys, PageFlag, PD};
 use crate::mm::{constant::*, util::*};
 use crate::ptr::PageBox;
+use crate::syscall::errno::Errno;
 
 use super::copy::{copy_user_to_user_page, memset_to_user_page};
 use super::vma::{AreaFlag, UserAddressSpace};

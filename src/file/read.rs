@@ -4,8 +4,8 @@ use alloc::sync::Arc;
 
 use crate::{
 	file::File,
-	interrupt::syscall::errno::Errno,
 	process::{fd_table::Fd, task::CURRENT},
+	syscall::errno::Errno,
 };
 
 pub(super) fn get_file(fd: isize) -> Result<Arc<File>, Errno> {

@@ -3,9 +3,11 @@ use core::mem;
 use alloc::sync::Arc;
 use kfs_macro::interrupt_handler;
 
-use super::task::{State, Task, CURRENT, TASK_QUEUE};
-
-use crate::x86::CPU_TASK_STATE;
+use crate::{
+	process::task::{State, Task, CURRENT},
+	scheduler::TASK_QUEUE,
+	x86::CPU_TASK_STATE,
+};
 
 /// yield control from current task to next task
 ///  call flow: yield_now -> switch_stack -> switch_task_finish
