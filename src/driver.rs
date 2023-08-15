@@ -1,5 +1,7 @@
 pub mod apic;
+pub mod ata;
 pub mod console;
+pub mod pci;
 pub mod pipe;
 pub mod ps2;
 pub mod serial;

@@ -13,17 +13,19 @@ COM1="$1"
 shift
 
 # -m 4032(4096 - 64): almost maximum memory in x86 (without PAE)
-qemu-system-i386                    \
-    -cpu max                        \
-    -smp sockets=1,cores=4,threads=1\
-    -machine pc,max-ram-below-4g=4G \
-    -m 4000                         \
-    -boot d                         \
-    -vga std                        \
-    -device isa-debug-exit          \
-    -cdrom $RESCUE                  \
-    -action reboot=shutdown         \
-    -serial $COM1                   \
+qemu-system-i386                                       \
+    -cpu max                                           \
+    -smp sockets=1,cores=4,threads=1                   \
+    -machine pc,max-ram-below-4g=4G                    \
+    -m 4000                                            \
+    -vga std                                           \
+    -drive file=$RESCUE,if=none,format=raw,id=rescue   \
+    -drive file=hello.txt,if=none,format=raw,id=hello  \
+    -device ide-hd,drive=hello,bus=ide.0               \
+    -device ide-cd,drive=rescue,bootindex=1            \
+    -device isa-debug-exit                             \
+    -action reboot=shutdown                            \
+    -serial $COM1                                      \
     $@
 
 RESULT=$?

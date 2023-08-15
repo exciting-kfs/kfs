@@ -67,7 +67,7 @@ impl Port {
 
 		unsafe {
 			asm!(
-				"in al, eax",
+				"in eax, dx",
 				in("dx") self.port,
 				out("eax") data,
 			)
@@ -85,5 +85,11 @@ impl Port {
 				in("eax") data,
 			)
 		};
+	}
+
+	pub const fn add(&self, offset: u16) -> Self {
+		Self {
+			port: self.port + offset,
+		}
 	}
 }
