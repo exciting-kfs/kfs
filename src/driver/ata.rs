@@ -118,6 +118,9 @@ impl AtaId {
 
 pub fn test() {
 	let ata0 = AtaController::new(0x1f0, 0x3f6, false);
+	// let ata1 = AtaController::new(0x1f0, 0x3f6, true);
+	// let ata2 = AtaController::new(0x170, 0x376, false);
+	// let ata3 = AtaController::new(0x170, 0x376, true);
 
 	let ata0_id = ata0.identify_device();
 
