@@ -4,6 +4,7 @@ use core::ptr::NonNull;
 use crate::mm::alloc::cache::{CacheAllocator, CacheAllocatorStat};
 use crate::mm::alloc::{page, Zone};
 use crate::mm::{constant::*, util::*};
+use crate::ptr::UnMapped;
 
 #[derive(Debug)]
 pub struct PMemAlloc {
@@ -51,7 +52,7 @@ impl PMemAlloc {
 			None => cache.allocate(level),
 			Some(rank) => {
 				rank_count[rank] += 1;
-				page::alloc_pages(rank, Zone::Normal)
+				page::alloc_pages(rank, Zone::Normal).map(|um| unsafe { um.as_mapped() })
 			}
 		}
 	}
@@ -64,7 +65,7 @@ impl PMemAlloc {
 			None => cache.deallocate(ptr, level),
 			Some(rank) => {
 				rank_count[rank] -= 1;
-				page::free_pages(ptr);
+				page::free_pages(UnMapped::from_normal(ptr));
 			}
 		}
 	}

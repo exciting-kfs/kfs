@@ -5,6 +5,7 @@ use core::slice::from_raw_parts_mut;
 
 use crate::boot::{self, BootAlloc};
 use crate::mm::util::*;
+use crate::ptr::UnMapped;
 use crate::sync::locked::Locked;
 
 use super::metapage::MetaPage;
@@ -31,16 +32,15 @@ pub unsafe fn init(table: NonNull<[MetaPage]>) {
 		.write(from_raw_parts_mut(base_ptr, count));
 }
 
-pub fn meta_to_ptr(page: NonNull<MetaPage>) -> NonNull<u8> {
+// TODO atomic?
+pub fn meta_to_unmapped(page: NonNull<MetaPage>) -> UnMapped {
 	let index = meta_to_index(page);
 
-	return unsafe { NonNull::new_unchecked(phys_to_virt(pfn_to_addr(index)) as *mut u8) };
+	unsafe { UnMapped::new(pfn_to_addr(index), page.as_ref().rank()) }
 }
 
-pub fn ptr_to_meta(ptr: NonNull<u8>) -> NonNull<MetaPage> {
-	let index = addr_to_pfn(virt_to_phys(ptr.as_ptr() as usize));
-
-	return index_to_meta(index);
+pub fn phys_to_meta(ptr: usize) -> NonNull<MetaPage> {
+	index_to_meta(addr_to_pfn(ptr))
 }
 
 pub fn meta_to_index(page: NonNull<MetaPage>) -> usize {

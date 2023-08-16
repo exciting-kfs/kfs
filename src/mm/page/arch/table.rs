@@ -21,10 +21,11 @@ impl PT {
 	}
 
 	pub fn new_from_4m(pde_4m: PDE) -> Result<&'static mut Self, AllocError> {
-		let addr = pde_4m.addr();
+		let addr = pde_4m.paddr();
 		let flag = pde_4m.flag();
 		unsafe {
 			let page_table = page::alloc_pages(0, Zone::Normal)?
+				.as_mapped()
 				.as_mut()
 				.as_mut_ptr()
 				.cast::<PT>();
@@ -79,7 +80,7 @@ impl PTE {
 		self.data = flag
 	}
 
-	pub fn addr(&self) -> usize {
+	pub fn paddr(&self) -> usize {
 		(self.data.bits() & Self::ADDR_MASK) as usize
 	}
 

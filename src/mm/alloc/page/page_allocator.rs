@@ -4,8 +4,8 @@ use super::buddy_allocator::BuddyAlloc;
 
 use crate::boot::MEM_INFO;
 use crate::mm::alloc::Zone;
-use crate::mm::page::index_to_meta;
 use crate::mm::{constant::*, util::*};
+use crate::ptr::UnMapped;
 use crate::sync::locked::Locked;
 
 use core::alloc::AllocError;
@@ -44,7 +44,7 @@ impl PageAlloc {
 	/// Note that if requested zone is `Zone::High`
 	/// and there is no sufficient pages in `Zone::High`, then
 	/// pages from `Zone::Normal` can be returned.
-	pub fn alloc_pages(&mut self, rank: usize, flag: Zone) -> Result<NonNull<[u8]>, AllocError> {
+	pub fn alloc_pages(&mut self, rank: usize, flag: Zone) -> Result<UnMapped, AllocError> {
 		let pages = match flag {
 			Zone::High => self.high.alloc_pages(rank),
 			Zone::Normal => Err(AllocError),
@@ -59,12 +59,11 @@ impl PageAlloc {
 	}
 
 	/// Deallocate pages.
-	pub fn free_pages(&mut self, page: NonNull<u8>) {
-		let addr = page.as_ptr() as usize;
-		let pfn = addr_to_pfn(virt_to_phys(addr));
+	pub fn free_pages(&mut self, page: UnMapped) {
+		let pfn = addr_to_pfn(page.as_phys());
 
-		let rank = unsafe { index_to_meta(pfn).as_ref() }.rank();
-		self.available_pages += rank_to_pages(rank);
+		// let rank = unsafe { index_to_meta(pfn).as_ref() }.rank();
+		self.available_pages += rank_to_pages(page.rank());
 
 		if pfn < unsafe { MEM_INFO.high_start_pfn } {
 			self.normal.free_pages(page)
@@ -96,32 +95,28 @@ mod test {
 	const RANDOM_SEED: u32 = 42;
 	const ALLOC_QUEUE_SIZE: usize = 100;
 
-	#[derive(Clone, Copy, Debug)]
+	#[derive(Clone, Debug)]
 	struct AllocInfo {
-		ptr: NonNull<u8>,
-		rank: usize,
+		// ptr: NonNull<u8>,
+		// rank: usize,
+		ptr: UnMapped,
 	}
 
 	impl AllocInfo {
-		pub fn new(mut ptr: NonNull<[u8]>) -> Self {
-			let slice = unsafe { ptr.as_mut() };
-
-			let rank = (slice.len() / PAGE_SIZE).ilog2() as usize;
-			let ptr = unsafe { NonNull::new_unchecked(slice.as_mut_ptr()) };
-
-			Self { ptr, rank }
+		pub fn new(ptr: UnMapped) -> Self {
+			Self { ptr }
 		}
 
 		pub fn as_non_null(&self) -> NonNull<u8> {
-			self.ptr
-		}
-
-		pub fn as_ptr(&self) -> *const u8 {
-			self.ptr.as_ptr().cast_const()
+			unsafe { self.ptr.clone().as_mapped().cast() }
 		}
 
 		pub fn rank(&self) -> usize {
-			self.rank
+			self.ptr.rank()
+		}
+
+		pub fn as_unmapped(&self) -> UnMapped {
+			self.ptr.clone()
 		}
 	}
 
@@ -160,10 +155,10 @@ mod test {
 	fn alloc(rank: usize, flag: Zone) -> Result<AllocInfo, AllocError> {
 		let mem = AllocInfo::new(alloc_pages(rank, flag.clone())?);
 
-		assert!(mem.as_ptr() as usize % PAGE_SIZE == 0);
+		assert!(mem.ptr.as_phys() % PAGE_SIZE == 0);
 		assert!(mem.rank() == rank);
 
-		mark_alloced(mem.as_ptr() as usize, rank);
+		mark_alloced(mem.ptr.as_phys() as usize, rank);
 
 		if let Zone::Normal = flag {
 			unsafe { *mem.as_non_null().as_ptr() = 42 };
@@ -173,9 +168,9 @@ mod test {
 	}
 
 	fn free(info: AllocInfo) {
-		mark_freed(info.ptr.as_ptr() as usize, info.rank);
+		mark_freed(info.ptr.as_phys() as usize, info.rank());
 
-		free_pages(info.ptr);
+		free_pages(info.as_unmapped());
 	}
 
 	fn is_zone_normal(ptr: NonNull<u8>) -> bool {
@@ -188,8 +183,7 @@ mod test {
 		for (i, is_alloced) in unsafe { &mut PAGE_STATE }.iter().enumerate() {
 			if *is_alloced {
 				free(AllocInfo {
-					ptr: NonNull::new((i << PAGE_SHIFT) as *mut u8).unwrap(),
-					rank: 0,
+					ptr: UnMapped::from_phys(pfn_to_addr(i)),
 				});
 			}
 		}
@@ -260,7 +254,7 @@ mod test {
 	pub fn zone_high_basic() {
 		let info = alloc(0, Zone::High).unwrap();
 
-		if is_zone_normal(info.ptr) {
+		if is_zone_normal(info.as_non_null()) {
 			pr_warn!(
 				concat!(
 					" note: allocated memory came from `ZONE_NORMAL`\n",
@@ -281,7 +275,7 @@ mod test {
 		loop {
 			let info = alloc(0, Zone::High).expect("OOM before ZONE_NORMAL is exhausted");
 
-			if is_zone_normal(info.ptr) {
+			if is_zone_normal(info.as_non_null()) {
 				break;
 			}
 

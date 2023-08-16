@@ -2,6 +2,7 @@ use core::{alloc::AllocError, ptr::NonNull};
 
 use crate::mm::page::{PageFlag, KERNEL_PD};
 use crate::mm::{constant::*, util::*};
+use crate::ptr::UnMapped;
 use crate::sync::locked::Locked;
 
 use super::AddressSpace;
@@ -54,10 +55,10 @@ pub fn kmap(paddr: usize) -> Result<NonNull<u8>, AllocError> {
 	Ok(unsafe { NonNull::new_unchecked(vaddr as *mut u8) })
 }
 
-pub fn kunmap(vaddr: usize) {
+pub fn kunmap(vaddr: usize) -> Option<UnMapped> {
 	// early return
 	if !matches!(AddressSpace::identify(vaddr), AddressSpace::Kmap) {
-		return;
+		return None;
 	}
 
 	let mut bitmap = KMAP_BITMAP.lock();
@@ -65,7 +66,7 @@ pub fn kunmap(vaddr: usize) {
 	let idx = addr_to_pfn(vaddr - KMAP_OFFSET);
 	bitmap.toggle_bitmap(idx);
 
-	KERNEL_PD.unmap_kernel(vaddr);
+	KERNEL_PD.unmap_kernel(vaddr)
 }
 
 mod test {
@@ -80,33 +81,23 @@ mod test {
 
 	#[ktest]
 	pub fn simple() {
-		let vaddr = alloc_pages(0, Zone::High).unwrap().as_ptr().cast::<u8>() as usize;
-
-		let paddr = virt_to_phys(vaddr);
-
-		let page = kmap(paddr).unwrap().as_ptr();
+		let unmapped = alloc_pages(0, Zone::High).unwrap();
+		let page = kmap(unmapped.as_phys()).unwrap().as_ptr();
 
 		// must not crash
 		unsafe { page.write_bytes(42, PAGE_SIZE) };
-
-		kunmap(page as usize);
-		free_pages(unsafe { NonNull::new_unchecked(vaddr as *mut u8) });
+		free_pages(kunmap(page as usize).unwrap());
 	}
 
 	#[ktest]
 	pub fn repeat_map_unmap() {
-		let pages = alloc_pages(MAX_RANK, Zone::High)
-			.unwrap()
-			.as_ptr()
-			.cast::<u8>() as usize;
-
-		let paddr = virt_to_phys(pages);
+		let unmapped = alloc_pages(MAX_RANK, Zone::High).unwrap();
 
 		let mut mapped_pages = Vec::new();
 		let mut count = 0;
 
 		// kmap while OOM
-		while let Ok(page) = kmap(paddr + count * PAGE_SIZE) {
+		while let Ok(page) = kmap(unmapped.as_phys() + count * PAGE_SIZE) {
 			unsafe { page.as_ptr().write_bytes(42, PAGE_SIZE) }
 			mapped_pages.push(page);
 			count += 1;
@@ -119,13 +110,13 @@ mod test {
 
 		// re-kmap as many as before
 		for i in 0..count {
-			mapped_pages.push(kmap(paddr + i * PAGE_SIZE).unwrap());
+			mapped_pages.push(kmap(unmapped.as_phys() + i * PAGE_SIZE).unwrap());
 		}
 
 		for p in mapped_pages.drain(..) {
 			kunmap(p.as_ptr() as usize);
 		}
 
-		free_pages(unsafe { NonNull::new_unchecked(pages as *mut u8) });
+		free_pages(unmapped);
 	}
 }

@@ -60,7 +60,7 @@ impl<const N: usize> SizeCache<N> {
 	}
 
 	fn alloc_pages(&mut self, rank: usize) -> Result<NonNull<[u8]>> {
-		let page = page::alloc_pages(rank, Zone::Normal)?;
+		let page = unsafe { page::alloc_pages(rank, Zone::Normal)?.as_mapped() };
 		self.page_count += 1 << rank;
 		Ok(page)
 	}

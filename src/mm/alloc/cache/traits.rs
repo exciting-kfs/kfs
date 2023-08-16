@@ -5,6 +5,7 @@ use super::meta_cache::MetaCache;
 use super::no_alloc_list::NAList;
 
 use crate::mm::alloc::page;
+use crate::ptr::UnMapped;
 
 pub trait CacheTrait {
 	fn partial(&mut self) -> &mut NAList<MetaCache>;
@@ -19,7 +20,7 @@ pub trait CacheTrait {
 		satisfied.iter_mut().for_each(|meta_cache| unsafe {
 			let ptr = meta_cache as *mut MetaCache;
 			let ptr = NonNull::new_unchecked(ptr.cast());
-			page::free_pages(ptr);
+			page::free_pages(UnMapped::from_normal(ptr));
 		});
 	}
 

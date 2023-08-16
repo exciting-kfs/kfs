@@ -7,8 +7,7 @@ use core::ptr::NonNull;
 
 use crate::mm::alloc::{page, Zone};
 use crate::mm::page::{index_to_meta, PageFlag, KERNEL_PD};
-use crate::mm::page::{meta_to_ptr, metapage_let, MetaPage};
-use crate::mm::util::virt_to_phys;
+use crate::mm::page::{meta_to_unmapped, metapage_let, MetaPage};
 use crate::mm::{constant::*, util::*};
 use crate::sync::locked::Locked;
 use core::slice::from_raw_parts;
@@ -65,12 +64,9 @@ impl VMemAlloc {
 		};
 
 		for vaddr in (0..pages).map(|x| base_address + x * PAGE_SIZE) {
-			let paddr = virt_to_phys(unsafe {
-				page::alloc_pages(0, Zone::High)
-					.map_err(|_| VMallocError::OutOfMemory(base_address))?
-					.as_mut()
-					.as_ptr() as usize
-			});
+			let paddr = page::alloc_pages(0, Zone::High)
+				.map_err(|_| VMallocError::OutOfMemory(base_address))?
+				.as_phys();
 
 			head.push(index_to_meta(addr_to_pfn(paddr)));
 
@@ -92,8 +88,7 @@ impl VMemAlloc {
 
 	fn free_pages(&self, head: &mut MetaPage, base_addr: usize, pages: usize) {
 		for (i, entry) in repeat_with(|| head.pop()).map_while(|v| v).enumerate() {
-			let page = meta_to_ptr(entry);
-			page::free_pages(page);
+			page::free_pages(meta_to_unmapped(entry));
 			let addr = base_addr + i * PAGE_SIZE;
 			KERNEL_PD.unmap_kernel(addr);
 		}

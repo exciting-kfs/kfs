@@ -1,12 +1,13 @@
-use core::{alloc::AllocError, mem, ptr::NonNull};
+use core::{alloc::AllocError, mem, ptr::NonNull, slice::from_raw_parts_mut};
 
 use crate::mm::{
 	alloc::{
 		page::{alloc_pages, free_pages},
 		Zone,
 	},
-	constant::PAGE_SHIFT,
-	util::virt_to_phys,
+	constant::{MAX_RANK, PAGE_SHIFT},
+	page::index_to_meta,
+	util::{addr_to_pfn, phys_to_virt, rank_to_size, virt_to_phys},
 };
 
 pub struct PageBox {
@@ -19,7 +20,7 @@ impl PageBox {
 	}
 
 	pub fn new_n_ranked(rank: usize, zone: Zone) -> Result<Self, AllocError> {
-		let ptr = alloc_pages(rank, zone)?;
+		let ptr = unsafe { alloc_pages(rank, zone)?.as_mapped() }; // ?
 
 		Ok(Self { ptr })
 	}
@@ -53,6 +54,51 @@ impl Drop for PageBox {
 	fn drop(&mut self) {
 		let page = self.ptr.cast::<u8>();
 
-		free_pages(page);
+		free_pages(UnMapped::from_normal(page));
+	}
+}
+
+#[derive(Clone, Debug)]
+pub struct UnMapped {
+	paddr: usize,
+	rank: usize,
+}
+
+impl UnMapped {
+	pub fn new(paddr: usize, rank: usize) -> Self {
+		debug_assert!(rank <= MAX_RANK, "unmapped: new: invalid rank");
+		Self { paddr, rank }
+	}
+
+	pub fn from_phys(paddr: usize) -> Self {
+		let pfn = addr_to_pfn(paddr);
+
+		unsafe {
+			Self {
+				paddr,
+				rank: index_to_meta(pfn).as_ref().rank(),
+			}
+		}
+	}
+
+	pub fn from_normal(vaddr: NonNull<u8>) -> Self {
+		let paddr = virt_to_phys(vaddr.as_ptr() as usize);
+		UnMapped::from_phys(paddr)
+	}
+
+	pub fn as_phys(&self) -> usize {
+		self.paddr
+	}
+
+	pub fn rank(&self) -> usize {
+		self.rank
+	}
+
+	pub unsafe fn as_mapped(self) -> NonNull<[u8]> {
+		let vaddr = phys_to_virt(self.paddr);
+		let size = rank_to_size(self.rank);
+		let slice = from_raw_parts_mut(vaddr as *mut u8, size);
+
+		NonNull::new_unchecked(slice)
 	}
 }

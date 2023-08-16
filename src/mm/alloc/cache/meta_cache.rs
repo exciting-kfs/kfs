@@ -4,7 +4,7 @@ use core::ptr::NonNull;
 
 use super::no_alloc_list::{NAList, Node};
 
-use crate::mm::{page::ptr_to_meta, util::*};
+use crate::mm::{page::phys_to_meta, util::*};
 
 #[derive(Debug)]
 pub struct Dummy;
@@ -107,8 +107,12 @@ impl MetaCache {
 	}
 }
 
-pub fn get_rank(ptr: NonNull<u8>) -> usize {
-	unsafe { ptr_to_meta(ptr).as_ref().rank() }
+fn get_rank(ptr: NonNull<u8>) -> usize {
+	unsafe {
+		phys_to_meta(virt_to_phys(ptr.as_ptr() as usize))
+			.as_ref()
+			.rank()
+	}
 }
 
 #[inline(always)]

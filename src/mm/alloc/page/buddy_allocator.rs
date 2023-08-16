@@ -2,15 +2,15 @@
 
 use super::free_list::FreeList;
 
-use crate::mm::page::{index_to_meta, meta_to_index, meta_to_ptr, ptr_to_meta, MetaPage};
+use crate::mm::page::{index_to_meta, meta_to_index, meta_to_unmapped, phys_to_meta, MetaPage};
 use crate::mm::{constant::*, util::*};
+use crate::ptr::UnMapped;
 
 use core::alloc::AllocError;
 use core::fmt::{self, Display};
 
 use core::ops::Range;
 use core::ptr::{addr_of_mut, NonNull};
-use core::slice::from_raw_parts;
 
 pub struct BuddyAlloc {
 	free_list: FreeList,
@@ -36,7 +36,7 @@ impl BuddyAlloc {
 	}
 
 	/// allocate `2 ^ req_rank` of pages.
-	pub fn alloc_pages(&mut self, req_rank: usize) -> Result<NonNull<[u8]>, AllocError> {
+	pub fn alloc_pages(&mut self, req_rank: usize) -> Result<UnMapped, AllocError> {
 		for rank in req_rank..=MAX_RANK {
 			if let Some(page) = self.free_list.get(rank) {
 				return Ok(self.split_to_rank(page, req_rank));
@@ -46,8 +46,8 @@ impl BuddyAlloc {
 	}
 
 	/// deallocate pages.
-	pub fn free_pages(&mut self, ptr: NonNull<u8>) {
-		let mut page = ptr_to_meta(ptr);
+	pub fn free_pages(&mut self, ptr: UnMapped) {
+		let mut page = phys_to_meta(ptr.as_phys());
 		unsafe { page.as_mut().set_inuse(false) };
 
 		while let Some(mut buddy) = self.get_free_buddy(page) {
@@ -58,7 +58,7 @@ impl BuddyAlloc {
 		self.free_list.add(page);
 	}
 
-	fn split_to_rank(&mut self, page: NonNull<MetaPage>, req_rank: usize) -> NonNull<[u8]> {
+	fn split_to_rank(&mut self, page: NonNull<MetaPage>, req_rank: usize) -> UnMapped {
 		let mut lpage = page;
 		let mut rpage;
 		while req_rank < unsafe { lpage.as_mut().rank() } {
@@ -68,8 +68,7 @@ impl BuddyAlloc {
 
 		unsafe { lpage.as_mut().set_inuse(true) };
 
-		let page = meta_to_ptr(lpage);
-		unsafe { NonNull::from(from_raw_parts(page.as_ptr(), rank_to_size(req_rank))) }
+		meta_to_unmapped(lpage)
 	}
 
 	fn get_free_buddy(&mut self, page: NonNull<MetaPage>) -> Option<NonNull<MetaPage>> {

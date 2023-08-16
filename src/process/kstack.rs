@@ -7,6 +7,7 @@ use crate::interrupt::InterruptFrame;
 use crate::mm::alloc::page::{alloc_pages, free_pages};
 use crate::mm::alloc::Zone;
 use crate::mm::util::*;
+use crate::ptr::UnMapped;
 
 use super::kthread::kthread_entry;
 
@@ -28,7 +29,8 @@ pub struct Stack {
 
 impl Stack {
 	pub fn alloc() -> Result<Self, AllocError> {
-		let storage: NonNull<StackStorage> = alloc_pages(KSTACK_RANK, Zone::Normal)?.cast();
+		let storage: NonNull<StackStorage> =
+			unsafe { alloc_pages(KSTACK_RANK, Zone::Normal)?.as_mapped().cast() };
 
 		let esp = (storage.as_ptr() as usize + size_of::<StackStorage>()) as *mut usize;
 
@@ -152,6 +154,6 @@ impl Stack {
 
 impl Drop for Stack {
 	fn drop(&mut self) {
-		free_pages(self.storage.cast());
+		free_pages(UnMapped::from_normal(self.storage.cast()));
 	}
 }

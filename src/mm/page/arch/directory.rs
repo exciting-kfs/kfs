@@ -3,6 +3,7 @@ use crate::mm::alloc::page::{alloc_pages, free_pages};
 use crate::mm::alloc::virt::AddressSpace;
 use crate::mm::alloc::Zone;
 use crate::mm::{constant::*, util::*};
+use crate::ptr::UnMapped;
 use crate::sync::locked::Locked;
 
 use core::alloc::AllocError;
@@ -42,7 +43,7 @@ impl PD {
 
 	pub fn new() -> Result<Self, AllocError> {
 		unsafe {
-			let pd: NonNull<[PDE; 1024]> = alloc_pages(0, Zone::Normal)?.cast();
+			let pd: NonNull<[PDE; 1024]> = alloc_pages(0, Zone::Normal)?.as_mapped().cast();
 
 			pd.as_ptr().copy_from_nonoverlapping(KERNEL_PD.inner(), 1);
 
@@ -73,16 +74,31 @@ impl PD {
 		VMALLOC_PT.lock()[pd_idx][pt_idx] = PTE::new(paddr, flags);
 	}
 
-	fn unmap_kmap_area(&self, vaddr: usize) {
-		let (pd_idx, pt_idx) = Self::addr_to_index(vaddr - KMAP_OFFSET);
+	unsafe fn __unmap(&self, vaddr: usize, offset: usize, pt: &mut [PT]) -> UnMapped {
+		let (pd_idx, pt_idx) = Self::addr_to_index(vaddr - offset);
 
-		KMAP_PT.lock()[pd_idx][pt_idx] = PTE::new(0, PageFlag::Global);
+		let paddr = pt[pd_idx][pt_idx].paddr();
+		pt[pd_idx][pt_idx] = PTE::new(0, PageFlag::Global);
+
+		UnMapped::new(paddr, 0)
 	}
 
-	fn unmap_vmalloc_area(&self, vaddr: usize) {
-		let (pd_idx, pt_idx) = Self::addr_to_index(vaddr - VMALLOC_OFFSET);
+	fn unmap_kmap_area(&self, vaddr: usize) -> UnMapped {
+		unsafe {
+			let pt = KMAP_PT.lock_manual();
+			let ret = self.__unmap(vaddr, KMAP_OFFSET, pt);
+			KMAP_PT.unlock_manual();
+			ret
+		}
+	}
 
-		VMALLOC_PT.lock()[pd_idx][pt_idx] = PTE::new(0, PageFlag::Global);
+	fn unmap_vmalloc_area(&self, vaddr: usize) -> UnMapped {
+		unsafe {
+			let pt = VMALLOC_PT.lock_manual();
+			let ret = self.__unmap(vaddr, VMALLOC_OFFSET, pt);
+			VMALLOC_PT.unlock_manual();
+			ret
+		}
 	}
 
 	pub fn map_kernel(&self, vaddr: usize, paddr: usize, flags: PageFlag) {
@@ -94,13 +110,14 @@ impl PD {
 		invlpg(vaddr);
 	}
 
-	pub fn unmap_kernel(&self, vaddr: usize) {
-		match AddressSpace::identify(vaddr) {
+	pub fn unmap_kernel(&self, vaddr: usize) -> Option<UnMapped> {
+		let ret = match AddressSpace::identify(vaddr) {
 			AddressSpace::Kmap => self.unmap_kmap_area(vaddr),
 			AddressSpace::Vmalloc => self.unmap_vmalloc_area(vaddr),
-			_ => return,
+			_ => return None,
 		};
 		invlpg(vaddr);
+		Some(ret)
 	}
 
 	pub fn map_user(
@@ -128,7 +145,7 @@ impl PD {
 
 			pt
 		} else {
-			unsafe { (phys_to_virt(pde.addr()) as *mut PT).as_mut().unwrap() }
+			unsafe { (phys_to_virt(pde.paddr()) as *mut PT).as_mut().unwrap() }
 		};
 
 		pt[pt_idx] = PTE::new(paddr, flags);
@@ -152,7 +169,7 @@ impl PD {
 			return;
 		}
 
-		let pt = unsafe { (phys_to_virt(pde.addr()) as *mut PT).as_mut().unwrap() };
+		let pt = unsafe { (phys_to_virt(pde.paddr()) as *mut PT).as_mut().unwrap() };
 
 		let mut new_flag = pt[pt_idx].flag();
 		new_flag.remove(PageFlag::Present);
@@ -171,12 +188,12 @@ impl PD {
 			return pde
 				.flag()
 				.contains(PageFlag::Present)
-				.then(|| pde.addr() + pt_idx * PAGE_SIZE);
+				.then(|| pde.paddr() + pt_idx * PAGE_SIZE);
 		} else {
-			let pt = unsafe { (phys_to_virt(pde.addr()) as *mut PT).as_mut().unwrap() };
+			let pt = unsafe { (phys_to_virt(pde.paddr()) as *mut PT).as_mut().unwrap() };
 			let pte = pt[pt_idx];
 
-			return pte.flag().contains(PageFlag::Present).then(|| pte.addr());
+			return pte.flag().contains(PageFlag::Present).then(|| pte.paddr());
 		}
 	}
 
@@ -215,13 +232,12 @@ impl Drop for PD {
 		let inner = self.inner_mut();
 		for pde in inner.iter().take(VM_OFFSET / PT_COVER_SIZE) {
 			if !pde.is_4m() {
-				let vaddr = phys_to_virt(pde.addr());
-
-				free_pages(unsafe { NonNull::new_unchecked(vaddr as *mut u8) });
+				free_pages(UnMapped::from_phys(pde.paddr()));
 			}
 		}
 
-		free_pages(NonNull::from(inner).cast());
+		let unmapped = UnMapped::from_normal(NonNull::from(inner).cast());
+		free_pages(unmapped);
 	}
 }
 
@@ -257,10 +273,10 @@ impl PDE {
 		if self.is_4m() {
 			return None;
 		}
-		unsafe { (phys_to_virt(self.addr()) as *const PT).as_ref() }
+		unsafe { (phys_to_virt(self.paddr()) as *const PT).as_ref() }
 	}
 
-	pub fn addr(&self) -> usize {
+	pub fn paddr(&self) -> usize {
 		(self.data.bits() & Self::ADDR_MASK) as usize
 	}
 
