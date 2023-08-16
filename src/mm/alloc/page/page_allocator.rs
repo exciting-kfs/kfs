@@ -97,8 +97,6 @@ mod test {
 
 	#[derive(Clone, Debug)]
 	struct AllocInfo {
-		// ptr: NonNull<u8>,
-		// rank: usize,
 		ptr: UnMapped,
 	}
 
