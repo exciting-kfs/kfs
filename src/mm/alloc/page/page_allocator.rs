@@ -61,8 +61,6 @@ impl PageAlloc {
 	/// Deallocate pages.
 	pub fn free_pages(&mut self, page: UnMapped) {
 		let pfn = addr_to_pfn(page.as_phys());
-
-		// let rank = unsafe { index_to_meta(pfn).as_ref() }.rank();
 		self.available_pages += rank_to_pages(page.rank());
 
 		if pfn < unsafe { MEM_INFO.high_start_pfn } {
