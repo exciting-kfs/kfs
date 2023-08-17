@@ -2,7 +2,8 @@ use core::{fmt::Display, mem::MaybeUninit};
 
 use crate::{io::pmio::Port, sync::locked::Locked};
 
-pub static BMIDE: Locked<[MaybeUninit<BMIDE>; 2]> = Locked::uninit_array(); // TODO lock split?
+/// BMIDE[channel]
+pub static BMIDE: [Locked<MaybeUninit<BMIDE>>; 2] = [Locked::uninit(), Locked::uninit()];
 
 /// BUS MASTER IDE
 pub struct BMIDE {
@@ -20,9 +21,8 @@ impl BMIDE {
 	const PRDTR: u16 = 0x4;
 
 	pub fn init(port: u16) {
-		let mut bmide = BMIDE.lock();
-		bmide[0].write(BMIDE::new(port, false));
-		bmide[1].write(BMIDE::new(port + 0x08, true));
+		BMIDE[0].lock().write(BMIDE::new(port, false));
+		BMIDE[1].lock().write(BMIDE::new(port + 0x08, true));
 	}
 
 	pub const fn new(base: u16, is_2nd_channel: bool) -> Self {
