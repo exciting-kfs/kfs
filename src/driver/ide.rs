@@ -66,6 +66,8 @@ pub fn init() -> Result<(), pci::Error> {
 }
 
 pub mod test {
+	use crate::driver::bus::ata::Command;
+
 	use super::*;
 	// TODO DELETE
 	pub static mut DMA_CHECK: MaybeUninit<NonNull<[u8]>> = MaybeUninit::uninit();
@@ -121,7 +123,7 @@ pub mod test {
 
 		ata_ide.write_lba28(0);
 		ata_ide.write_sector_count(1);
-		ata_ide.write_command(0xca);
+		ata_ide.write_command(Command::WriteDMA);
 
 		pr_debug!("{}", ata_ide.output());
 
@@ -148,7 +150,7 @@ pub mod test {
 
 		ata_ide.write_lba28(0);
 		ata_ide.write_sector_count(1);
-		ata_ide.write_command(0xc8);
+		ata_ide.write_command(Command::ReadDMA);
 
 		pr_debug!("{}", ata_ide.output());
 

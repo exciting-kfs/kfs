@@ -65,8 +65,10 @@ impl AtaController {
 		self.command.add(Self::SECTOR_COUNT).write_byte(count);
 	}
 
-	pub fn write_command(&self, command: u8) {
-		self.command.add(Self::STATUS_COMMAND).write_byte(command);
+	pub fn write_command(&self, command: Command) {
+		self.command
+			.add(Self::STATUS_COMMAND)
+			.write_byte(command as u8);
 	}
 
 	pub fn output(&self) -> AtaOutput {
@@ -86,7 +88,9 @@ impl AtaController {
 
 		self.write_lba28(lba);
 
-		self.command.add(Self::STATUS_COMMAND).write_byte(0x20);
+		self.command
+			.add(Self::STATUS_COMMAND)
+			.write_byte(Command::ReadSectors as u8);
 
 		for sector in buf {
 			for word in &mut sector.0 {
@@ -100,7 +104,9 @@ impl AtaController {
 			.add(Self::DEVICE)
 			.write_byte((self.is_2nd_dev as u8) << 4);
 
-		self.command.add(Self::STATUS_COMMAND).write_byte(0xec);
+		self.command
+			.add(Self::STATUS_COMMAND)
+			.write_byte(Command::IdentifyDevice as u8);
 
 		let mut data = RawSector([0; 256]);
 		for word in &mut data.0 {
@@ -170,4 +176,12 @@ impl Display for AtaOutput {
 
 		Ok(())
 	}
+}
+
+#[repr(u8)]
+pub enum Command {
+	ReadDMA = 0xc8,
+	WriteDMA = 0xca,
+	ReadSectors = 0x20,
+	IdentifyDevice = 0xec,
 }
