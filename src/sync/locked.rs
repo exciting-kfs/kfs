@@ -36,6 +36,15 @@ impl<T> Locked<MaybeUninit<T>> {
 	}
 }
 
+impl<T, const N: usize> Locked<[MaybeUninit<T>; N]> {
+	pub const fn uninit_array() -> Self {
+		Self {
+			inner: SpinLock::new(),
+			value: UnsafeCell::new(MaybeUninit::uninit_array()),
+		}
+	}
+}
+
 impl<T> Locked<T> {
 	pub const fn new(value: T) -> Self {
 		Self {

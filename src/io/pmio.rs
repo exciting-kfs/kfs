@@ -2,6 +2,7 @@
 
 use core::arch::asm;
 
+#[derive(Debug)]
 pub struct Port {
 	port: u16,
 }
@@ -37,6 +38,45 @@ impl Port {
 		};
 	}
 
+	pub fn read_u16(&self) -> u16 {
+		let data: u16;
+
+		unsafe {
+			asm!(
+				"in ax, dx",
+				in("dx") self.port,
+				out("ax") data,
+			)
+		};
+
+		data
+	}
+
+	pub fn write_u16(&self, data: u16) {
+		unsafe {
+			asm!(
+				"out dx, ax",
+				in("dx") self.port,
+				in("ax") data,
+			)
+		};
+	}
+
+	/// read 4 byte from port
+	pub fn read_u32(&self) -> u32 {
+		let data: u32;
+
+		unsafe {
+			asm!(
+				"in eax, dx",
+				in("dx") self.port,
+				out("eax") data,
+			)
+		};
+
+		data
+	}
+
 	/// write 4 byte into port
 	pub fn write_u32(&self, data: u32) {
 		unsafe {
@@ -48,18 +88,9 @@ impl Port {
 		};
 	}
 
-	/// read 4 byte from port
-	pub fn read_u32(&self) -> u32 {
-		let data: u32;
-
-		unsafe {
-			asm!(
-				"in al, eax",
-				in("dx") self.port,
-				out("eax") data,
-			)
-		};
-
-		data
+	pub const fn add(&self, offset: u16) -> Self {
+		Self {
+			port: self.port + offset,
+		}
 	}
 }

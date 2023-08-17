@@ -172,10 +172,13 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	mm::alloc::virt::init();
 
 	driver::console::console_manager::init();
+	driver::bus::pci::enumerate();
 
 	acpi::init();
+
 	driver::apic::io::init().expect("io apic init");
 	driver::ps2::init().expect("failed to init PS/2");
+	driver::ide::init().expect("IDE controller initialization.");
 
 	unsafe { x86::init() };
 	process::init();
