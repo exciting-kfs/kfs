@@ -60,7 +60,6 @@ pub fn io_allocate(paddr: usize, count: usize) -> Result<NonNull<[u8]>, AllocErr
 	unsafe {
 		Ok(NonNull::from(slice::from_raw_parts(
 			vaddr as *mut u8,
-			// rank_to_size(count),
 			PAGE_SIZE * count,
 		)))
 	}
