@@ -71,6 +71,8 @@ RESUCE_SRC_ROOT := iso
 RESCUE_IMG_NAME := rescue.iso
 RESCUE_IMG := $(TARGET_ROOT)/$(RESCUE_IMG_NAME)
 
+HDD_IMG := /tmp/disk.img
+
 LINKER_SCRIPT := linker-script/kernel.ld
 
 DOC := $(shell dirname $(TARGET_ROOT))/doc/kernel/index.html
@@ -82,7 +84,7 @@ USERSPACE_SRC_ROOT := userspace
 # === Phony recipes ===
 
 .PHONY : all
-all : rescue
+all : rescue hdd
 
 .PHONY : build
 build : $(KERNEL_BIN)
@@ -102,22 +104,22 @@ re : clean
 	@$(MAKE) all
 
 .PHONY : run
-run : rescue
-	@scripts/qemu.sh $(RESCUE_IMG) stdio -monitor pty
+run : rescue hdd
+	@scripts/qemu.sh $(RESCUE_IMG) $(HDD_IMG) stdio -monitor pty
 
 .PHONY : debug debug-display
 ifeq ($(DEBUG_WITH_VSCODE),y)
 debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
 	@scripts/vsc-debug.py $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN) &
-	@scripts/qemu.sh $(RESCUE_IMG) stdio -s -S -monitor pty -display none 
+	@scripts/qemu.sh $(RESCUE_IMG) $(HDD_IMG) stdio -s -S -monitor pty -display none 
 
 debug-display : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
 	@scripts/vsc-debug.py $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN) &
-	@scripts/qemu.sh $(RESCUE_IMG) stdio -s -S -monitor pty
+	@scripts/qemu.sh $(RESCUE_IMG) $(HDD_IMG) stdio -s -S -monitor pty
 
 else
 debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
-	@scripts/qemu.sh $(RESCUE_IMG) stdio -s -S -monitor pty & rust-lldb   \
+	@scripts/qemu.sh $(RESCUE_IMG) $(HDD_IMG) stdio -s -S -monitor pty & rust-lldb   \
 		--one-line "target create --symfile $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN)"   \
 		--one-line "gdb-remote localhost:1234"                                      \
 		--source scripts/debug.lldb
@@ -165,7 +167,7 @@ endif
 test : RUSTC_FLAG += --cfg ktest
 test : RUSTC_FLAG += --cfg ktest='"$(TEST_CASE)"'
 test : rescue
-	@scripts/qemu.sh $(RESCUE_IMG) stdio -display none
+	@scripts/qemu.sh $(RESCUE_IMG) $(HDD_IMG) stdio -display none
 
 # === Main recipes ===
 
@@ -209,3 +211,15 @@ userspace :
 ci : CFLAGS := -Werror
 ci : RUSTC_FLAG += -D warnings
 ci : test
+
+
+.PHONY: hdd hdd-clean
+hdd: $(HDD_IMG)
+
+$(HDD_IMG):
+	@echo "[-] creating disk.img"
+	@hdd/run.sh
+
+hdd-clean:
+	@echo "[-] cleaning up disk.img"
+	@rm $(HDD_IMG)

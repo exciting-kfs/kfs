@@ -4,9 +4,10 @@
 /// PIIX specification.
 /// OsDev [PCI, PCI IDE Controller, ATA/ATAPI using DMA]
 mod bmide;
+mod partition;
 mod prd;
 
-use core::{mem::MaybeUninit, ptr::NonNull};
+use core::{array, mem::MaybeUninit, ptr::NonNull};
 
 use kfs_macro::interrupt_handler;
 
@@ -34,17 +35,16 @@ const IDE_CLASS_CODE: ClassCode = ClassCode {
 	sub_class: 0x01,
 };
 
-static ATA_IDE: Locked<[[AtaController; 2]; 2]> = Locked::new([
-	// TODO split lock?
+static ATA_IDE: [[Locked<AtaController>; 2]; 2] = [
 	[
-		AtaController::new(0x1f0, 0x3f6, false), // CH: P, DEV: P
-		AtaController::new(0x1f0, 0x3f6, true),  // CH: P, DEV: S
+		Locked::new(AtaController::new(0x1f0, 0x3f6, false)), // CH: P, DEV: P
+		Locked::new(AtaController::new(0x1f0, 0x3f6, true)),  // CH: P, DEV: S
 	],
 	[
-		AtaController::new(0x170, 0x376, false), // CH: S, DEV: P
-		AtaController::new(0x170, 0x376, true),  // CH: S, DEV: S
+		Locked::new(AtaController::new(0x170, 0x376, false)), // CH: S, DEV: P
+		Locked::new(AtaController::new(0x170, 0x376, true)),  // CH: S, DEV: S
 	],
-]);
+];
 
 pub fn init() -> Result<(), pci::Error> {
 	// PCI CONFIGURATION SPACE
@@ -59,8 +59,16 @@ pub fn init() -> Result<(), pci::Error> {
 	};
 	BMIDE::init(bmide_port as u16);
 
-	// test::test_read_dma();
-	test::test_write_dma();
+	// PARTITION
+	let existed = array::from_fn(|i| {
+		let dev = &ATA_IDE[i / 2][i % 2];
+		let output = dev.lock().self_diagnosis();
+		(output.error == 0x01).then_some(dev)
+	});
+	partition::init(existed);
+
+	test::test_read_dma();
+	// test::test_write_dma();
 
 	Ok(())
 }
@@ -119,15 +127,13 @@ pub mod test {
 			.for_each(|(i, c)| buf[i] = *c);
 
 		// ATA - DO DMA: WRITE DMA
-		let ata_ide = &ATA_IDE.lock()[0][0];
+		let ata_ide = &ATA_IDE[0][0].lock();
 
 		ata_ide.write_lba28(0);
 		ata_ide.write_sector_count(1);
 		ata_ide.write_command(Command::WriteDMA);
 
 		pr_debug!("{}", ata_ide.output());
-
-		test_identify_device(ata_ide);
 
 		bmi.start();
 
@@ -146,15 +152,13 @@ pub mod test {
 		clear_paper(page);
 
 		// ATA - DO DMA: READ DMA
-		let ata_ide = &ATA_IDE.lock()[0][0];
+		let ata_ide = &ATA_IDE[0][0].lock();
 
 		ata_ide.write_lba28(0);
 		ata_ide.write_sector_count(1);
 		ata_ide.write_command(Command::ReadDMA);
 
 		pr_debug!("{}", ata_ide.output());
-
-		test_identify_device(ata_ide);
 
 		bmi.start();
 
@@ -168,7 +172,7 @@ pub extern "C" fn handle_ide_impl(_frame: InterruptFrame) {
 	let bmide = BMIDE.lock();
 	let bmi = unsafe { bmide[0].assume_init_ref() };
 
-	let ata_ide = &ATA_IDE.lock()[0][0];
+	let ata_ide = &ATA_IDE[0][0].lock();
 	let ata_out = ata_ide.output();
 
 	if bmi.is_error() || ata_out.is_error() {

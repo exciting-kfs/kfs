@@ -2,11 +2,14 @@
 
 trap 'SIGNALED=1' INT
 
-if [ $# -lt 2 ]; then
-	echo 'Usage: qemu.sh "ISO file" "kernbuf serial" ...extraflags'; exit 1
+if [ $# -lt 3 ]; then
+	echo 'Usage: qemu.sh "ISO file" "HDD file" "kernbuf serial" ...extraflags'; exit 1
 fi
 
 RESCUE="$1"
+shift
+
+HDD="$1"
 shift
 
 COM1="$1"
@@ -21,8 +24,10 @@ qemu-system-i386                                                \
     -vga std                                                    \
     -drive file=$RESCUE,if=none,format=raw,id=rescue            \
     -device ide-hd,drive=rescue,bus=ide.1,unit=0,bootindex=1    \
+    -drive file=$HDD,if=none,format=raw,id=hdd                  \
+    -device ide-hd,drive=hdd,bus=ide.0,unit=0                   \
     -drive file=hello.txt,if=none,format=raw,id=hello           \
-    -device ide-hd,drive=hello,bus=ide.0,unit=0                 \
+    -device ide-hd,drive=hello,bus=ide.0,unit=1                 \
     -device isa-debug-exit                                      \
     -action reboot=shutdown                                     \
     -serial $COM1                                               \

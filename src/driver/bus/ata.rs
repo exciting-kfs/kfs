@@ -1,4 +1,4 @@
-use core::{array, fmt::Display, mem::transmute};
+use core::{array, fmt::Display, mem::transmute, ops::Deref};
 
 use alloc::{string::String, vec::Vec};
 
@@ -15,6 +15,19 @@ pub struct AtaController {
 
 #[repr(transparent)]
 pub struct RawSector([u16; 256]);
+
+impl RawSector {
+	pub fn new(buf: [u16; 256]) -> Self {
+		Self(buf)
+	}
+}
+
+impl Deref for RawSector {
+	type Target = [u16; 256];
+	fn deref(&self) -> &Self::Target {
+		&self.0
+	}
+}
 
 impl AtaController {
 	const DATA: u16 = 0;
@@ -76,6 +89,13 @@ impl AtaController {
 		let res = off.map(|o| self.command.add(o).read_byte());
 
 		unsafe { transmute(res) }
+	}
+
+	pub fn self_diagnosis(&self) -> AtaOutput {
+		self.write_lba28(0);
+		self.write_sector_count(0);
+		self.write_command(Command::ExcuteDeviceDiagnostic);
+		self.output()
 	}
 
 	/// Perform READ SECTORS command (PIO)
@@ -173,6 +193,7 @@ impl Display for AtaOutput {
 		write!(f, "dev: {}\n", dev)?;
 		write!(f, "lba: 0x{:x}\n", self.lba())?;
 		write!(f, "sector count: 0x{:x}\n", self.sector_count)?;
+		write!(f, "status: 0b{:b}\n", self.status)?;
 
 		Ok(())
 	}
@@ -184,4 +205,6 @@ pub enum Command {
 	WriteDMA = 0xca,
 	ReadSectors = 0x20,
 	IdentifyDevice = 0xec,
+	ExcuteDeviceDiagnostic = 0x90,
+	FlushCache = 0xe7, // ?
 }
