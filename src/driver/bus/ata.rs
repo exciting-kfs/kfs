@@ -44,6 +44,9 @@ impl AtaController {
 	const LBA_HIGH_RANGE: BitRange = BitRange::new(16, 24);
 	const LBA_TOP_RANGE: BitRange = BitRange::new(24, 28);
 
+	const SIG_BUSY: u8 = 0x80;
+	const SIG_DRQ: u8 = 0x08;
+
 	pub const fn new(command_base: u16, control_base: u16, is_2nd_dev: bool) -> Self {
 		Self {
 			command: Port::new(command_base),
@@ -78,7 +81,16 @@ impl AtaController {
 		self.command.add(Self::SECTOR_COUNT).write_byte(count);
 	}
 
+	// TODO Runtime: yield
+	pub fn wait_command(&self) {
+		let mut status = self.control.read_byte();
+		while status & 0x80 > 0 || status & 0x08 > 0 {
+			status = self.control.read_byte();
+		}
+	}
+
 	pub fn write_command(&self, command: Command) {
+		self.wait_command();
 		self.command
 			.add(Self::STATUS_COMMAND)
 			.write_byte(command as u8);
@@ -86,7 +98,13 @@ impl AtaController {
 
 	pub fn output(&self) -> AtaOutput {
 		let off: [u16; 7] = array::from_fn(|i| (i + 1) as u16);
-		let res = off.map(|o| self.command.add(o).read_byte());
+		let res = off.map(|o| {
+			if o != 7 {
+				self.command.add(o).read_byte()
+			} else {
+				self.read_status()
+			}
+		});
 
 		unsafe { transmute(res) }
 	}
@@ -98,23 +116,23 @@ impl AtaController {
 		self.output()
 	}
 
+	fn pio_read_data(&self) -> u16 {
+		let mut status = self.read_status();
+		while status & Self::SIG_BUSY != 0 || status & Self::SIG_DRQ == 0 {
+			status = self.read_status();
+		}
+		self.command.add(Self::DATA).read_u16()
+	}
+
 	/// Perform READ SECTORS command (PIO)
 	pub fn read_sectors(&self, lba: usize, buf: &mut [RawSector]) {
-		let sector_count = buf.len() as u8;
-
-		self.command
-			.add(Self::SECTOR_COUNT)
-			.write_byte(sector_count);
-
+		self.write_sector_count(buf.len() as u8);
 		self.write_lba28(lba);
-
-		self.command
-			.add(Self::STATUS_COMMAND)
-			.write_byte(Command::ReadSectors as u8);
+		self.write_command(Command::ReadSectors);
 
 		for sector in buf {
 			for word in &mut sector.0 {
-				*word = self.command.add(Self::DATA).read_u16();
+				*word = self.pio_read_data();
 			}
 		}
 	}
@@ -134,6 +152,12 @@ impl AtaController {
 		}
 
 		AtaId { data }
+	}
+
+	#[inline(always)]
+	/// This function reads `Alternate Status Register` to avoid that the interrupt pending bit is cleard.
+	fn read_status(&self) -> u8 {
+		self.control.read_byte()
 	}
 }
 
@@ -189,11 +213,11 @@ impl Display for AtaOutput {
 		};
 
 		write!(f, "[ATA OUTPUT]\n")?;
-		write!(f, "err: 0b{:b}\n", self.error)?;
+		write!(f, "err: 0b{:08b}\n", self.error)?;
 		write!(f, "dev: {}\n", dev)?;
 		write!(f, "lba: 0x{:x}\n", self.lba())?;
 		write!(f, "sector count: 0x{:x}\n", self.sector_count)?;
-		write!(f, "status: 0b{:b}\n", self.status)?;
+		write!(f, "status: 0b{:08b}\n", self.status)?;
 
 		Ok(())
 	}

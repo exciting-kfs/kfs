@@ -75,11 +75,11 @@ pub unsafe fn print_stack(esp: *const usize, count: usize) {
 
 pub unsafe fn print_memory(ptr: *const u8, count: usize) {
 	pr_info!("[[mem]]");
-	pr_info!("range: {:x?} ~ {:x?}", ptr, ptr.offset(count as isize));
-	let line = count / 16 + 1;
+	pr_info!("range: {:p} ~ {:p}", ptr, ptr.offset(count as isize));
+	let line = count / 16 + (count % 16 != 0) as usize;
 
 	for i in 0..line {
-		printk!("0x{:x?}: ", ptr.offset((i * 16) as isize));
+		printk!("0x{:p}: ", ptr.offset((i * 16) as isize));
 
 		for j in 0..16 {
 			let next = ptr.offset((i * 16 + j) as isize);

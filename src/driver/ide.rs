@@ -59,7 +59,7 @@ pub fn init() -> Result<(), pci::Error> {
 	};
 	BMIDE::init(bmide_port as u16);
 
-	// PARTITION
+	// PARTITION TABLE
 	let existed = array::from_fn(|i| {
 		let dev = &ATA_IDE[i / 2][i % 2];
 		let output = dev.lock().self_diagnosis();
@@ -67,7 +67,7 @@ pub fn init() -> Result<(), pci::Error> {
 	});
 	partition::init(existed);
 
-	test::test_read_dma();
+	// test::test_read_dma();
 	// test::test_write_dma();
 
 	Ok(())
@@ -128,7 +128,6 @@ pub mod test {
 
 		// ATA - DO DMA: WRITE DMA
 		let ata_ide = &ATA_IDE[0][0].lock();
-
 		ata_ide.write_lba28(0);
 		ata_ide.write_sector_count(1);
 		ata_ide.write_command(Command::WriteDMA);
@@ -153,6 +152,7 @@ pub mod test {
 
 		// ATA - DO DMA: READ DMA
 		let ata_ide = &ATA_IDE[0][0].lock();
+		pr_debug!("test_read_dma: {}", ata_ide.output());
 
 		ata_ide.write_lba28(0);
 		ata_ide.write_sector_count(1);
