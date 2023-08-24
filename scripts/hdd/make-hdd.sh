@@ -21,7 +21,7 @@ NBD_SERVER=$!
 trap "kill $NBD_SERVER" EXIT 
 
 echo DOCKER-RUN bkahlert/libguestfs:edge
-docker run -e LIBGUESTFS_DEBUG=1 -e LIBGUESTFS_TRACE=1 --rm -i bkahlert/libguestfs:edge guestfish << EOF
+docker run --rm -i --add-host=host.docker.internal:host-gateway bkahlert/libguestfs:edge guestfish << EOF
 add '' protocol:nbd server:host.docker.internal
 run
 part-init /dev/sda mbr
