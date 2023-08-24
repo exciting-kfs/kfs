@@ -67,7 +67,7 @@ pub fn init() -> Result<(), pci::Error> {
 	});
 	partition::init(existed);
 
-	// test::test_read_dma();
+	test::test_read_dma();
 	// test::test_write_dma();
 
 	Ok(())
