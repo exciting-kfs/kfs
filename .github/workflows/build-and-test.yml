@@ -30,7 +30,6 @@ jobs:
             build-essential \
             xorriso \
             grub-pc \
-            docker \
             nasm 
 
       - name: build and test

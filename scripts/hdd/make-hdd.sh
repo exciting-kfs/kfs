@@ -16,7 +16,7 @@ PART1_END=$(( $PART2_START - 1 ))
 
 echo CREATE $(basename $HDD) "($HDD_SIZE_MB""MB)"
 qemu-img create -q -f qcow2 $HDD $HDD_SIZE_MB"M"
-qemu-nbd $HDD --persistent &
+qemu-nbd --persistent -v $HDD &
 NBD_SERVER=$!
 trap "kill $NBD_SERVER" EXIT 
 
