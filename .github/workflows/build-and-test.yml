@@ -30,8 +30,7 @@ jobs:
             build-essential \
             xorriso \
             grub-pc \
-            nasm \
-            docker
+            nasm 
 
       - name: build and test
         run: make ci
