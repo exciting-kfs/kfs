@@ -20,11 +20,8 @@ qemu-nbd $HDD --persistent &
 NBD_SERVER=$!
 trap "kill $NBD_SERVER" EXIT 
 
-echo DOCKER-BUILD kfs-build-hdd-qcow
-docker build -q -t kfs-build-hdd-qcow scripts/hdd > /dev/null
-
-echo DOCKER-RUN kfs-build-hdd-qcow
-docker run --rm -i kfs-build-hdd-qcow << EOF
+echo DOCKER-RUN bkahlert/libguestfs:1.2
+docker run --rm -i bkahlert/libguestfs:1.2 guestfish << EOF
 add '' protocol:nbd server:host.docker.internal
 run
 part-init /dev/sda mbr
