@@ -14,9 +14,10 @@ use crate::input::{
 };
 use crate::interrupt::InterruptFrame;
 use crate::mm::constant::PAGE_SIZE;
-use crate::printk;
 use crate::scheduler::work::{schedule_fast_work, wakeup_fast_woker};
+use crate::util::print_memory;
 use crate::{acpi::IAPC_BOOT_ARCH, io::pmio::Port};
+use crate::{pr_err, printk};
 
 fn wait_then_write_byte(port: &Port, byte: u8) {
 	while control::test_status_now(control::Status::IBF) {}
@@ -106,10 +107,10 @@ pub extern "C" fn handle_keyboard_impl(_frame: InterruptFrame) {
 		if ev.key == Code::Backtick && ev.pressed() {
 			// TODO DELETE
 			{
+				pr_err!("DMA_CHECK");
 				let buf = unsafe { DMA_CHECK.assume_init_mut().as_mut() };
-				for i in 0..PAGE_SIZE {
-					printk!("{:x} ", buf[i]);
-				}
+				let ptr = buf.as_ptr() as *const u8;
+				unsafe { print_memory(ptr, PAGE_SIZE) };
 				printk!("\n");
 			}
 

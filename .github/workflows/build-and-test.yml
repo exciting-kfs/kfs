@@ -18,15 +18,19 @@ jobs:
           toolchain: nightly
           components: rust-src
 
+      - name: Setup Docker
+        uses: docker-practice/actions-setup-docker@v1
+
       - name: Setup extra tools
         run: |
           sudo apt update && sudo apt install -y \
             gcc-i686-linux-gnu \
             qemu-system \
+            qemu-utils \
             build-essential \
             xorriso \
             grub-pc \
-            nasm
+            nasm 
 
       - name: build and test
         run: make ci

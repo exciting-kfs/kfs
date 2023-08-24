@@ -4,9 +4,10 @@
 /// PIIX specification.
 /// OsDev [PCI, PCI IDE Controller, ATA/ATAPI using DMA]
 mod bmide;
+mod partition;
 mod prd;
 
-use core::{mem::MaybeUninit, ptr::NonNull};
+use core::{array, mem::MaybeUninit, ptr::NonNull};
 
 use kfs_macro::interrupt_handler;
 
@@ -34,17 +35,16 @@ const IDE_CLASS_CODE: ClassCode = ClassCode {
 	sub_class: 0x01,
 };
 
-static ATA_IDE: Locked<[[AtaController; 2]; 2]> = Locked::new([
-	// TODO split lock?
+static ATA_IDE: [[Locked<AtaController>; 2]; 2] = [
 	[
-		AtaController::new(0x1f0, 0x3f6, false), // CH: P, DEV: P
-		AtaController::new(0x1f0, 0x3f6, true),  // CH: P, DEV: S
+		Locked::new(AtaController::new(0x1f0, 0x3f6, false)), // CH: P, DEV: P
+		Locked::new(AtaController::new(0x1f0, 0x3f6, true)),  // CH: P, DEV: S
 	],
 	[
-		AtaController::new(0x170, 0x376, false), // CH: S, DEV: P
-		AtaController::new(0x170, 0x376, true),  // CH: S, DEV: S
+		Locked::new(AtaController::new(0x170, 0x376, false)), // CH: S, DEV: P
+		Locked::new(AtaController::new(0x170, 0x376, true)),  // CH: S, DEV: S
 	],
-]);
+];
 
 pub fn init() -> Result<(), pci::Error> {
 	// PCI CONFIGURATION SPACE
@@ -59,34 +59,29 @@ pub fn init() -> Result<(), pci::Error> {
 	};
 	BMIDE::init(bmide_port as u16);
 
+	// PARTITION TABLE
+	let existed = array::from_fn(|i| {
+		let dev = &ATA_IDE[i / 2][i % 2];
+		let output = dev.lock().self_diagnosis();
+		(output.error == 0x01).then_some(dev)
+	});
+	partition::init(existed);
+
 	test::test_read_dma();
+	// test::test_write_dma();
 
 	Ok(())
 }
 
 pub mod test {
+	use crate::driver::bus::ata::Command;
+
 	use super::*;
 	// TODO DELETE
 	pub static mut DMA_CHECK: MaybeUninit<NonNull<[u8]>> = MaybeUninit::uninit();
+	static mut PRDT: MaybeUninit<PRD> = MaybeUninit::uninit();
 
-	pub fn test_read_dma() {
-		static mut PRDT: MaybeUninit<PRD> = MaybeUninit::uninit();
-
-		let page = alloc_pages(0, Zone::High).expect("OOM");
-		let paddr = virt_to_phys(page.as_ptr() as *const usize as usize);
-
-		let prdt = unsafe { PRDT.write(PRD::new(paddr, 512, true)) };
-		let paddr = virt_to_phys(prdt as *const PRD as usize);
-
-		let bmide = BMIDE.lock();
-		let bmi = unsafe { bmide[0].assume_init_ref() };
-
-		bmi.register_prdt(paddr as u32);
-		bmi.set_dma_read();
-
-		pr_debug!("{}", bmi);
-
-		// CLEAR DATA
+	fn clear_paper(page: NonNull<[u8]>) -> &'static mut [u8] {
 		let paddr = virt_to_phys(page.as_ptr() as *const usize as usize);
 		let mut ptr = io_allocate(paddr, 1).expect("OOM");
 		unsafe { DMA_CHECK.write(ptr) };
@@ -95,19 +90,75 @@ pub mod test {
 		for i in 0..PAGE_SIZE {
 			buf[i] = 0;
 		}
+		buf
+	}
 
-		// ATA - DO DMA: READ DMA
-		let ata_ide = &ATA_IDE.lock()[0][0];
+	fn set_bmi(bmi: &BMIDE, page: NonNull<[u8]>) {
+		let paddr = virt_to_phys(page.as_ptr() as *const usize as usize);
 
-		ata_ide.write_lba28(0);
-		ata_ide.write_sector_count(1);
-		ata_ide.write_command(0xc8);
+		let prdt = unsafe { PRDT.write(PRD::new(paddr, 512, true)) };
+		let paddr = virt_to_phys(prdt as *const PRD as usize);
 
-		pr_debug!("{}", ata_ide.output());
+		bmi.register_prdt(paddr as u32);
+		bmi.set_dma_read();
+	}
 
+	fn test_identify_device(ata_ide: &AtaController) {
 		let ata0_id = ata_ide.identify_device();
 		pr_debug!("SECTORS: {}", ata0_id.sector_count());
 		pr_debug!("MODEL: [{}]", ata0_id.model());
+	}
+
+	pub fn test_write_dma() {
+		let page = alloc_pages(0, Zone::High).expect("OOM");
+
+		let bmide = BMIDE.lock();
+		let bmi = unsafe { bmide[0].assume_init_ref() };
+		set_bmi(bmi, page);
+
+		pr_debug!("{}", bmi);
+
+		let buf = clear_paper(page);
+
+		"world hello?"
+			.as_bytes()
+			.iter()
+			.enumerate()
+			.for_each(|(i, c)| buf[i] = *c);
+
+		// ATA - DO DMA: WRITE DMA
+		let ata_ide = &ATA_IDE[0][0].lock();
+		ata_ide.write_lba28(0);
+		ata_ide.write_sector_count(1);
+		ata_ide.write_command(Command::WriteDMA);
+
+		pr_debug!("{}", ata_ide.output());
+
+		bmi.start();
+
+		pr_debug!("{}", bmi);
+	}
+
+	pub fn test_read_dma() {
+		let page = alloc_pages(0, Zone::High).expect("OOM");
+		let bmide = BMIDE.lock();
+		let bmi = unsafe { bmide[0].assume_init_ref() };
+
+		set_bmi(bmi, page);
+
+		pr_debug!("{}", bmi);
+
+		clear_paper(page);
+
+		// ATA - DO DMA: READ DMA
+		let ata_ide = &ATA_IDE[0][0].lock();
+		pr_debug!("test_read_dma: {}", ata_ide.output());
+
+		ata_ide.write_lba28(0);
+		ata_ide.write_sector_count(1);
+		ata_ide.write_command(Command::ReadDMA);
+
+		pr_debug!("{}", ata_ide.output());
 
 		bmi.start();
 
@@ -121,7 +172,7 @@ pub extern "C" fn handle_ide_impl(_frame: InterruptFrame) {
 	let bmide = BMIDE.lock();
 	let bmi = unsafe { bmide[0].assume_init_ref() };
 
-	let ata_ide = &ATA_IDE.lock()[0][0];
+	let ata_ide = &ATA_IDE[0][0].lock();
 	let ata_out = ata_ide.output();
 
 	if bmi.is_error() || ata_out.is_error() {
@@ -136,6 +187,8 @@ pub extern "C" fn handle_ide_impl(_frame: InterruptFrame) {
 
 		panic!("IDE ERROR"); // TODO is it fine?
 	}
+
+	bmi.sync_data();
 	bmi.clear();
 	bmi.stop();
 

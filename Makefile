@@ -71,6 +71,9 @@ RESUCE_SRC_ROOT := iso
 RESCUE_IMG_NAME := rescue.iso
 RESCUE_IMG := $(TARGET_ROOT)/$(RESCUE_IMG_NAME)
 
+HDD_IMG_NAME := disk.iso
+HDD_IMG := $(TARGET_ROOT)/$(HDD_IMG_NAME)
+
 LINKER_SCRIPT := linker-script/kernel.ld
 
 DOC := $(shell dirname $(TARGET_ROOT))/doc/kernel/index.html
@@ -82,13 +85,26 @@ USERSPACE_SRC_ROOT := userspace
 # === Phony recipes ===
 
 .PHONY : all
-all : rescue
+all : rescue hdd
 
 .PHONY : build
 build : $(KERNEL_BIN)
 
 .PHONY : rescue
 rescue : $(RESCUE_IMG)
+
+.PHONY : userspace
+userspace :
+	@echo "[-] build userspace binaries"
+	@$(MAKE) EXTRA_CFLAGS=$(CFLAGS) -s -C $(USERSPACE_SRC_ROOT)
+
+.PHONY : ci
+ci : CFLAGS := -Werror
+ci : RUSTC_FLAG += -D warnings
+ci : test
+
+.PHONY: hdd
+hdd: $(HDD_IMG)
 
 .PHONY : clean
 clean :
@@ -102,22 +118,22 @@ re : clean
 	@$(MAKE) all
 
 .PHONY : run
-run : rescue
-	@scripts/qemu.sh $(RESCUE_IMG) stdio -monitor pty
+run : all
+	@scripts/qemu.sh $(RESCUE_IMG) $(HDD_IMG) stdio -monitor pty
 
 .PHONY : debug debug-display
 ifeq ($(DEBUG_WITH_VSCODE),y)
-debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
+debug : all $(KERNEL_DEBUG_SYMBOL)
 	@scripts/vsc-debug.py $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN) &
-	@scripts/qemu.sh $(RESCUE_IMG) stdio -s -S -monitor pty -display none 
+	@scripts/qemu.sh $(RESCUE_IMG) $(HDD_IMG) stdio -s -S -monitor pty -display none 
 
-debug-display : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
+debug-display : all $(KERNEL_DEBUG_SYMBOL)
 	@scripts/vsc-debug.py $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN) &
-	@scripts/qemu.sh $(RESCUE_IMG) stdio -s -S -monitor pty
+	@scripts/qemu.sh $(RESCUE_IMG) $(HDD_IMG) stdio -s -S -monitor pty
 
 else
-debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
-	@scripts/qemu.sh $(RESCUE_IMG) stdio -s -S -monitor pty & rust-lldb   \
+debug : all $(KERNEL_DEBUG_SYMBOL)
+	@scripts/qemu.sh $(RESCUE_IMG) $(HDD_IMG) stdio -s -S -monitor pty & rust-lldb   \
 		--one-line "target create --symfile $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN)"   \
 		--one-line "gdb-remote localhost:1234"                                      \
 		--source scripts/debug.lldb
@@ -164,8 +180,8 @@ endif
 .PHONY : test
 test : RUSTC_FLAG += --cfg ktest
 test : RUSTC_FLAG += --cfg ktest='"$(TEST_CASE)"'
-test : rescue
-	@scripts/qemu.sh $(RESCUE_IMG) stdio -display none
+test : all 
+	@scripts/qemu.sh $(RESCUE_IMG) $(HDD_IMG) stdio -display none
 
 # === Main recipes ===
 
@@ -200,12 +216,6 @@ $(RESCUE_IMG) : $(KERNEL_BIN) $(shell find $(RESUCE_SRC_ROOT) -type f) $(KERNEL_
 	@cp $(KERNEL_BIN) $(RESCUE_TARGET_ROOT)/boot
 	@$(GRUB2_MKRESCUE) -d $(GRUB2_I386_LIB) $(RESCUE_TARGET_ROOT) -o $@ 2>/dev/null >/dev/null
 
-.PHONY : userspace
-userspace :
-	@echo "[-] build userspace binaries"
-	@$(MAKE) EXTRA_CFLAGS=$(CFLAGS) -s -C $(USERSPACE_SRC_ROOT)
-
-.PHONY : ci
-ci : CFLAGS := -Werror
-ci : RUSTC_FLAG += -D warnings
-ci : test
+$(HDD_IMG) : scripts/hdd/make-hdd.sh
+	@echo "[-] creating disk.img"
+	@scripts/hdd/make-hdd.sh $@

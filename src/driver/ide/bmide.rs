@@ -63,6 +63,10 @@ impl BMIDE {
 		self.write_status(self.dma_init_status());
 	}
 
+	pub fn sync_data(&self) {
+		self.read_status();
+	}
+
 	pub fn clear(&self) {
 		self.write_status(Self::STATUS_CLEAR);
 	}
