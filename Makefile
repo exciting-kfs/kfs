@@ -71,7 +71,8 @@ RESUCE_SRC_ROOT := iso
 RESCUE_IMG_NAME := rescue.iso
 RESCUE_IMG := $(TARGET_ROOT)/$(RESCUE_IMG_NAME)
 
-HDD_IMG := /tmp/disk.img
+HDD_IMG_NAME := disk.iso
+HDD_IMG := $(TARGET_ROOT)/$(HDD_IMG_NAME)
 
 LINKER_SCRIPT := linker-script/kernel.ld
 
@@ -92,6 +93,19 @@ build : $(KERNEL_BIN)
 .PHONY : rescue
 rescue : $(RESCUE_IMG)
 
+.PHONY : userspace
+userspace :
+	@echo "[-] build userspace binaries"
+	@$(MAKE) EXTRA_CFLAGS=$(CFLAGS) -s -C $(USERSPACE_SRC_ROOT)
+
+.PHONY : ci
+ci : CFLAGS := -Werror
+ci : RUSTC_FLAG += -D warnings
+ci : test
+
+.PHONY: hdd
+hdd: $(HDD_IMG)
+
 .PHONY : clean
 clean :
 	@echo '[-] cleanup...'
@@ -104,21 +118,21 @@ re : clean
 	@$(MAKE) all
 
 .PHONY : run
-run : rescue hdd
+run : all
 	@scripts/qemu.sh $(RESCUE_IMG) $(HDD_IMG) stdio -monitor pty
 
 .PHONY : debug debug-display
 ifeq ($(DEBUG_WITH_VSCODE),y)
-debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
+debug : all $(KERNEL_DEBUG_SYMBOL)
 	@scripts/vsc-debug.py $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN) &
 	@scripts/qemu.sh $(RESCUE_IMG) $(HDD_IMG) stdio -s -S -monitor pty -display none 
 
-debug-display : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
+debug-display : all $(KERNEL_DEBUG_SYMBOL)
 	@scripts/vsc-debug.py $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN) &
 	@scripts/qemu.sh $(RESCUE_IMG) $(HDD_IMG) stdio -s -S -monitor pty
 
 else
-debug : $(RESCUE_IMG) $(KERNEL_DEBUG_SYMBOL)
+debug : all $(KERNEL_DEBUG_SYMBOL)
 	@scripts/qemu.sh $(RESCUE_IMG) $(HDD_IMG) stdio -s -S -monitor pty & rust-lldb   \
 		--one-line "target create --symfile $(KERNEL_DEBUG_SYMBOL) $(KERNEL_BIN)"   \
 		--one-line "gdb-remote localhost:1234"                                      \
@@ -166,7 +180,7 @@ endif
 .PHONY : test
 test : RUSTC_FLAG += --cfg ktest
 test : RUSTC_FLAG += --cfg ktest='"$(TEST_CASE)"'
-test : rescue
+test : all 
 	@scripts/qemu.sh $(RESCUE_IMG) $(HDD_IMG) stdio -display none
 
 # === Main recipes ===
@@ -202,24 +216,6 @@ $(RESCUE_IMG) : $(KERNEL_BIN) $(shell find $(RESUCE_SRC_ROOT) -type f) $(KERNEL_
 	@cp $(KERNEL_BIN) $(RESCUE_TARGET_ROOT)/boot
 	@$(GRUB2_MKRESCUE) -d $(GRUB2_I386_LIB) $(RESCUE_TARGET_ROOT) -o $@ 2>/dev/null >/dev/null
 
-.PHONY : userspace
-userspace :
-	@echo "[-] build userspace binaries"
-	@$(MAKE) EXTRA_CFLAGS=$(CFLAGS) -s -C $(USERSPACE_SRC_ROOT)
-
-.PHONY : ci
-ci : CFLAGS := -Werror
-ci : RUSTC_FLAG += -D warnings
-ci : test
-
-
-.PHONY: hdd hdd-clean
-hdd: $(HDD_IMG)
-
-$(HDD_IMG):
+$(HDD_IMG) : scripts/hdd/make-hdd.sh
 	@echo "[-] creating disk.img"
-	@hdd/run.sh
-
-hdd-clean:
-	@echo "[-] cleaning up disk.img"
-	@rm $(HDD_IMG)
+	@scripts/hdd/make-hdd.sh $@
