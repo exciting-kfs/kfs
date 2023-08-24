@@ -16,12 +16,12 @@ PART1_END=$(( $PART2_START - 1 ))
 
 echo CREATE $(basename $HDD) "($HDD_SIZE_MB""MB)"
 qemu-img create -q -f qcow2 $HDD $HDD_SIZE_MB"M"
-qemu-nbd --persistent -v $HDD &
+qemu-nbd --persistent $HDD &
 NBD_SERVER=$!
 trap "kill $NBD_SERVER" EXIT 
 
-echo DOCKER-RUN bkahlert/libguestfs:1.2
-docker run --rm -i bkahlert/libguestfs:1.2 guestfish << EOF
+echo DOCKER-RUN bkahlert/libguestfs:edge
+docker run --rm -i bkahlert/libguestfs:edge guestfish << EOF
 add '' protocol:nbd server:host.docker.internal
 run
 part-init /dev/sda mbr
