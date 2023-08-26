@@ -1,27 +1,44 @@
+use core::slice;
+
 use alloc::vec::Vec;
 
-pub struct Path(Vec<u8>);
+#[derive(Debug)]
+pub struct Path {
+	base: Base,
+	comps: Vec<Vec<u8>>,
+}
 
 #[derive(Debug, PartialEq)]
 pub enum Component<'a> {
-	RootDir,
 	ParentDir,
 	CurDir,
-	Dir(&'a [u8]),
+	Part(&'a [u8]),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Base {
+	RootDir,
+	WorkingDir(usize),
 }
 
 pub struct ComponentIter<'a> {
 	path: &'a [u8],
-	is_begining: bool,
 }
 
 impl<'a> ComponentIter<'a> {
+	fn new(path: &'a [u8]) -> Self {
+		let mut it = Self { path };
+
+		it.ignore_slash();
+
+		it
+	}
+
 	fn ignore_slash(&mut self) {
 		let slash_end = self
 			.path
 			.iter()
-			.enumerate()
-			.find_map(|(i, ch)| (*ch != b'/').then_some(i))
+			.position(|ch| *ch != b'/')
 			.unwrap_or(self.path.len());
 
 		let (_, next) = self.path.split_at(slash_end);
@@ -33,8 +50,7 @@ impl<'a> ComponentIter<'a> {
 		let slash_start = self
 			.path
 			.iter()
-			.enumerate()
-			.find_map(|(i, ch)| (*ch == b'/').then_some(i))
+			.position(|ch| *ch == b'/')
 			.unwrap_or(self.path.len());
 
 		let (comp, next) = self.path.split_at(slash_start);
@@ -53,18 +69,6 @@ impl<'a> Iterator for ComponentIter<'a> {
 			return None;
 		}
 
-		if self.is_begining {
-			self.is_begining = false;
-			let ret = match self.path[0] {
-				b'/' => Component::RootDir,
-				_ => Component::CurDir,
-			};
-
-			self.ignore_slash();
-
-			return Some(ret);
-		}
-
 		let comp = self.take_before_slash();
 		self.ignore_slash();
 
@@ -73,7 +77,7 @@ impl<'a> Iterator for ComponentIter<'a> {
 		} else if comp == b".." {
 			Component::ParentDir
 		} else {
-			Component::Dir(comp)
+			Component::Part(comp)
 		};
 
 		Some(comp)
@@ -81,37 +85,75 @@ impl<'a> Iterator for ComponentIter<'a> {
 }
 
 impl Path {
-	pub fn new(bytes: &[u8]) -> Self {
-		Path(Vec::from(bytes))
+	pub fn new(path: &[u8]) -> Self {
+		let mut base = if path.len() != 0 && path[0] == b'/' {
+			Base::RootDir
+		} else {
+			Base::WorkingDir(0)
+		};
+
+		let raw_comps = ComponentIter::new(path);
+		let mut comps = Vec::new();
+
+		for comp in raw_comps {
+			use Component::*;
+			match comp {
+				ParentDir => {
+					if comps.is_empty() {
+						if let Base::WorkingDir(depth) = base {
+							base = Base::WorkingDir(depth + 1);
+						}
+					} else {
+						comps.pop();
+					}
+				}
+				Part(p) => comps.push(p.to_vec()),
+				CurDir => (),
+			}
+		}
+
+		Self { base, comps }
 	}
 
-	pub fn components(&self) -> ComponentIter<'_> {
-		ComponentIter {
-			path: &self.0,
-			is_begining: true,
-		}
+	pub fn base(&self) -> Base {
+		self.base
+	}
+
+	pub fn pop_component(&mut self) -> Option<Vec<u8>> {
+		self.comps.pop()
+	}
+
+	pub fn components(&self) -> slice::Iter<'_, Vec<u8>> {
+		self.comps.iter()
 	}
 }
 
 mod test {
 	use super::*;
 	use kfs_macro::ktest;
-	use Component::*;
+
+	#[ktest(path)]
+	fn empty() {
+		let p = Path::new(b"");
+
+		assert_eq!(p.base(), Base::WorkingDir(0));
+		assert_eq!(p.components().next(), None);
+	}
 
 	#[ktest(path)]
 	fn basic() {
 		let path = Path::new(b"abcd");
 
 		let mut comps = path.components();
-		assert_eq!(comps.next(), Some(CurDir));
-		assert_eq!(comps.next(), Some(Dir(b"abcd")));
+		assert_eq!(path.base(), Base::WorkingDir(0));
+		assert_eq!(comps.next().unwrap(), b"abcd");
 		assert_eq!(comps.next(), None);
 
 		let path = Path::new(b"/abcd");
 
 		let mut comps = path.components();
-		assert_eq!(comps.next(), Some(RootDir));
-		assert_eq!(comps.next(), Some(Dir(b"abcd")));
+		assert_eq!(path.base(), Base::RootDir);
+		assert_eq!(comps.next().unwrap(), b"abcd");
 		assert_eq!(comps.next(), None);
 	}
 
@@ -120,15 +162,15 @@ mod test {
 		let path = Path::new(b"abcd/");
 
 		let mut comps = path.components();
-		assert_eq!(comps.next(), Some(CurDir));
-		assert_eq!(comps.next(), Some(Dir(b"abcd")));
+		assert_eq!(path.base(), Base::WorkingDir(0));
+		assert_eq!(comps.next().unwrap(), b"abcd");
 		assert_eq!(comps.next(), None);
 
 		let path = Path::new(b"/abcd/");
 
 		let mut comps = path.components();
-		assert_eq!(comps.next(), Some(RootDir));
-		assert_eq!(comps.next(), Some(Dir(b"abcd")));
+		assert_eq!(path.base(), Base::RootDir);
+		assert_eq!(comps.next().unwrap(), b"abcd");
 		assert_eq!(comps.next(), None);
 	}
 
@@ -137,15 +179,15 @@ mod test {
 		let path = Path::new(b"abcd////");
 
 		let mut comps = path.components();
-		assert_eq!(comps.next(), Some(CurDir));
-		assert_eq!(comps.next(), Some(Dir(b"abcd")));
+		assert_eq!(path.base(), Base::WorkingDir(0));
+		assert_eq!(comps.next().unwrap(), b"abcd");
 		assert_eq!(comps.next(), None);
 
 		let path = Path::new(b"////abcd");
 
 		let mut comps = path.components();
-		assert_eq!(comps.next(), Some(RootDir));
-		assert_eq!(comps.next(), Some(Dir(b"abcd")));
+		assert_eq!(path.base(), Base::RootDir);
+		assert_eq!(comps.next().unwrap(), b"abcd");
 		assert_eq!(comps.next(), None);
 	}
 
@@ -154,17 +196,15 @@ mod test {
 		let path = Path::new(b"./abcd");
 
 		let mut comps = path.components();
-		assert_eq!(comps.next(), Some(CurDir));
-		assert_eq!(comps.next(), Some(CurDir));
-		assert_eq!(comps.next(), Some(Dir(b"abcd")));
+		assert_eq!(path.base(), Base::WorkingDir(0));
+		assert_eq!(comps.next().unwrap(), b"abcd");
 		assert_eq!(comps.next(), None);
 
 		let path = Path::new(b"/./abcd");
 
 		let mut comps = path.components();
-		assert_eq!(comps.next(), Some(RootDir));
-		assert_eq!(comps.next(), Some(CurDir));
-		assert_eq!(comps.next(), Some(Dir(b"abcd")));
+		assert_eq!(path.base(), Base::RootDir);
+		assert_eq!(comps.next().unwrap(), b"abcd");
 		assert_eq!(comps.next(), None);
 	}
 
@@ -173,17 +213,15 @@ mod test {
 		let path = Path::new(b"../abcd");
 
 		let mut comps = path.components();
-		assert_eq!(comps.next(), Some(CurDir));
-		assert_eq!(comps.next(), Some(ParentDir));
-		assert_eq!(comps.next(), Some(Dir(b"abcd")));
+		assert_eq!(path.base(), Base::WorkingDir(1));
+		assert_eq!(comps.next().unwrap(), b"abcd");
 		assert_eq!(comps.next(), None);
 
 		let path = Path::new(b"/../abcd");
 
 		let mut comps = path.components();
-		assert_eq!(comps.next(), Some(RootDir));
-		assert_eq!(comps.next(), Some(ParentDir));
-		assert_eq!(comps.next(), Some(Dir(b"abcd")));
+		assert_eq!(path.base(), Base::RootDir);
+		assert_eq!(comps.next().unwrap(), b"abcd");
 		assert_eq!(comps.next(), None);
 	}
 
@@ -192,21 +230,19 @@ mod test {
 		let path = Path::new(b"..");
 
 		let mut comps = path.components();
-		assert_eq!(comps.next(), Some(CurDir));
-		assert_eq!(comps.next(), Some(ParentDir));
+		assert_eq!(path.base(), Base::WorkingDir(1));
 		assert_eq!(comps.next(), None);
 
 		let path = Path::new(b".");
 
 		let mut comps = path.components();
-		assert_eq!(comps.next(), Some(CurDir));
-		assert_eq!(comps.next(), Some(CurDir));
+		assert_eq!(path.base(), Base::WorkingDir(0));
 		assert_eq!(comps.next(), None);
 
 		let path = Path::new(b"/");
 
 		let mut comps = path.components();
-		assert_eq!(comps.next(), Some(RootDir));
+		assert_eq!(path.base(), Base::RootDir);
 		assert_eq!(comps.next(), None);
 	}
 
@@ -215,15 +251,32 @@ mod test {
 		let path = Path::new(b"/./..//abc///././/../dddd//eeeeee//");
 
 		let mut comps = path.components();
-		assert_eq!(comps.next(), Some(RootDir));
-		assert_eq!(comps.next(), Some(CurDir));
-		assert_eq!(comps.next(), Some(ParentDir));
-		assert_eq!(comps.next(), Some(Dir(b"abc")));
-		assert_eq!(comps.next(), Some(CurDir));
-		assert_eq!(comps.next(), Some(CurDir));
-		assert_eq!(comps.next(), Some(ParentDir));
-		assert_eq!(comps.next(), Some(Dir(b"dddd")));
-		assert_eq!(comps.next(), Some(Dir(b"eeeeee")));
+		assert_eq!(path.base(), Base::RootDir);
+		assert_eq!(comps.next().unwrap(), b"dddd");
+		assert_eq!(comps.next().unwrap(), b"eeeeee");
 		assert_eq!(comps.next(), None);
+
+		let path = Path::new(b"./..//abc///././/../dddd//eeeeee//");
+
+		let mut comps = path.components();
+		assert_eq!(path.base(), Base::WorkingDir(1));
+		assert_eq!(comps.next().unwrap(), b"dddd");
+		assert_eq!(comps.next().unwrap(), b"eeeeee");
+		assert_eq!(comps.next(), None);
+	}
+
+	#[ktest(path)]
+	fn pop_comps() {
+		let mut path = Path::new(b"a/../../..");
+
+		assert_eq!(path.base(), Base::WorkingDir(2));
+		assert_eq!(path.pop_component(), None);
+
+		let mut path = Path::new(b"a/b/c/d/..");
+		assert_eq!(path.base(), Base::WorkingDir(0));
+		assert_eq!(path.pop_component().unwrap(), b"c");
+		assert_eq!(path.pop_component().unwrap(), b"b");
+		assert_eq!(path.pop_component().unwrap(), b"a");
+		assert_eq!(path.pop_component(), None);
 	}
 }
