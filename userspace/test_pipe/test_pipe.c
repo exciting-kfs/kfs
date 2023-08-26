@@ -1,4 +1,4 @@
-#include <kfs/kernel.h>
+#include <unistd.h>
 
 const char buffer[] = "hello, world!\n";
 
@@ -40,7 +40,6 @@ void test_eof() {
 	} else {
 		read_and_exit(pipe_fds);
 	}
-
 }
 
 void test_sigpipe() {
@@ -60,5 +59,5 @@ void test_sigpipe() {
 int main(void) {
 	// test_eof();
 	test_sigpipe();
-	return 0;	
+	return 0;
 }

@@ -1,5 +1,8 @@
-#include <kfs/ft.h>
-#include <kfs/kernel.h>
+#include <signal.h>
+#include <unistd.h>
+
+#include "kfs/ft.h"
+#include "kfs/kernel.h"
 
 void sig_int(int num) {
 	(void)num;

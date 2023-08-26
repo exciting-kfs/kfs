@@ -1,5 +1,7 @@
-#include <kfs/ft.h>
-#include <kfs/kernel.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#include "kfs/ft.h"
 
 const char *tests[] = {
     "test_sig_stop_cont.bin", "test_sig.bin", "test_pipe.bin", "test_setXid.bin", NULL,
