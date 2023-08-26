@@ -1,5 +1,9 @@
-#include <kfs/ft.h>
-#include <kfs/kernel.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#include "kfs/ft.h"
+#include "kfs/kernel.h"
 
 void sig_int(int num) {
 	(void)num;
@@ -213,7 +217,7 @@ int main(void) {
 	ft_putstr("- check that the params of the signal handler is correct.\n");
 	struct sigaction g = {.sa_sigaction = sig_action, .sa_mask = 0, .sa_flags = SA_SIGINFO};
 	sigaction(SIGINT, &g, NULL);
-	next_test(10);
+	next_test();
 
 	return 0;
 }
