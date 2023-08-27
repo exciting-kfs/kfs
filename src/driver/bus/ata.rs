@@ -3,6 +3,7 @@ use core::{array, fmt::Display, mem::transmute, ops::Deref};
 use alloc::{string::String, vec::Vec};
 
 use crate::{
+	driver::ide::lba::LBA28,
 	io::pmio::Port,
 	util::bitrange::{BitData, BitRange},
 };
@@ -55,8 +56,8 @@ impl AtaController {
 		}
 	}
 
-	pub fn write_lba28(&self, lba: usize) {
-		let lba = BitData::new(lba);
+	pub fn write_lba28(&self, lba: LBA28) {
+		let lba = BitData::new(lba.as_raw());
 
 		self.command
 			.add(Self::LBA_LOW)
@@ -110,7 +111,7 @@ impl AtaController {
 	}
 
 	pub fn self_diagnosis(&self) -> AtaOutput {
-		self.write_lba28(0);
+		self.write_lba28(LBA28::new(0));
 		self.write_sector_count(0);
 		self.write_command(Command::ExcuteDeviceDiagnostic);
 		self.output()
@@ -125,7 +126,7 @@ impl AtaController {
 	}
 
 	/// Perform READ SECTORS command (PIO)
-	pub fn read_sectors(&self, lba: usize, buf: &mut [RawSector]) {
+	pub fn read_sectors(&self, lba: LBA28, buf: &mut [RawSector]) {
 		self.write_sector_count(buf.len() as u8);
 		self.write_lba28(lba);
 		self.write_command(Command::ReadSectors);
