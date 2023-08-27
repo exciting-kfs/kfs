@@ -27,8 +27,10 @@ impl MetaCache {
 	pub unsafe fn construct_at<'a>(mem: NonNull<u8>, cache_size: usize) -> &'a mut Self {
 		let rank = get_rank(mem);
 		let count = count_total(rank, Self::META_SIZE, cache_size);
-		let offset = ((Self::META_SIZE - 1) / cache_size + 1) * cache_size;
-		let first = mem.as_ptr().offset(offset as isize);
+
+		let p = mem.as_ptr() as usize + Self::META_SIZE;
+		let first = next_align(p, cache_size) as *mut u8;
+
 		let mut free_list = NAList::new();
 
 		for i in 0..count {
