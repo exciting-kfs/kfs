@@ -18,9 +18,6 @@ jobs:
           toolchain: nightly
           components: rust-src
 
-      - name: Setup Docker
-        uses: docker-practice/actions-setup-docker@v1
-
       - name: Setup extra tools
         run: |
           sudo apt update && sudo apt install -y \
