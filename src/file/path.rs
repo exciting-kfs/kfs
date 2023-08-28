@@ -18,7 +18,16 @@ pub enum Component<'a> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Base {
 	RootDir,
-	WorkingDir(usize),
+	WorkingDir { to_parent: usize },
+}
+
+impl Base {
+	pub fn move_to_parent_dir(&mut self) {
+		use Base::*;
+		if let WorkingDir { to_parent } = self {
+			*to_parent += 1;
+		}
+	}
 }
 
 pub struct ComponentIter<'a> {
@@ -89,7 +98,7 @@ impl Path {
 		let mut base = if path.len() != 0 && path[0] == b'/' {
 			Base::RootDir
 		} else {
-			Base::WorkingDir(0)
+			Base::WorkingDir { to_parent: 0 }
 		};
 
 		let raw_comps = ComponentIter::new(path);
@@ -98,15 +107,10 @@ impl Path {
 		for comp in raw_comps {
 			use Component::*;
 			match comp {
-				ParentDir => {
-					if comps.is_empty() {
-						if let Base::WorkingDir(depth) = base {
-							base = Base::WorkingDir(depth + 1);
-						}
-					} else {
-						comps.pop();
-					}
-				}
+				ParentDir => match comps.is_empty() {
+					true => base.move_to_parent_dir(),
+					false => _ = comps.pop(),
+				},
 				Part(p) => comps.push(p.to_vec()),
 				CurDir => (),
 			}
@@ -136,7 +140,7 @@ mod test {
 	fn empty() {
 		let p = Path::new(b"");
 
-		assert_eq!(p.base(), Base::WorkingDir(0));
+		assert_eq!(p.base(), Base::WorkingDir { to_parent: 0 });
 		assert_eq!(p.components().next(), None);
 	}
 
@@ -145,7 +149,7 @@ mod test {
 		let path = Path::new(b"abcd");
 
 		let mut comps = path.components();
-		assert_eq!(path.base(), Base::WorkingDir(0));
+		assert_eq!(path.base(), Base::WorkingDir { to_parent: 0 });
 		assert_eq!(comps.next().unwrap(), b"abcd");
 		assert_eq!(comps.next(), None);
 
@@ -162,7 +166,7 @@ mod test {
 		let path = Path::new(b"abcd/");
 
 		let mut comps = path.components();
-		assert_eq!(path.base(), Base::WorkingDir(0));
+		assert_eq!(path.base(), Base::WorkingDir { to_parent: 0 });
 		assert_eq!(comps.next().unwrap(), b"abcd");
 		assert_eq!(comps.next(), None);
 
@@ -179,7 +183,7 @@ mod test {
 		let path = Path::new(b"abcd////");
 
 		let mut comps = path.components();
-		assert_eq!(path.base(), Base::WorkingDir(0));
+		assert_eq!(path.base(), Base::WorkingDir { to_parent: 0 });
 		assert_eq!(comps.next().unwrap(), b"abcd");
 		assert_eq!(comps.next(), None);
 
@@ -196,7 +200,7 @@ mod test {
 		let path = Path::new(b"./abcd");
 
 		let mut comps = path.components();
-		assert_eq!(path.base(), Base::WorkingDir(0));
+		assert_eq!(path.base(), Base::WorkingDir { to_parent: 0 });
 		assert_eq!(comps.next().unwrap(), b"abcd");
 		assert_eq!(comps.next(), None);
 
@@ -213,7 +217,7 @@ mod test {
 		let path = Path::new(b"../abcd");
 
 		let mut comps = path.components();
-		assert_eq!(path.base(), Base::WorkingDir(1));
+		assert_eq!(path.base(), Base::WorkingDir { to_parent: 1 });
 		assert_eq!(comps.next().unwrap(), b"abcd");
 		assert_eq!(comps.next(), None);
 
@@ -230,13 +234,13 @@ mod test {
 		let path = Path::new(b"..");
 
 		let mut comps = path.components();
-		assert_eq!(path.base(), Base::WorkingDir(1));
+		assert_eq!(path.base(), Base::WorkingDir { to_parent: 1 });
 		assert_eq!(comps.next(), None);
 
 		let path = Path::new(b".");
 
 		let mut comps = path.components();
-		assert_eq!(path.base(), Base::WorkingDir(0));
+		assert_eq!(path.base(), Base::WorkingDir { to_parent: 0 });
 		assert_eq!(comps.next(), None);
 
 		let path = Path::new(b"/");
@@ -259,7 +263,7 @@ mod test {
 		let path = Path::new(b"./..//abc///././/../dddd//eeeeee//");
 
 		let mut comps = path.components();
-		assert_eq!(path.base(), Base::WorkingDir(1));
+		assert_eq!(path.base(), Base::WorkingDir { to_parent: 1 });
 		assert_eq!(comps.next().unwrap(), b"dddd");
 		assert_eq!(comps.next().unwrap(), b"eeeeee");
 		assert_eq!(comps.next(), None);
@@ -269,11 +273,11 @@ mod test {
 	fn pop_comps() {
 		let mut path = Path::new(b"a/../../..");
 
-		assert_eq!(path.base(), Base::WorkingDir(2));
+		assert_eq!(path.base(), Base::WorkingDir { to_parent: 2 });
 		assert_eq!(path.pop_component(), None);
 
 		let mut path = Path::new(b"a/b/c/d/..");
-		assert_eq!(path.base(), Base::WorkingDir(0));
+		assert_eq!(path.base(), Base::WorkingDir { to_parent: 0 });
 		assert_eq!(path.pop_component().unwrap(), b"c");
 		assert_eq!(path.pop_component().unwrap(), b"b");
 		assert_eq!(path.pop_component().unwrap(), b"a");
