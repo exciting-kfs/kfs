@@ -1,3 +1,5 @@
+pub mod cast_box;
+
 use core::{alloc::AllocError, mem, ptr::NonNull};
 
 use crate::mm::{
