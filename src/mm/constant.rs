@@ -25,6 +25,7 @@ pub const BLOCK_SIZE: usize = PAGE_SIZE * (1 << MAX_RANK);
 /// SIZE
 pub const KB: usize = 1024;
 pub const MB: usize = 1024 * KB;
+pub const SECTOR_SIZE: usize = 512;
 
 /// cache allocator
 pub const LEVEL_MIN: usize = 6;

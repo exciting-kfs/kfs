@@ -27,6 +27,15 @@ impl<T: Clone> Clone for Locked<T> {
 	}
 }
 
+impl<T: Default> Default for Locked<T> {
+	fn default() -> Self {
+		Self {
+			inner: SpinLock::new(),
+			value: UnsafeCell::new(T::default()),
+		}
+	}
+}
+
 impl<T> Locked<MaybeUninit<T>> {
 	pub const fn uninit() -> Self {
 		Self {
