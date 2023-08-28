@@ -47,8 +47,7 @@ impl CastBox {
 	pub fn as_chunks(&mut self, size: usize) -> impl Iterator<Item = CastChunk> {
 		debug_assert!(size <= self.ptr.len());
 
-		let chunks = unsafe { self.ptr.as_mut() }.chunks_exact_mut(size);
-		chunks.into_iter().map(|chunk| CastChunk { chunk })
+unsafe { self.ptr.as_mut() }.chunks_exact_mut(size).map(|chunk| CastChunk { chunk })
 	}
 
 	pub unsafe fn as_slice<U>(&mut self, count: usize) -> &mut [U] {
