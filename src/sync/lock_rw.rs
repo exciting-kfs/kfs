@@ -25,18 +25,19 @@ impl<T> LockRW<T> {
 		}
 	}
 
-	pub fn read_lock(&self) -> ReadLockGuard<'_, T> {
+	fn raise_read_count(&self) {
 		self.write_lock.lock();
-		self.write_lock.unlock();
 		self.read_count.fetch_add(1, Ordering::Relaxed);
+		self.write_lock.unlock();
+	}
 
+	pub fn read_lock(&self) -> ReadLockGuard<'_, T> {
+		self.raise_read_count();
 		unsafe { ReadLockGuard::new(self) }
 	}
 
 	pub unsafe fn read_lock_manual(&self) -> &T {
-		self.write_lock.lock();
-		self.write_lock.unlock();
-		self.read_count.fetch_add(1, Ordering::Relaxed);
+		self.raise_read_count();
 
 		unsafe { &*self.value.get() }
 	}
