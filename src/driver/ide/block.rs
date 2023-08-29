@@ -14,9 +14,7 @@ use crate::mm::{
 	util::virt_to_phys,
 };
 
-pub struct Array<T: ?Sized>(PhantomData<T>);
-
-pub struct Block<T = ()> {
+pub struct Block<T: ?Sized = ()> {
 	ptr: NonNull<[u8]>,
 	layout: Layout,
 	_p: PhantomData<T>,
@@ -40,9 +38,9 @@ impl Size {
 
 impl Block {
 	pub fn new(size: Size) -> Result<Self, AllocError> {
-		let ptr = Normal.allocate(size.layout())?;
+		let layout = size.layout();
+		let ptr = Normal.allocate(layout)?;
 
-		let layout = unsafe { Layout::from_size_align_unchecked(ptr.len(), ptr.len()) };
 		Ok(Self {
 			ptr,
 			layout,
@@ -59,7 +57,7 @@ impl Block {
 	}
 }
 
-impl<T> Block<Array<T>> {
+impl<T> Block<[T]> {
 	pub unsafe fn as_slice(&mut self, count: usize) -> &mut [T] {
 		debug_assert!(max(size_of::<T>(), align_of::<T>()) * count <= self.ptr.len());
 		core::slice::from_raw_parts_mut(self.ptr.as_ptr().cast(), count)
@@ -114,7 +112,7 @@ impl<T> Block<T> {
 	}
 }
 
-impl<T> Drop for Block<T> {
+unsafe impl<#[may_dangle] T: ?Sized> Drop for Block<T> {
 	fn drop(&mut self) {
 		unsafe { Normal.deallocate(self.ptr.cast(), self.layout) };
 	}
