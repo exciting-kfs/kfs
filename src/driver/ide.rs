@@ -1,8 +1,9 @@
-/// PCI IDE Controller Specification.
-/// Bus Master IDE Controller.
-/// ATA/ATAPI spcification.
-/// PIIX specification.
-/// OsDev [PCI, PCI IDE Controller, ATA/ATAPI using DMA]
+//! PCI IDE Controller Specification.
+//! Bus Master IDE Controller.
+//! ATA/ATAPI spcification.
+//! PIIX specification.
+//! OsDev [PCI, PCI IDE Controller, ATA/ATAPI using DMA]
+pub mod block;
 mod bmide;
 mod prd;
 
