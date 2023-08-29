@@ -8,6 +8,7 @@
 #![feature(asm_const)]
 #![feature(variant_count)]
 #![feature(extract_if)]
+#![feature(dropck_eyepatch)]
 
 extern crate alloc;
 

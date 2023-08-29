@@ -88,3 +88,10 @@ pub unsafe fn print_memory(ptr: *const u8, count: usize) {
 		printk!("\n");
 	}
 }
+
+#[macro_export]
+macro_rules! write_field {
+	($f: ident, $self: ident, $field: ident ) => {
+		write!($f, "\t{}: {:x?}\n", stringify!($field), $self.$field)
+	};
+}
