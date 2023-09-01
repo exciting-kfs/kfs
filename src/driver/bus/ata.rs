@@ -190,12 +190,6 @@ impl AtaController {
 		status & Self::SIG_DRDY > 0
 	}
 
-	fn wait_400ns(&self) {
-		for _ in 0..4 {
-			let _ = self.control.read_byte();
-		}
-	}
-
 	fn wait<F: Fn(u8) -> bool>(&self, condition: F) {
 		let mut status = self.read_status();
 		while !condition(status) {

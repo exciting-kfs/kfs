@@ -40,8 +40,8 @@ const IDE_CLASS_CODE: ClassCode = ClassCode {
 };
 
 static ATA_IDE: [Locked<AtaController>; 2] = [
-	Locked::new(AtaController::new(0x1f0, 0x3f6)), // CH: P, DEV: P
-	Locked::new(AtaController::new(0x170, 0x376)), // CH: S, DEV: P
+	Locked::new(AtaController::new(0x1f0, 0x3f6)), // CH: P
+	Locked::new(AtaController::new(0x170, 0x376)), // CH: S
 ];
 
 pub fn init() -> Result<(), pci::Error> {
