@@ -9,6 +9,8 @@
 #![feature(variant_count)]
 #![feature(extract_if)]
 #![feature(dropck_eyepatch)]
+#![feature(maybe_uninit_as_bytes)]
+#![feature(slice_as_chunks)]
 
 extern crate alloc;
 

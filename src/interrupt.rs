@@ -19,7 +19,7 @@ pub fn irq_disable() {
 	unsafe { asm!("cli") };
 }
 
-pub fn get_interrupt_flag() -> bool {
+pub fn is_sti() -> bool {
 	let flag_mask = 1 << 9;
 	let mut eflags: usize;
 	unsafe {
@@ -60,8 +60,8 @@ mod tests {
 	#[ktest(dev)]
 	fn test() {
 		unsafe { core::arch::asm!("sti") };
-		assert!(get_interrupt_flag());
+		assert!(is_sti());
 		unsafe { core::arch::asm!("cli") };
-		assert!(!get_interrupt_flag());
+		assert!(!is_sti());
 	}
 }
