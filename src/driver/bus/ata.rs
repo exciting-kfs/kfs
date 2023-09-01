@@ -102,12 +102,6 @@ impl AtaController {
 		self.write_command(command);
 	}
 
-	pub fn write_command(&self, command: Command) {
-		self.command
-			.add(Self::STATUS_COMMAND)
-			.write_byte(command as u8);
-	}
-
 	pub fn output(&self) -> AtaOutput {
 		let off: [u16; 7] = array::from_fn(|i| (i + 1) as u16);
 		let res = off.map(|o| {
@@ -166,7 +160,7 @@ impl AtaController {
 
 	pub fn is_idle(&self) -> bool {
 		let status = self.read_status();
-		!Self::is_busy(status) && !Self::is_drq(status)
+		!Self::is_busy(status) && !Self::is_drq(status) && !self.intr_pending
 	}
 
 	#[inline(always)]
@@ -203,6 +197,12 @@ impl AtaController {
 		self.wait(|status| {
 			!Self::is_busy(status) && !Self::is_drq(status) && Self::is_drdy(status)
 		});
+	}
+
+	fn write_command(&self, command: Command) {
+		self.command
+			.add(Self::STATUS_COMMAND)
+			.write_byte(command as u8);
 	}
 
 	fn write_lba28(&self, lba: LBA28) {
