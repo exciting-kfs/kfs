@@ -8,22 +8,22 @@ impl DevNum {
 		DevNum(num)
 	}
 
-	#[inline(always)]
+	#[inline]
 	pub fn channel(&self) -> usize {
 		self.0 / 2
 	}
 
-	#[inline(always)]
+	#[inline]
 	pub fn index(&self) -> usize {
 		self.0
 	}
 
-	#[inline(always)]
+	#[inline]
 	pub fn index_in_channel(&self) -> usize {
 		self.0 % 2
 	}
 
-	#[inline(always)]
+	#[inline]
 	pub fn is_primary(&self) -> bool {
 		self.0 % 2 == 0
 	}

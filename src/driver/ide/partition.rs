@@ -1,7 +1,6 @@
 use core::{
-	array,
 	fmt::{Display, LowerHex},
-	mem::transmute,
+	mem::MaybeUninit,
 	ops::Deref,
 	slice::Iter,
 };
@@ -87,32 +86,46 @@ impl Display for PartitionTable {
 	}
 }
 
-pub static mut PART_TABLE: [Option<Box<Locked<PartitionTable>>>; 4] = [None, None, None, None];
+pub static PART_TABLE: [Locked<Option<Box<PartitionTable>>>; 4] = [
+	Locked::new(None),
+	Locked::new(None),
+	Locked::new(None),
+	Locked::new(None),
+];
 
 const BOOT_SECTOR_MAGIC: u16 = 0xaa55;
 const BOOT_SECTOR_OFFSET: usize = 0x1fe / 2;
-const PARTION_TABLE_OFFSET: usize = 0x1be / 2;
+const PARTITION_TABLE_OFFSET: usize = 0x1be / 2;
+
+fn read_partition_table(dev: DevNum) -> Option<Box<PartitionTable>> {
+	let ide = get_ide_controller(dev);
+
+	let mut sector = Box::new_uninit_slice(1);
+	ide.read_sectors(LBA28::new(0), &mut sector);
+
+	let sector = unsafe { sector.assume_init() };
+
+	if sector[0][BOOT_SECTOR_OFFSET] != BOOT_SECTOR_MAGIC {
+		return None;
+	}
+
+	let mut part_table: Box<MaybeUninit<PartitionTable>> = Box::new_uninit();
+	unsafe {
+		part_table
+			.as_mut_ptr()
+			.cast::<u16>()
+			.copy_from_nonoverlapping(&sector[0][PARTITION_TABLE_OFFSET], 32)
+	};
+
+	Some(unsafe { part_table.assume_init() })
+}
 
 pub fn init(devices: [Option<DevNum>; 4]) {
-	let mut mem = Box::new_uninit_slice(1);
-	let table = devices.into_iter().map(|dev| unsafe {
-		let boot_sector = dev.and_then(|dev_num| {
-			let ide = get_ide_controller(dev_num);
-			let sector = mem.as_mut();
-			ide.read_sectors(LBA28::new(0), sector);
-			(sector[0].assume_init_ref()[BOOT_SECTOR_OFFSET] == BOOT_SECTOR_MAGIC).then_some(sector)
-		});
-
-		boot_sector.map(|sector| {
-			let src = &sector[0].assume_init_ref()[PARTION_TABLE_OFFSET..BOOT_SECTOR_OFFSET];
-			let dst = array::from_fn(|i| src[i]);
-			Box::new(Locked::new(transmute::<[u16; 32], _>(dst)))
-		})
-	});
-
-	table
-		.enumerate()
-		.for_each(|(i, e)| unsafe { PART_TABLE[i] = e });
+	for (dev, entry) in devices.into_iter().zip(PART_TABLE.iter()) {
+		if let Some(dev) = dev {
+			*entry.lock() = read_partition_table(dev);
+		}
+	}
 }
 
 pub fn byte_to_sector_count(byte: usize) -> usize {
@@ -120,9 +133,9 @@ pub fn byte_to_sector_count(byte: usize) -> usize {
 }
 
 fn print_partition_table() {
-	for (i, tab) in unsafe { PART_TABLE.iter().enumerate() } {
-		if let Some(t) = tab {
-			pr_debug!("{}:\n{}", i, *t.lock());
+	for (i, tab) in PART_TABLE.iter().enumerate() {
+		if let Some(t) = &*tab.lock() {
+			pr_debug!("{}:\n{}", i, t);
 		}
 	}
 }

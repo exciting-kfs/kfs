@@ -163,23 +163,23 @@ impl AtaController {
 		!Self::is_busy(status) && !Self::is_drq(status) && !self.intr_pending
 	}
 
-	#[inline(always)]
+	#[inline]
 	/// This function reads `Alternate Status Register` to avoid that the interrupt pending bit is cleard.
 	fn read_status(&self) -> u8 {
 		self.control.read_byte()
 	}
 
-	#[inline(always)]
+	#[inline]
 	fn is_busy(status: u8) -> bool {
 		status & Self::SIG_BUSY > 0
 	}
 
-	#[inline(always)]
+	#[inline]
 	fn is_drq(status: u8) -> bool {
 		status & Self::SIG_DRQ > 0
 	}
 
-	#[inline(always)]
+	#[inline]
 	fn is_drdy(status: u8) -> bool {
 		status & Self::SIG_DRDY > 0
 	}
