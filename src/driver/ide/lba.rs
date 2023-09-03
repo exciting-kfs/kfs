@@ -1,7 +1,9 @@
 use core::fmt::LowerHex;
 
+use crate::mm::constant::SECTOR_SIZE;
+
 /// Logical Block Address
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 #[repr(transparent)]
 pub struct LBA28(usize);
 
@@ -33,6 +35,11 @@ impl LBA28 {
 
 		LBA28::new(((c * HPC + h) * SPT + (s - 1)) as usize)
 	}
+
+	pub fn byte_add(&self, byte: usize) -> Self {
+		debug_assert!(byte % SECTOR_SIZE == 0, "invalid byte offset");
+		*self + byte / SECTOR_SIZE
+	}
 }
 
 impl LowerHex for LBA28 {
@@ -48,6 +55,17 @@ impl core::ops::Add<usize> for LBA28 {
 			LBA28::end()
 		} else {
 			LBA28::new(self.0 + rhs)
+		}
+	}
+}
+
+impl core::ops::Sub<Self> for LBA28 {
+	type Output = usize;
+	fn sub(self, rhs: Self) -> Self::Output {
+		if self.0 >= rhs.0 {
+			self.0 - rhs.0
+		} else {
+			0
 		}
 	}
 }

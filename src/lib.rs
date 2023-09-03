@@ -9,6 +9,8 @@
 #![feature(variant_count)]
 #![feature(extract_if)]
 #![feature(dropck_eyepatch)]
+#![feature(maybe_uninit_as_bytes)]
+#![feature(slice_as_chunks)]
 
 extern crate alloc;
 
@@ -35,12 +37,11 @@ mod util;
 mod x86;
 
 use alloc::sync::Arc;
-use core::mem;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::{arch::asm, panic::PanicInfo};
 use driver::tty;
 use file::{File, OpenFlag};
-use interrupt::enter_interrupt_context;
+use process::kthread::kthread_init;
 use process::task::Task;
 use scheduler::context::yield_now;
 use scheduler::work::slow_worker;
@@ -87,7 +88,7 @@ fn run_test() -> ! {
 }
 
 fn idle() -> ! {
-	mem::drop(enter_interrupt_context());
+	kthread_init();
 	loop {
 		yield_now();
 	}

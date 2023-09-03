@@ -1,9 +1,14 @@
-use core::{array, fmt::Display, mem::transmute, ops::Deref};
+use core::{
+	array,
+	fmt::Display,
+	mem::{transmute, MaybeUninit},
+	ops::Deref,
+};
 
 use alloc::{string::String, vec::Vec};
 
 use crate::{
-	driver::ide::lba::LBA28,
+	driver::ide::{dev_num::DevNum, lba::LBA28},
 	io::pmio::Port,
 	util::bitrange::{BitData, BitRange},
 };
@@ -12,14 +17,15 @@ pub struct AtaController {
 	command: Port,
 	control: Port,
 	is_2nd_dev: bool,
+	intr_pending: bool,
 }
 
-#[repr(transparent)]
+#[repr(align(512))]
 pub struct RawSector([u16; 256]);
 
 impl RawSector {
-	pub fn new(buf: [u16; 256]) -> Self {
-		Self(buf)
+	pub const fn empty() -> Self {
+		Self([0; 256])
 	}
 }
 
@@ -46,55 +52,54 @@ impl AtaController {
 	const LBA_TOP_RANGE: BitRange = BitRange::new(24, 28);
 
 	const SIG_BUSY: u8 = 0x80;
+	const SIG_DRDY: u8 = 0x40;
 	const SIG_DRQ: u8 = 0x08;
 
-	pub const fn new(command_base: u16, control_base: u16, is_2nd_dev: bool) -> Self {
+	const N_IEN: u8 = 1;
+	const DEVICE_BIT: u8 = 4;
+
+	pub const fn new(command_base: u16, control_base: u16) -> Self {
 		Self {
 			command: Port::new(command_base),
 			control: Port::new(control_base),
-			is_2nd_dev,
+			is_2nd_dev: false,
+			intr_pending: false,
 		}
 	}
 
-	pub fn write_lba28(&self, lba: LBA28) {
-		let lba = BitData::new(lba.as_raw());
-
-		self.command
-			.add(Self::LBA_LOW)
-			.write_byte(lba.shift_get_bits(&Self::LBA_LOW_RANGE) as u8);
-
-		self.command
-			.add(Self::LBA_MID)
-			.write_byte(lba.shift_get_bits(&Self::LBA_MID_RANGE) as u8);
-
-		self.command
-			.add(Self::LBA_HIGH)
-			.write_byte(lba.shift_get_bits(&Self::LBA_HIGH_RANGE) as u8);
-
-		self.command.add(Self::DEVICE).write_byte(
-			lba.shift_get_bits(&Self::LBA_TOP_RANGE) as u8
-				| ((self.is_2nd_dev as u8) << 4)
-				| (1 << 6),
-		)
+	pub fn set_interrupt(&self, on: bool) {
+		self.control.write_byte((!on as u8) << Self::N_IEN);
 	}
 
-	pub fn write_sector_count(&self, count: u8) {
-		self.command.add(Self::SECTOR_COUNT).write_byte(count);
+	pub fn set_device(&mut self, dev_num: DevNum) {
+		self.is_2nd_dev = dev_num.index_in_channel() == 1;
 	}
 
-	// TODO Runtime: yield
-	pub fn wait_command(&self) {
-		let mut status = self.control.read_byte();
-		while status & 0x80 > 0 || status & 0x08 > 0 {
-			status = self.control.read_byte();
-		}
+	pub fn interrupt_pending(&self) -> bool {
+		self.intr_pending
 	}
 
-	pub fn write_command(&self, command: Command) {
-		self.wait_command();
-		self.command
-			.add(Self::STATUS_COMMAND)
-			.write_byte(command as u8);
+	pub fn interrupt_resolve(&mut self) {
+		self.intr_pending = false;
+	}
+
+	pub fn write_dma(&mut self, lba: LBA28, sector_count: u16) {
+		self.do_command(Command::WriteDMA, lba, sector_count);
+		self.intr_pending = true;
+	}
+
+	pub fn read_dma(&mut self, lba: LBA28, sector_count: u16) {
+		self.do_command(Command::ReadDMA, lba, sector_count);
+		self.intr_pending = true;
+	}
+
+	// HI0 ~ HI4
+	pub fn do_command(&self, command: Command, lba: LBA28, sector_count: u16) {
+		self.device_select();
+
+		self.write_lba28(lba);
+		self.write_sector_count(sector_count);
+		self.write_command(command);
 	}
 
 	pub fn output(&self) -> AtaOutput {
@@ -111,41 +116,39 @@ impl AtaController {
 	}
 
 	pub fn self_diagnosis(&self) -> AtaOutput {
+		let select = (self.is_2nd_dev as u8) << Self::DEVICE_BIT;
+		self.command.add(Self::DEVICE).write_byte(select);
+		self.wait(|status| !Self::is_busy(status) && !Self::is_drq(status));
+
 		self.write_lba28(LBA28::new(0));
 		self.write_sector_count(0);
 		self.write_command(Command::ExcuteDeviceDiagnostic);
+
 		self.output()
 	}
 
-	fn pio_read_data(&self) -> u16 {
-		let mut status = self.read_status();
-		while status & Self::SIG_BUSY != 0 || status & Self::SIG_DRQ == 0 {
-			status = self.read_status();
-		}
-		self.command.add(Self::DATA).read_u16()
-	}
-
 	/// Perform READ SECTORS command (PIO)
-	pub fn read_sectors(&self, lba: LBA28, buf: &mut [RawSector]) {
-		self.write_sector_count(buf.len() as u8);
-		self.write_lba28(lba);
-		self.write_command(Command::ReadSectors);
+	///
+	/// - Don't use at nIEN == 0.
+	pub fn read_sectors(&self, lba: LBA28, buf: &mut [MaybeUninit<RawSector>]) {
+		self.do_command(Command::ReadSectors, lba, buf.len() as u16);
+		self.wait(|status| Self::is_drq(status));
 
 		for sector in buf {
-			for word in &mut sector.0 {
-				*word = self.pio_read_data();
+			let (chunks, _) = sector.as_bytes_mut().as_chunks_mut::<2>();
+			for word in chunks {
+				*word = unsafe { transmute(self.pio_read_data()) };
 			}
 		}
 	}
 
-	pub fn identify_device(&self) -> AtaId {
-		self.command
-			.add(Self::DEVICE)
-			.write_byte((self.is_2nd_dev as u8) << 4);
+	fn pio_read_data(&self) -> u16 {
+		self.wait(|status| !Self::is_busy(status) || Self::is_drq(status));
+		self.command.add(Self::DATA).read_u16()
+	}
 
-		self.command
-			.add(Self::STATUS_COMMAND)
-			.write_byte(Command::IdentifyDevice as u8);
+	pub fn identify_device(&self) -> AtaId {
+		self.do_command(Command::IdentifyDevice, LBA28::new(0), 0);
 
 		let mut data = RawSector([0; 256]);
 		for word in &mut data.0 {
@@ -155,10 +158,82 @@ impl AtaController {
 		AtaId { data }
 	}
 
-	#[inline(always)]
+	pub fn is_idle(&self) -> bool {
+		let status = self.read_status();
+		!Self::is_busy(status) && !Self::is_drq(status) && !self.intr_pending
+	}
+
+	#[inline]
 	/// This function reads `Alternate Status Register` to avoid that the interrupt pending bit is cleard.
 	fn read_status(&self) -> u8 {
 		self.control.read_byte()
+	}
+
+	#[inline]
+	fn is_busy(status: u8) -> bool {
+		status & Self::SIG_BUSY > 0
+	}
+
+	#[inline]
+	fn is_drq(status: u8) -> bool {
+		status & Self::SIG_DRQ > 0
+	}
+
+	#[inline]
+	fn is_drdy(status: u8) -> bool {
+		status & Self::SIG_DRDY > 0
+	}
+
+	fn wait<F: Fn(u8) -> bool>(&self, condition: F) {
+		let mut status = self.read_status();
+		while !condition(status) {
+			status = self.read_status();
+		}
+	}
+
+	fn device_select(&self) {
+		let select = (self.is_2nd_dev as u8) << Self::DEVICE_BIT;
+		self.command.add(Self::DEVICE).write_byte(select);
+		self.wait(|status| {
+			!Self::is_busy(status) && !Self::is_drq(status) && Self::is_drdy(status)
+		});
+	}
+
+	fn write_command(&self, command: Command) {
+		self.command
+			.add(Self::STATUS_COMMAND)
+			.write_byte(command as u8);
+	}
+
+	fn write_lba28(&self, lba: LBA28) {
+		let lba = BitData::new(lba.as_raw());
+
+		self.command
+			.add(Self::LBA_LOW)
+			.write_byte(lba.shift_get_bits(&Self::LBA_LOW_RANGE) as u8);
+
+		self.command
+			.add(Self::LBA_MID)
+			.write_byte(lba.shift_get_bits(&Self::LBA_MID_RANGE) as u8);
+
+		self.command
+			.add(Self::LBA_HIGH)
+			.write_byte(lba.shift_get_bits(&Self::LBA_HIGH_RANGE) as u8);
+
+		self.command.add(Self::DEVICE).write_byte(
+			lba.shift_get_bits(&Self::LBA_TOP_RANGE) as u8
+				| ((self.is_2nd_dev as u8) << Self::DEVICE_BIT)
+				| (1 << 6),
+		);
+	}
+
+	fn write_sector_count(&self, count: u16) {
+		debug_assert!(count <= 256);
+		let count = match count == 256 {
+			true => 0 as u8,
+			false => count as u8,
+		};
+		self.command.add(Self::SECTOR_COUNT).write_byte(count);
 	}
 }
 
@@ -224,6 +299,7 @@ impl Display for AtaOutput {
 	}
 }
 
+#[derive(PartialEq, Eq, Debug)]
 #[repr(u8)]
 pub enum Command {
 	ReadDMA = 0xc8,

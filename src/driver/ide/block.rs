@@ -28,9 +28,11 @@ pub enum Size {
 impl Size {
 	fn layout(&self) -> Layout {
 		let size = match self {
-			Self::Sector(count) => *count * SECTOR_SIZE,
-			Self::KB(kb) => *kb * KB / SECTOR_SIZE,
+			Self::Sector(count) => (*count) * SECTOR_SIZE,
+			Self::KB(kb) => (*kb) * KB,
 		};
+
+		debug_assert!(size <= 64 * KB);
 
 		unsafe { Layout::from_size_align_unchecked(size, SECTOR_SIZE) }
 	}
@@ -75,23 +77,6 @@ impl<T> Block<[T]> {
 }
 
 impl<T> Block<T> {
-	pub fn into<U>(self) -> Block<U> {
-		let m = ManuallyDrop::new(self);
-		Block {
-			ptr: m.ptr,
-			layout: m.layout,
-			_p: PhantomData,
-		}
-	}
-
-	pub fn as_phys_addr(&self) -> usize {
-		virt_to_phys(self.ptr.as_ptr() as *const u8 as usize)
-	}
-
-	pub fn size(&self) -> usize {
-		self.ptr.len()
-	}
-
 	pub unsafe fn as_one(&mut self) -> &mut T {
 		debug_assert!(align_of::<T>() <= self.layout.align(), "invalid align.");
 		debug_assert!(
@@ -112,14 +97,29 @@ impl<T> Block<T> {
 	}
 }
 
-unsafe impl<#[may_dangle] T: ?Sized> Drop for Block<T> {
-	fn drop(&mut self) {
-		unsafe { Normal.deallocate(self.ptr.cast(), self.layout) };
+impl<T: ?Sized> Block<T> {
+	pub fn as_phys_addr(&self) -> usize {
+		virt_to_phys(self.ptr.as_ptr() as *const u8 as usize)
+	}
+
+	pub fn size(&self) -> usize {
+		self.ptr.len()
+	}
+
+	pub fn into<U: ?Sized>(self) -> Block<U> {
+		let m = ManuallyDrop::new(self);
+		Block {
+			ptr: m.ptr,
+			layout: m.layout,
+			_p: PhantomData,
+		}
 	}
 }
 
-pub fn layout_of<T>() -> Layout {
-	unsafe { Layout::from_size_align_unchecked(size_of::<T>(), align_of::<T>()) }
+impl<T: ?Sized> Drop for Block<T> {
+	fn drop(&mut self) {
+		unsafe { Normal.deallocate(self.ptr.cast(), self.layout) };
+	}
 }
 
 pub struct BlockChunk<'a> {

@@ -1,23 +1,19 @@
 use core::{
-	array,
 	fmt::{Display, LowerHex},
-	mem::transmute,
+	mem::MaybeUninit,
+	ops::Deref,
 	slice::Iter,
 };
 
 use alloc::boxed::Box;
 
-use crate::{
-	driver::bus::ata::{AtaController, RawSector},
-	pr_debug,
-	sync::locked::Locked,
-};
+use crate::{mm::constant::SECTOR_SIZE, pr_debug, sync::locked::Locked};
 
-use super::lba::LBA28;
+use super::{dev_num::DevNum, get_ide_controller, lba::LBA28};
 
 #[repr(C)]
 #[derive(Debug)]
-pub struct PartitionTableEntry {
+pub struct PartitionEntry {
 	attribute: u8,
 	begin_h: u8,
 	begin_s: u8,
@@ -30,7 +26,7 @@ pub struct PartitionTableEntry {
 	sector_count: u32,
 }
 
-impl PartitionTableEntry {
+impl PartitionEntry {
 	pub fn begin(&self) -> LBA28 {
 		debug_assert!(self.partition_type != PartitionType::Empty);
 		LBA28::new(self.begin_lba as usize)
@@ -44,11 +40,18 @@ impl PartitionTableEntry {
 }
 
 #[derive(Debug)]
-pub struct PartitionTable([PartitionTableEntry; 4]);
+pub struct PartitionTable([PartitionEntry; 4]);
 
 impl PartitionTable {
-	pub fn iter(&self) -> Iter<'_, PartitionTableEntry> {
+	pub fn iter(&self) -> Iter<'_, PartitionEntry> {
 		self.0.iter()
+	}
+}
+
+impl Deref for PartitionTable {
+	type Target = [PartitionEntry; 4];
+	fn deref(&self) -> &Self::Target {
+		&self.0
 	}
 }
 
@@ -83,36 +86,55 @@ impl Display for PartitionTable {
 	}
 }
 
-pub static PART_TABLE: Locked<[Option<Box<PartitionTable>>; 4]> =
-	Locked::new([None, None, None, None]);
+pub static PART_TABLE: [Locked<Option<Box<PartitionTable>>>; 4] = [
+	Locked::new(None),
+	Locked::new(None),
+	Locked::new(None),
+	Locked::new(None),
+];
+
 const BOOT_SECTOR_MAGIC: u16 = 0xaa55;
 const BOOT_SECTOR_OFFSET: usize = 0x1fe / 2;
-const PARTION_TABLE_OFFSET: usize = 0x1be / 2;
+const PARTITION_TABLE_OFFSET: usize = 0x1be / 2;
 
-pub fn init(devices: [Option<&Locked<AtaController>>; 4]) {
-	let mut sector = Box::new([RawSector::new([0; 256])]);
-	let table = devices.iter().map(|dev| {
-		let boot_sector = dev.and_then(|ata| {
-			ata.lock().read_sectors(LBA28::new(0), sector.as_mut());
-			(sector[0][BOOT_SECTOR_OFFSET] == BOOT_SECTOR_MAGIC).then_some(sector.as_mut())
-		});
+fn read_partition_table(dev: DevNum) -> Option<Box<PartitionTable>> {
+	let ide = get_ide_controller(dev);
 
-		boot_sector.map(|sector| unsafe {
-			let src = &sector[0][PARTION_TABLE_OFFSET..BOOT_SECTOR_OFFSET];
-			let dst = array::from_fn(|i| src[i]);
-			Box::new(transmute::<[u16; 32], _>(dst))
-		})
-	});
+	let mut sector = Box::new_uninit_slice(1);
+	ide.read_sectors(LBA28::new(0), &mut sector);
 
-	table
-		.enumerate()
-		.for_each(|(i, e)| PART_TABLE.lock()[i] = e);
-	// print_partition_table();
+	let sector = unsafe { sector.assume_init() };
+
+	if sector[0][BOOT_SECTOR_OFFSET] != BOOT_SECTOR_MAGIC {
+		return None;
+	}
+
+	let mut part_table: Box<MaybeUninit<PartitionTable>> = Box::new_uninit();
+	unsafe {
+		part_table
+			.as_mut_ptr()
+			.cast::<u16>()
+			.copy_from_nonoverlapping(&sector[0][PARTITION_TABLE_OFFSET], 32)
+	};
+
+	Some(unsafe { part_table.assume_init() })
+}
+
+pub fn init(devices: [Option<DevNum>; 4]) {
+	for (dev, entry) in devices.into_iter().zip(PART_TABLE.iter()) {
+		if let Some(dev) = dev {
+			*entry.lock() = read_partition_table(dev);
+		}
+	}
+}
+
+pub fn byte_to_sector_count(byte: usize) -> usize {
+	(byte - 1) / SECTOR_SIZE + 1
 }
 
 fn print_partition_table() {
-	for (i, tab) in PART_TABLE.lock().iter().enumerate() {
-		if let Some(t) = tab {
+	for (i, tab) in PART_TABLE.iter().enumerate() {
+		if let Some(t) = &*tab.lock() {
 			pr_debug!("{}:\n{}", i, t);
 		}
 	}

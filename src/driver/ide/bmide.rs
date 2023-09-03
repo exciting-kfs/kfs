@@ -1,14 +1,16 @@
-use core::{fmt::Display, mem::MaybeUninit};
+use core::{fmt::Display, mem::MaybeUninit, ptr::addr_of};
 
-use crate::{io::pmio::Port, sync::locked::Locked};
+use crate::{io::pmio::Port, mm::util::virt_to_phys, sync::locked::Locked};
 
-/// BMIDE[channel]
-pub static BMIDE: [Locked<MaybeUninit<BMIDE>>; 2] = [Locked::uninit(), Locked::uninit()];
+use super::prd::PRD;
+
+pub static BMIDE: [Locked<MaybeUninit<BMIDE>>; 2] = [Locked::uninit(), Locked::uninit()]; // channel
 
 /// BUS MASTER IDE
 pub struct BMIDE {
 	base: Port,
 	is_2nd_channel: bool,
+	prd_table: [PRD; 128],
 }
 
 impl BMIDE {
@@ -21,15 +23,28 @@ impl BMIDE {
 	const PRDTR: u16 = 0x4;
 
 	pub fn init(port: u16) {
-		BMIDE[0].lock().write(BMIDE::new(port, false));
-		BMIDE[1].lock().write(BMIDE::new(port + 0x08, true));
+		let mut bmide0 = BMIDE[0].lock();
+		let mut bmide1 = BMIDE[1].lock();
+
+		bmide0.write(BMIDE::new(port, false));
+		bmide1.write(BMIDE::new(port + 0x08, true));
+
+		unsafe {
+			bmide0.assume_init_ref().load_prd_table();
+			bmide1.assume_init_ref().load_prd_table();
+		}
 	}
 
 	pub const fn new(base: u16, is_2nd_channel: bool) -> Self {
 		Self {
 			base: Port::new(base),
 			is_2nd_channel,
+			prd_table: [PRD::new(0, 0); 128],
 		}
+	}
+
+	pub fn prd_table(&mut self) -> &mut [PRD] {
+		&mut self.prd_table
 	}
 
 	fn write_status(&self, data: u8) {
@@ -83,8 +98,9 @@ impl BMIDE {
 		(self.read_status() & Self::ERROR_BIT) == Self::ERROR_BIT
 	}
 
-	pub fn register_prdt(&self, paddr: u32) {
-		self.base.add(Self::PRDTR).write_u32(paddr);
+	pub fn load_prd_table(&self) {
+		let paddr = virt_to_phys(addr_of!(self.prd_table) as usize);
+		self.base.add(Self::PRDTR).write_u32(paddr as u32);
 	}
 }
 
