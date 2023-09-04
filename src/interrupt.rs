@@ -48,6 +48,10 @@ pub fn enter_interrupt_context() -> InterruptGuard {
 	InterruptGuard(())
 }
 
+pub unsafe extern "C" fn leave_interrupt_context() {
+	*IN_INTERRUPT.get_mut() = false;
+}
+
 pub fn in_interrupt_context() -> bool {
 	unsafe { *IN_INTERRUPT.get_ref() }
 }

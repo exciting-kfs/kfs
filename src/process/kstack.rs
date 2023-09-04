@@ -3,7 +3,7 @@ use core::mem::{self, size_of};
 use core::ptr::{addr_of_mut, NonNull};
 
 use crate::config::KSTACK_RANK;
-use crate::interrupt::InterruptFrame;
+use crate::interrupt::{leave_interrupt_context, InterruptFrame};
 use crate::mm::alloc::page::{alloc_pages, free_pages};
 use crate::mm::alloc::Zone;
 use crate::mm::util::*;
@@ -80,6 +80,7 @@ impl Stack {
 
 		// kernel context frame
 		stack.push(return_from_interrupt as usize).unwrap();
+		stack.push(leave_interrupt_context as usize).unwrap();
 		stack.push(0).unwrap();
 		stack.push(0).unwrap();
 		stack.push(0).unwrap();
@@ -96,6 +97,7 @@ impl Stack {
 		unsafe { new.set_user_return_value(0) };
 
 		new.push(return_from_interrupt as usize).unwrap();
+		new.push(leave_interrupt_context as usize).unwrap();
 		new.push(0).unwrap();
 		new.push(0).unwrap();
 		new.push(0).unwrap();
