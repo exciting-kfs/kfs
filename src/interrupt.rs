@@ -7,7 +7,7 @@ use core::arch::asm;
 
 pub use interrupt_frame::InterruptFrame;
 
-use crate::sync::cpu_local::CpuLocal;
+use crate::sync::{cpu_local::CpuLocal, spinlock::get_lock_depth};
 
 #[inline(always)]
 pub fn irq_enable() {
@@ -48,8 +48,42 @@ pub fn enter_interrupt_context() -> InterruptGuard {
 	InterruptGuard(())
 }
 
+pub unsafe extern "C" fn leave_interrupt_context() {
+	*IN_INTERRUPT.get_mut() = false;
+}
+
 pub fn in_interrupt_context() -> bool {
-	unsafe { *IN_INTERRUPT.get_mut() }
+	unsafe { *IN_INTERRUPT.get_ref() }
+}
+
+pub struct InterruptBackup(bool);
+
+impl Drop for InterruptBackup {
+	fn drop(&mut self) {
+		assert_eq!(get_lock_depth(), 0);
+
+		unsafe { *IN_INTERRUPT.get_mut() = self.0 };
+
+		if !self.0 {
+			irq_enable();
+		}
+	}
+}
+
+pub fn save_interrupt_context() -> InterruptBackup {
+	irq_disable();
+	assert_eq!(get_lock_depth(), 0);
+
+	let backup = InterruptBackup(unsafe { *IN_INTERRUPT.get_ref() });
+
+	unsafe { *IN_INTERRUPT.get_mut() = true };
+
+	backup
+}
+
+pub fn kthread_init() {
+	unsafe { *IN_INTERRUPT.get_mut() = false };
+	irq_enable();
 }
 
 #[cfg(disable)]
