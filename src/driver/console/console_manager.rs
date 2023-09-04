@@ -17,6 +17,7 @@ use crate::driver::tty::{SyncTTY, TTYFlag, TTY};
 use crate::driver::vga::text_vga::WINDOW_SIZE;
 use crate::input::key_event::Code;
 use crate::io::ChWrite;
+use crate::scheduler::work::Error;
 use crate::sync::locked::Locked;
 
 pub static mut CONSOLE_MANAGER: MaybeUninit<ConsoleManager> = MaybeUninit::uninit();
@@ -85,8 +86,9 @@ impl ConsoleManager {
 	}
 }
 
-pub fn console_screen_draw(_: &mut ()) {
+pub fn console_screen_draw(_: &mut ()) -> Result<(), Error> {
 	unsafe { CONSOLE_MANAGER.assume_init_mut().screen_draw() };
+	Ok(())
 }
 
 pub fn init() {

@@ -44,8 +44,8 @@ use file::{File, OpenFlag};
 use interrupt::kthread_init;
 use process::task::Task;
 use scheduler::context::yield_now;
+use scheduler::schedule_last;
 use scheduler::work::slow_worker;
-use scheduler::TASK_QUEUE;
 use test::{exit_qemu_with, TEST_ARRAY};
 
 use crate::interrupt::irq_disable;
@@ -122,11 +122,11 @@ fn run_process() -> ! {
 	// TASK_QUEUE.lock().push_back(stat);
 
 	let worker = Task::new_kernel(slow_worker as usize, 0).expect("OOM");
-	TASK_QUEUE.lock().push_back(worker);
-
 	let mut init = process::get_init_task();
 	open_default_fd(&mut init);
-	TASK_QUEUE.lock().push_back(init);
+
+	schedule_last(init);
+	schedule_last(worker);
 
 	idle();
 }

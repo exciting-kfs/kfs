@@ -6,18 +6,14 @@ use kfs_macro::interrupt_handler;
 use crate::config::CONSOLE_COUNTS;
 use crate::driver::apic::local::LOCAL_APIC;
 use crate::driver::console::{console_screen_draw, CONSOLE_MANAGER};
-use crate::driver::ide::test::DMA_CHECK;
 use crate::driver::ps2::keyboard::{get_raw_scancode, into_key_event};
 use crate::input::{
 	self,
 	key_event::{Code, KeyKind},
 };
 use crate::interrupt::InterruptFrame;
-use crate::mm::constant::PAGE_SIZE;
-use crate::scheduler::work::{schedule_fast_work, wakeup_fast_woker};
-use crate::util::print_memory;
+use crate::scheduler::work::schedule_fast_work;
 use crate::{acpi::IAPC_BOOT_ARCH, io::pmio::Port};
-use crate::{pr_err, printk};
 
 fn wait_then_write_byte(port: &Port, byte: u8) {
 	while control::test_status_now(control::Status::IBF) {}
@@ -105,15 +101,6 @@ pub extern "C" fn handle_keyboard_impl(_frame: InterruptFrame) {
 
 	into_key_event(code as u8).map(|ev| {
 		if ev.key == Code::Backtick && ev.pressed() {
-			// TODO DELETE
-			{
-				pr_err!("DMA_CHECK");
-				let buf = unsafe { DMA_CHECK.assume_init_mut().as_mut() };
-				let ptr = buf.as_ptr() as *const u8;
-				unsafe { print_memory(ptr, PAGE_SIZE) };
-				printk!("\n");
-			}
-
 			panic!("BACKTICK PRESSED!!");
 		}
 		input::keyboard::change_state(ev);
@@ -133,7 +120,7 @@ pub extern "C" fn handle_keyboard_impl(_frame: InterruptFrame) {
 			}
 		}
 		schedule_fast_work(console_screen_draw, ());
-		wakeup_fast_woker();
+		// wakeup_fast_woker();
 	});
 
 	LOCAL_APIC.end_of_interrupt();

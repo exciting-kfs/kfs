@@ -5,7 +5,7 @@ use crate::{
 		relation::session::Session,
 		task::{State, Task, CURRENT},
 	},
-	scheduler::{context::yield_now, TASK_QUEUE},
+	scheduler::{context::yield_now, schedule_last},
 	sync::locked::Locked,
 };
 
@@ -28,7 +28,7 @@ pub fn wake_up(task: &Arc<Task>, state: State) {
 		// pr_debug!("{:?} wake up!", task.get_pid());
 		*state_lock = State::Running;
 		drop(state_lock);
-		TASK_QUEUE.lock().push_back(task.clone());
+		schedule_last(task.clone());
 	}
 }
 

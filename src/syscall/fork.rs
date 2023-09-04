@@ -1,5 +1,6 @@
 use crate::{
-	interrupt::InterruptFrame, process::task::CURRENT, scheduler::TASK_QUEUE, syscall::errno::Errno,
+	interrupt::InterruptFrame, process::task::CURRENT, scheduler::schedule_last,
+	syscall::errno::Errno,
 };
 
 pub fn sys_fork(frame: *const InterruptFrame) -> Result<usize, Errno> {
@@ -7,9 +8,8 @@ pub fn sys_fork(frame: *const InterruptFrame) -> Result<usize, Errno> {
 
 	if let Ok(forked) = current.clone_for_fork(frame) {
 		let pid = forked.get_pid().as_raw();
-		let mut tq = TASK_QUEUE.lock();
 
-		tq.push_back(forked);
+		schedule_last(forked);
 
 		Ok(pid)
 	} else {
