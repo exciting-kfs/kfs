@@ -41,7 +41,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use core::{arch::asm, panic::PanicInfo};
 use driver::tty;
 use file::{File, OpenFlag};
-use process::kthread::kthread_init;
+use interrupt::kthread_init;
 use process::task::Task;
 use scheduler::context::yield_now;
 use scheduler::work::slow_worker;
@@ -122,11 +122,11 @@ fn run_process() -> ! {
 	// TASK_QUEUE.lock().push_back(stat);
 
 	let worker = Task::new_kernel(slow_worker as usize, 0).expect("OOM");
+	TASK_QUEUE.lock().push_back(worker);
+
 	let mut init = process::get_init_task();
 	open_default_fd(&mut init);
-
 	TASK_QUEUE.lock().push_back(init);
-	TASK_QUEUE.lock().push_back(worker);
 
 	idle();
 }

@@ -1,4 +1,4 @@
-use crate::interrupt::{enter_interrupt_context, irq_enable};
+use crate::interrupt::kthread_init;
 
 use super::exit::sys_exit;
 
@@ -7,9 +7,4 @@ pub extern "C" fn kthread_entry(routine: extern "C" fn(usize) -> usize, arg: usi
 	kthread_init();
 	let ret = routine(arg);
 	sys_exit(ret);
-}
-
-pub fn kthread_init() {
-	drop(enter_interrupt_context());
-	irq_enable();
 }

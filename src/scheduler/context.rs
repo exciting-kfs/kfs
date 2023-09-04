@@ -1,9 +1,9 @@
 use core::mem;
 
 use alloc::sync::Arc;
-use kfs_macro::interrupt_handler;
 
 use crate::{
+	interrupt::save_interrupt_context,
 	process::task::{State, Task, CURRENT},
 	scheduler::TASK_QUEUE,
 	x86::CPU_TASK_STATE,
@@ -11,8 +11,9 @@ use crate::{
 
 /// yield control from current task to next task
 ///  call flow: yield_now -> switch_stack -> switch_task_finish
-#[interrupt_handler]
 pub fn yield_now() {
+	let _ctx = save_interrupt_context();
+
 	let next = {
 		let mut task_q = TASK_QUEUE.lock();
 
