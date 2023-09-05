@@ -27,4 +27,16 @@ int pipe(int pipe_pair[2]);
 uid_t getuid(void);
 int setuid(uid_t uid);
 
+int chdir(const char *path);
+int rmdir(const char *path);
+int unlink(const char *path);
+
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
+
+off_t lseek(int fd, off_t offset, int whence);
+
+int truncate(const char *path, off_t length);
+
 #endif // _UNISTD_H

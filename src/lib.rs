@@ -19,7 +19,7 @@ mod boot;
 mod collection;
 mod config;
 mod driver;
-mod file;
+mod fs;
 mod input;
 mod interrupt;
 mod io;
@@ -36,11 +36,12 @@ mod user_bin;
 mod util;
 mod x86;
 
+use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::{arch::asm, panic::PanicInfo};
 use driver::tty;
-use file::{File, OpenFlag};
+use fs::vfs::{AccessFlag, IOFlag, VfsFileHandle, VfsHandle};
 use interrupt::kthread_init;
 use process::task::Task;
 use scheduler::context::yield_now;
@@ -103,14 +104,16 @@ fn open_default_fd(task: &mut Arc<Task>) {
 	let ext = task.get_user_ext().expect("user task");
 	let sess = &ext.lock_relation().get_session();
 
-	tty.lock().connect(Arc::downgrade(sess));
+	tty.lock_tty().connect(Arc::downgrade(sess));
 	sess.lock().set_ctty(tty.clone());
 
 	let mut fd_table = ext.lock_fd_table();
-	let file = Arc::new(File {
-		ops: tty.clone(),
-		open_flag: OpenFlag::O_RDWR,
-	});
+	let file = VfsHandle::File(Arc::new(VfsFileHandle::new(
+		None,
+		Box::new(tty.clone()),
+		IOFlag::empty(),
+		AccessFlag::O_RDWR,
+	)));
 
 	fd_table.alloc_fd(file.clone());
 	fd_table.alloc_fd(file.clone());
@@ -183,6 +186,7 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	driver::ide::init().expect("IDE controller initialization.");
 
 	unsafe { x86::init() };
+	fs::init().expect("failed to mount /");
 	process::init();
 	scheduler::work::init().expect("worker thread init");
 

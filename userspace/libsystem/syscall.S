@@ -38,9 +38,17 @@ SYSCALL write,          4,              3
 SYSCALL open,           5,              0 ; FIXME
 SYSCALL close,          6,              1
 SYSCALL waitpid,        7,              3
+SYSCALL creat,          8,              2
+SYSCALL unlink,         10,             1
 SYSCALL exec,           11,             1
+SYSCALL chdir,          12,             1
+SYSCALL chmod,          15,             2
+SYSCALL stat,           18,             2
+SYSCALL lseek,          19,             3
 SYSCALL getpid,         20,             0
 SYSCALL kill,           37,             2
+SYSCALL mkdir,          39,             2
+SYSCALL rmdir,          40,             1
 SYSCALL pipe,           42,             1
 SYSCALL signal,         48,             2
 SYSCALL setpgid,        57,             2
@@ -48,9 +56,15 @@ SYSCALL getppid,        64,             0
 SYSCALL getpgrp,        65,             0
 SYSCALL setsid,         66,             0
 SYSCALL sigaction,      67,             3
+SYSCALL truncate,       92,             2
 SYSCALL getpgid,        132,            1
+SYSCALL getdents,       141,            3
 SYSCALL getsid,         147,            0
 SYSCALL sched_yield,    158,            0
 SYSCALL mmap,           192,            6
 SYSCALL getuid,         199,            0
+SYSCALL getgid,         200,            0
+SYSCALL chown,          212,            3
 SYSCALL setuid,         213,            1
+SYSCALL setgid,         214,            1
+SYSCALL open2,          999,            3

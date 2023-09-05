@@ -1,7 +1,7 @@
-use alloc::sync::Arc;
 use core::{array, ops::IndexMut};
 
-use crate::{file::File, syscall::errno::Errno};
+use crate::fs::vfs::VfsHandle;
+use crate::syscall::errno::Errno;
 
 const FDTABLE_SIZE: usize = 256;
 
@@ -19,7 +19,7 @@ impl Fd {
 	}
 }
 
-pub struct FdTable([Option<Arc<File>>; FDTABLE_SIZE]);
+pub struct FdTable([Option<VfsHandle>; FDTABLE_SIZE]);
 
 impl FdTable {
 	pub fn new() -> Self {
@@ -30,11 +30,11 @@ impl FdTable {
 		Self(self.0.clone())
 	}
 
-	pub fn get_file(&self, fd: Fd) -> Option<Arc<File>> {
+	pub fn get_file(&self, fd: Fd) -> Option<VfsHandle> {
 		self.0[fd.index()].clone()
 	}
 
-	pub fn alloc_fd(&mut self, file: Arc<File>) -> Option<Fd> {
+	pub fn alloc_fd(&mut self, file: VfsHandle) -> Option<Fd> {
 		let (fd, entry) = self
 			.0
 			.iter_mut()

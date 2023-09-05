@@ -1,5 +1,6 @@
 pub mod exit;
 pub mod fd_table;
+pub mod gid;
 pub mod kstack;
 pub mod kthread;
 pub mod process_tree;

@@ -9,3 +9,5 @@ pub const TRAMPOLINE_BASE: usize = 0xa000_0000;
 
 pub const TIMER_FREQUENCY_HZ: usize = 1000;
 pub const CONSOLE_COUNTS: usize = 4;
+
+pub const PATH_MAX: usize = 1024;

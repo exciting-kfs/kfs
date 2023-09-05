@@ -49,3 +49,11 @@ void ft_putnbr_x(int n) {
 	start = convert_to_str(buffer, n, 16);
 	write(1, buffer + start, __PUTNBR_BUFFER_MAX - start);
 }
+
+void ft_putnbr_o(int n) {
+	char buffer[__PUTNBR_BUFFER_MAX];
+	int start;
+
+	start = convert_to_str(buffer, n, 8);
+	write(1, buffer + start, __PUTNBR_BUFFER_MAX - start);
+}

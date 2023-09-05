@@ -2,7 +2,7 @@ use core::marker::PhantomData;
 use core::mem::{self, size_of};
 
 use crate::collection::WrapQueue;
-use crate::file::{File, FileOps, OpenFlag};
+use crate::fs::vfs::{AccessFlag, FileHandle, IOFlag, VfsFileHandle, VfsHandle};
 use crate::mm::user::vma::AreaFlag;
 use crate::process::signal::send_signal_to;
 use crate::process::signal::sig_code::SigCode;
@@ -13,6 +13,7 @@ use crate::scheduler::context::yield_now;
 use crate::sync::locked::{Locked, LockedGuard};
 use crate::syscall::errno::Errno;
 
+use alloc::boxed::Box;
 use alloc::sync::Arc;
 
 trait PipeEnd {}
@@ -60,8 +61,8 @@ impl<T: PipeEnd> Pipe<T> {
 	}
 }
 
-impl FileOps for Pipe<ReadEnd> {
-	fn read(&self, file: &Arc<File>, buf: &mut [u8]) -> Result<usize, Errno> {
+impl FileHandle for Pipe<ReadEnd> {
+	fn read(&self, buf: &mut [u8], io_flags: IOFlag) -> Result<usize, Errno> {
 		let mut out_buf = buf;
 		let mut total_read = 0;
 		while out_buf.len() != 0 {
@@ -74,7 +75,7 @@ impl FileOps for Pipe<ReadEnd> {
 				return Ok(total_read);
 			}
 
-			if file.open_flag.contains(OpenFlag::O_NONBLOCK) {
+			if io_flags.contains(IOFlag::O_NONBLOCK) {
 				match curr_read {
 					0 => return Err(Errno::EAGAIN),
 					x => return Ok(x),
@@ -91,17 +92,21 @@ impl FileOps for Pipe<ReadEnd> {
 		Ok(total_read)
 	}
 
-	fn write(&self, _file: &Arc<File>, _buf: &[u8]) -> Result<usize, Errno> {
-		return Err(Errno::EBADF);
+	fn write(&self, _buf: &[u8], _io_flags: IOFlag) -> Result<usize, Errno> {
+		Err(Errno::EBADF)
+	}
+
+	fn lseek(&self, _offset: isize, _whence: crate::fs::vfs::Whence) -> Result<usize, Errno> {
+		Err(Errno::ESPIPE)
 	}
 }
 
-impl FileOps for Pipe<WriteEnd> {
-	fn read(&self, _file: &Arc<File>, _buf: &mut [u8]) -> Result<usize, Errno> {
+impl FileHandle for Pipe<WriteEnd> {
+	fn read(&self, _buf: &mut [u8], _io_flags: IOFlag) -> Result<usize, Errno> {
 		return Err(Errno::EBADF);
 	}
 
-	fn write(&self, file: &Arc<File>, buf: &[u8]) -> Result<usize, Errno> {
+	fn write(&self, buf: &[u8], io_flags: IOFlag) -> Result<usize, Errno> {
 		let mut in_buf = buf;
 		let mut total_write = 0;
 		while in_buf.len() != 0 {
@@ -125,7 +130,7 @@ impl FileOps for Pipe<WriteEnd> {
 			let curr_write = pipe_buf.data.write(in_buf);
 			total_write += curr_write;
 
-			if file.open_flag.contains(OpenFlag::O_NONBLOCK) {
+			if io_flags.contains(IOFlag::O_NONBLOCK) {
 				match curr_write {
 					0 => return Err(Errno::EAGAIN),
 					x => return Ok(x),
@@ -141,6 +146,10 @@ impl FileOps for Pipe<WriteEnd> {
 
 		Ok(total_write)
 	}
+
+	fn lseek(&self, _offset: isize, _whencee: crate::fs::vfs::Whence) -> Result<usize, Errno> {
+		Err(Errno::ESPIPE)
+	}
 }
 
 impl<T: PipeEnd> Drop for Pipe<T> {
@@ -151,18 +160,22 @@ impl<T: PipeEnd> Drop for Pipe<T> {
 	}
 }
 
-pub fn get_pipe() -> (Arc<File>, Arc<File>) {
+pub fn open_pipe() -> (VfsHandle, VfsHandle) {
 	let buffer = Arc::new(Locked::new(PipeBuffer::new()));
 
 	(
-		Arc::new(File::new(
-			Arc::new(Pipe::<ReadEnd>::new(buffer.clone())),
-			OpenFlag::empty(),
-		)),
-		Arc::new(File::new(
-			Arc::new(Pipe::<WriteEnd>::new(buffer.clone())),
-			OpenFlag::empty(),
-		)),
+		VfsHandle::File(Arc::new(VfsFileHandle::new(
+			None,
+			Box::new(Pipe::<ReadEnd>::new(buffer.clone())),
+			IOFlag::empty(),
+			AccessFlag::O_RDWR,
+		))),
+		VfsHandle::File(Arc::new(VfsFileHandle::new(
+			None,
+			Box::new(Pipe::<WriteEnd>::new(buffer.clone())),
+			IOFlag::empty(),
+			AccessFlag::O_RDWR,
+		))),
 	)
 }
 
@@ -178,12 +191,12 @@ pub fn sys_pipe(pipe_ptr: usize) -> Result<usize, Errno> {
 		return Err(Errno::EFAULT);
 	}
 
-	let pipe = get_pipe();
+	let (read_handle, write_handle) = open_pipe();
 
 	let mut fd_table = user_ext.lock_fd_table();
 
-	let read_end = fd_table.alloc_fd(pipe.0.clone());
-	let write_end = fd_table.alloc_fd(pipe.1.clone());
+	let read_end = fd_table.alloc_fd(read_handle);
+	let write_end = fd_table.alloc_fd(write_handle);
 
 	match (read_end, write_end) {
 		(Some(x), Some(y)) => {
