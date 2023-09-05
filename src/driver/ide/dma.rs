@@ -5,7 +5,7 @@ pub mod write;
 
 use core::alloc::AllocError;
 
-use crate::{driver::ide::dma::dma_q::work, pr_debug, scheduler::work::schedule_slow_work};
+use crate::pr_debug;
 
 use self::{dma_q::get_dma_q, event::Event};
 
@@ -21,10 +21,7 @@ pub fn dma_schedule(dev_num: DevNum, event: Event) -> Result<(), AllocError> {
 	let mut dma_q = get_dma_q(dev_num);
 
 	if dma_q.is_idle() {
-		dma_q.push_front(dev_num, event);
-		dma_q.schedule_next();
-		schedule_slow_work(work::do_dma, dev_num);
-		pr_debug!("dma_schedule: do_dma scheduled");
+		dma_q.start_with(dev_num, event);
 	} else {
 		dma_q.merge_insert(dev_num, event);
 		pr_debug!("DMA_Q[{}].len: {:?}", dev_num.channel(), dma_q.len());

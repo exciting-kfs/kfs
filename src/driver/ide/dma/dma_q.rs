@@ -5,12 +5,13 @@ use alloc::collections::LinkedList;
 use crate::{
 	driver::ide::{dev_num::DevNum, IdeController},
 	pr_debug,
+	scheduler::work::schedule_slow_work,
 	sync::locked::{Locked, LockedGuard},
 };
 
 use super::Event;
 
-static DMA_Q: [Locked<DmaQ>; 2] = [Locked::new(DmaQ::new()), Locked::new(DmaQ::new())];
+static DMA_Q: [Locked<DmaQ>; 2] = [Locked::new(DmaQ::new(0)), Locked::new(DmaQ::new(1))];
 
 pub struct DmaQ {
 	prev: DevNum,
@@ -19,9 +20,9 @@ pub struct DmaQ {
 }
 
 impl DmaQ {
-	pub const fn new() -> Self {
+	pub const fn new(channel: usize) -> Self {
 		Self {
-			prev: unsafe { DevNum::new_unchecked(0) },
+			prev: unsafe { DevNum::new_unchecked(channel * 2) },
 			scheduled: None,
 			queue: [LinkedList::new(), LinkedList::new()],
 		}
@@ -67,9 +68,12 @@ impl DmaQ {
 		ret
 	}
 
-	pub fn push_front(&mut self, dev: DevNum, event: Event) {
-		self.prev = dev;
+	pub fn start_with(&mut self, dev: DevNum, event: Event) {
+		self.prev = dev.pair();
 		self.queue[dev.index_in_channel()].push_front(event);
+		self.schedule_next();
+		schedule_slow_work(work::start_dma, dev);
+		pr_debug!("dma_schedule: start_dma scheduled");
 	}
 
 	pub fn merge_insert(&mut self, dev: DevNum, event: Event) {
@@ -129,7 +133,7 @@ pub mod work {
 
 	const LOCK_TRY: usize = 3;
 
-	pub fn do_dma(dev_num: &mut DevNum) -> Result<(), Error> {
+	pub fn start_dma(dev_num: &mut DevNum) -> Result<(), Error> {
 		printk!(".");
 		let ide = try_get_ide_controller(*dev_num, LOCK_TRY).map_err(|_| Error::Yield)?;
 		let mut dma_q = get_dma_q(*dev_num);
