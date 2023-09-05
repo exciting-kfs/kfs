@@ -21,7 +21,7 @@ pub struct DmaQ {
 impl DmaQ {
 	pub const fn new() -> Self {
 		Self {
-			prev: DevNum::new(0),
+			prev: unsafe { DevNum::new_unchecked(0) },
 			scheduled: None,
 			queue: [LinkedList::new(), LinkedList::new()],
 		}

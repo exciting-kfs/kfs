@@ -48,12 +48,13 @@ pub mod test {
 	pub const TEST_SECTOR_COUNT: usize = 128;
 
 	pub fn write_dma_event(dev_num: DevNum, i: usize) {
-		let begin = LBA28::new(i * TEST_SECTOR_COUNT);
-		let end = LBA28::new((i + 1) * TEST_SECTOR_COUNT);
+		let begin = unsafe { LBA28::new_unchecked(i * TEST_SECTOR_COUNT) };
+		let end = unsafe { LBA28::new_unchecked((i + 1) * TEST_SECTOR_COUNT) };
 
 		let prepare = move || {
 			pr_debug!("+++++ prepare called +++++");
-			Block::new(block::Size::Sector(TEST_SECTOR_COUNT)).map(|block| unsafe {
+			let size = block::BlockSize::from_sector_count(TEST_SECTOR_COUNT).unwrap();
+			Block::new(size).map(|block| unsafe {
 				let mut block: Block<[u8]> = block.into();
 				let arr = block.as_slice(block.size()).as_mut();
 				arr.iter_mut().for_each(|e| *e = b'b' + i as u8);
@@ -75,12 +76,13 @@ pub mod test {
 	}
 
 	pub fn read_dma_event(dev_num: DevNum, i: usize) {
-		let begin = LBA28::new(i * TEST_SECTOR_COUNT);
-		let end = LBA28::new((i + 1) * TEST_SECTOR_COUNT);
+		let begin = unsafe { LBA28::new_unchecked(i * TEST_SECTOR_COUNT) };
+		let end = unsafe { LBA28::new_unchecked((i + 1) * TEST_SECTOR_COUNT) };
 
 		let prepare = move || {
 			pr_debug!("+++++ prepare called +++++");
-			Block::new(block::Size::Sector(TEST_SECTOR_COUNT)).map(|block| block.into())
+			let size = block::BlockSize::from_sector_count(TEST_SECTOR_COUNT).unwrap();
+			Block::new(size).map(|block| block.into())
 		};
 
 		let mut cb = CallBack::new();

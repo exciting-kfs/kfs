@@ -47,7 +47,7 @@ pub fn handle_ide_impl(channel: usize) {
 	} else {
 		// schedule work.
 		let num = channel * 2 + (is_secondary as usize);
-		let dev_num = DevNum::new(num);
+		let dev_num = unsafe { DevNum::new_unchecked(num) };
 		schedule_slow_work(work::do_next_dma, dev_num);
 		pr_debug!("ide handler: do_next_dma scheduled: {:?}", dev_num);
 	}

@@ -75,7 +75,7 @@ pub fn init() -> Result<(), pci::Error> {
 
 	// PART TABLE
 	let existed = array::from_fn(|i| {
-		let dev = DevNum::new(i);
+		let dev = unsafe { DevNum::new_unchecked(i) };
 		let ide = get_ide_controller(dev);
 		let output = ide.ata.self_diagnosis();
 
@@ -92,7 +92,7 @@ pub fn init() -> Result<(), pci::Error> {
 
 pub fn enable_interrupt() {
 	for i in 0..4 {
-		let ide = get_ide_controller(DevNum::new(i));
+		let ide = get_ide_controller(unsafe { DevNum::new_unchecked(i) });
 		ide.ata.set_interrupt(true);
 	}
 
@@ -101,7 +101,6 @@ pub fn enable_interrupt() {
 }
 
 pub fn get_ide_controller(dev_num: DevNum) -> LockedGuard<'static, IdeController> {
-	debug_assert!(dev_num.index() < 4, "invalid ide controller");
 	let channel = dev_num.channel();
 
 	let mut ide = IDE[channel].lock();
@@ -121,7 +120,6 @@ pub fn try_get_ide_controller(
 	dev_num: DevNum,
 	try_count: usize,
 ) -> Result<LockedGuard<'static, IdeController>, TryLockFail> {
-	debug_assert!(dev_num.index() < 4, "invalid ide controller");
 	let channel = dev_num.channel();
 
 	let mut ide = IDE[channel].lock();
@@ -143,10 +141,7 @@ pub fn try_get_ide_controller(
 
 pub mod test {
 
-	use crate::driver::{
-		bus::ata::Command,
-		ide::{dma::DmaOps, lba::LBA28},
-	};
+	use crate::driver::ide::{dma::DmaOps, lba::LBA28};
 
 	const DEV_NUM: usize = 1;
 
@@ -184,7 +179,7 @@ pub mod test {
 
 	pub fn test_write_dma() {
 		let page = alloc_pages(0, Zone::High).expect("OOM");
-		let mut ide = get_ide_controller(DevNum::new(1));
+		let mut ide = get_ide_controller(unsafe { DevNum::new_unchecked(1) });
 		let bmi = unsafe { ide.bmi.assume_init_mut() };
 		set_prd_table(bmi, page);
 		bmi.set_dma(DmaOps::Write);
@@ -200,7 +195,8 @@ pub mod test {
 			.for_each(|(i, c)| buf[i] = *c);
 
 		// ATA - DO DMA: WRITE DMA
-		ide.ata.do_dma(Command::WriteDma, LBA28::new(0), 1);
+		ide.ata
+			.do_dma(DmaOps::Write, unsafe { LBA28::new_unchecked(0) }, 1);
 
 		pr_debug!("{}", ide.ata.output());
 
@@ -212,7 +208,7 @@ pub mod test {
 
 	pub fn test_read_dma() {
 		let page = alloc_pages(0, Zone::High).expect("OOM");
-		let mut ide = get_ide_controller(DevNum::new(1));
+		let mut ide = get_ide_controller(unsafe { DevNum::new_unchecked(1) });
 		let bmi = unsafe { ide.bmi.assume_init_mut() };
 
 		set_prd_table(bmi, page);
@@ -225,7 +221,8 @@ pub mod test {
 		// ATA - DO DMA: READ DMA
 		pr_debug!("test_read_dma: {}", ide.ata.output());
 
-		ide.ata.do_dma(Command::ReadDma, LBA28::new(0), 1);
+		ide.ata
+			.do_dma(DmaOps::Read, unsafe { LBA28::new_unchecked(0) }, 1);
 		pr_debug!("{}", ide.ata.output());
 
 		let bmi = unsafe { ide.bmi.assume_init_mut() };

@@ -3,8 +3,15 @@
 pub struct DevNum(usize);
 
 impl DevNum {
-	pub const fn new(num: usize) -> Self {
-		debug_assert!(num < 4);
+	pub const fn new(num: usize) -> Option<Self> {
+		if num < 4 {
+			Some(DevNum(num))
+		} else {
+			None
+		}
+	}
+
+	pub const unsafe fn new_unchecked(num: usize) -> Self {
 		DevNum(num)
 	}
 

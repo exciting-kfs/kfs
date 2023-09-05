@@ -195,7 +195,7 @@ mod test_threads {
 
 	pub fn run_dma_test(_: usize) {
 		let tries = 5;
-		let dev_num = DevNum::new(1);
+		let dev_num = unsafe { DevNum::new_unchecked(1) };
 
 		let mut ide = get_ide_controller(dev_num);
 		ide.ata.interrupt_pending();

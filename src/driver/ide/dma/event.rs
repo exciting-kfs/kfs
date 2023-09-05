@@ -3,10 +3,7 @@ use core::{alloc::AllocError, mem::take};
 use alloc::{boxed::Box, collections::BTreeMap, vec::Vec};
 
 use crate::{
-	driver::{
-		bus::ata::Command,
-		ide::{block::Block, lba::LBA28, IdeController},
-	},
+	driver::ide::{block::Block, lba::LBA28, IdeController},
 	mm::constant::{KB, SECTOR_SIZE},
 	pr_debug,
 	sync::locked::LockedGuard,
@@ -93,12 +90,7 @@ impl Event {
 	pub fn perform(&mut self, mut ide: LockedGuard<'_, IdeController>, blocks: Vec<Block>) {
 		pr_debug!("+++++ perform called +++++");
 
-		let ata_command = match self.kind {
-			// (write)cache writeback for blocks
-			DmaOps::Write => Command::WriteDma,
-			DmaOps::Read => Command::ReadDma,
-		};
-
+		// (write)cache writeback for blocks
 		let bmi = unsafe { ide.bmi.assume_init_mut() };
 		bmi.set_prd_table(&blocks);
 		bmi.set_dma(self.kind);
@@ -106,7 +98,7 @@ impl Event {
 		self.own = blocks;
 
 		let ata = &mut ide.ata;
-		ata.do_dma(ata_command, self.begin, self.count() as u16);
+		ata.do_dma(self.kind, self.begin, self.count() as u16);
 
 		unsafe { ide.bmi.assume_init_mut().start() };
 	}
@@ -125,7 +117,8 @@ impl Event {
 	}
 
 	pub fn merge(&mut self, event: Self) {
-		debug_assert!(self.kind == event.kind);
+		debug_assert!(self.kind == event.kind); // ?
+
 		let Self {
 			kind: _,
 			begin,

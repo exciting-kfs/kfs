@@ -11,7 +11,7 @@ use alloc::boxed::Box;
 use crate::mm::{
 	alloc::phys::Normal,
 	constant::{KB, SECTOR_SIZE},
-	util::virt_to_phys,
+	util::{next_align, virt_to_phys},
 };
 
 pub struct Block<T: ?Sized = ()> {
@@ -20,26 +20,37 @@ pub struct Block<T: ?Sized = ()> {
 	_p: PhantomData<T>,
 }
 
-pub enum Size {
-	Sector(usize),
-	KB(usize),
+pub struct BlockSize {
+	kb: usize,
 }
 
-impl Size {
+impl BlockSize {
+	const MAX_KB: usize = 64;
+	pub fn from_bytes(bytes: usize) -> Option<BlockSize> {
+		let kb = next_align(bytes, KB) / KB;
+		if 1 <= kb && kb <= Self::MAX_KB {
+			Some(BlockSize { kb })
+		} else {
+			None
+		}
+	}
+
+	pub fn from_sector_count(count: usize) -> Option<BlockSize> {
+		Self::from_bytes(count * SECTOR_SIZE)
+	}
+
+	pub fn as_bytes(&self) -> usize {
+		self.kb * KB
+	}
+
 	fn layout(&self) -> Layout {
-		let size = match self {
-			Self::Sector(count) => (*count) * SECTOR_SIZE,
-			Self::KB(kb) => (*kb) * KB,
-		};
-
-		debug_assert!(size <= 64 * KB, "{}", size);
-
+		let size = self.kb * KB;
 		unsafe { Layout::from_size_align_unchecked(size, SECTOR_SIZE) }
 	}
 }
 
 impl Block {
-	pub fn new(size: Size) -> Result<Self, AllocError> {
+	pub fn new(size: BlockSize) -> Result<Self, AllocError> {
 		let layout = size.layout();
 		let ptr = Normal.allocate(layout)?;
 

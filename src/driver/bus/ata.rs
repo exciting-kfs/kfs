@@ -8,7 +8,7 @@ use core::{
 use alloc::{string::String, vec::Vec};
 
 use crate::{
-	driver::ide::{dev_num::DevNum, lba::LBA28},
+	driver::ide::{dev_num::DevNum, dma::DmaOps, lba::LBA28},
 	io::pmio::Port,
 	util::bitrange::{BitData, BitRange},
 };
@@ -84,8 +84,12 @@ impl AtaController {
 		self.intr_pending = true;
 	}
 
-	pub fn do_dma(&mut self, command: Command, lba: LBA28, sector_count: u16) {
-		debug_assert!(command == Command::ReadDma || command == Command::WriteDma);
+	pub fn do_dma(&mut self, ops: DmaOps, lba: LBA28, sector_count: u16) {
+		let command = match ops {
+			DmaOps::Read => Command::ReadDma,
+			DmaOps::Write => Command::WriteDma,
+		};
+
 		self.do_command(command, lba, sector_count);
 		self.intr_pending = true;
 	}
@@ -108,7 +112,7 @@ impl AtaController {
 		self.command.add(Self::DEVICE).write_byte(select);
 		self.wait(|status| !Self::is_busy(status) && !Self::is_drq(status));
 
-		self.write_lba28(LBA28::new(0));
+		self.write_lba28(unsafe { LBA28::new_unchecked(0) });
 		self.write_sector_count(0);
 		self.write_command(Command::ExcuteDeviceDiagnostic);
 
@@ -136,7 +140,11 @@ impl AtaController {
 	}
 
 	pub fn identify_device(&self) -> AtaId {
-		self.do_command(Command::IdentifyDevice, LBA28::new(0), 0);
+		self.do_command(
+			Command::IdentifyDevice,
+			unsafe { LBA28::new_unchecked(0) },
+			0,
+		);
 
 		let mut data = RawSector([0; 256]);
 		for word in &mut data.0 {
@@ -225,7 +233,7 @@ impl AtaController {
 	}
 
 	fn write_sector_count(&self, count: u16) {
-		debug_assert!(count <= 256);
+		debug_assert!(count <= 256); // hmm..
 		let count = match count == 256 {
 			true => 0 as u8,
 			false => count as u8,
