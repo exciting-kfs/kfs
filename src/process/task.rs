@@ -229,16 +229,13 @@ impl Task {
 
 		PROCESS_TREE.lock().remove(&self.pid);
 
-		if self.is_kernel() {
-			Pid::deallocate(self.get_pid());
-			return;
-		}
-
 		if let Some(ref ext) = self.user_ext {
 			let mut rel = ext.lock_relation();
 			rel.exit(self.pid, status);
 			let pgrp = &mut rel.pgroup;
 			pgrp.lock_members().remove(&self.pid);
+		} else {
+			Pid::deallocate(self.get_pid());
 		}
 
 		*state = State::Exited;

@@ -8,16 +8,14 @@ use crate::{process::task::Task, sync::locked::Locked, syscall::errno::Errno};
 
 use self::context::yield_now;
 
-pub static TASK_QUEUE: Locked<LinkedList<Arc<Task>>> = Locked::new(LinkedList::new());
+static TASK_QUEUE: Locked<LinkedList<Arc<Task>>> = Locked::new(LinkedList::new());
 
-pub type SyncTask = Arc<Task>;
-
-pub fn schedule_first(task: SyncTask) {
+pub fn schedule_first(task: Arc<Task>) {
 	let mut q = TASK_QUEUE.lock();
 	q.push_front(task);
 }
 
-pub fn schedule_last(task: SyncTask) {
+pub fn schedule_last(task: Arc<Task>) {
 	let mut q = TASK_QUEUE.lock();
 	q.push_back(task);
 }

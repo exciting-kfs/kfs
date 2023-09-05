@@ -1,64 +1,73 @@
 use core::mem;
 use core::{alloc::AllocError, mem::MaybeUninit};
 
+use alloc::sync::Arc;
 use alloc::{boxed::Box, collections::LinkedList};
 
-use crate::mm::alloc::phys::Atomic;
 use crate::process::task::{State, Task};
 use crate::sync::locked::Locked;
 
 use super::context::yield_now;
-use super::{schedule_first, SyncTask};
+use super::schedule_first;
 
 pub struct Work<ArgType> {
-	func: fn(&mut ArgType),
-	arg: Box<ArgType, Atomic>,
+	func: fn(&mut ArgType) -> Result<(), Error>,
+	arg: Box<ArgType>,
 }
 
 impl<ArgType> Work<ArgType> {
-	pub fn new(func: fn(&mut ArgType), arg: Box<ArgType, Atomic>) -> Self {
+	pub fn new(func: fn(&mut ArgType) -> Result<(), Error>, arg: Box<ArgType>) -> Self {
 		Self { func, arg }
 	}
 }
 
 pub trait Workable {
-	fn work(&mut self);
+	fn work(&mut self) -> Result<(), Error>;
 }
 
 impl<ArgType> Workable for Work<ArgType> {
-	fn work(&mut self) {
+	fn work(&mut self) -> Result<(), Error> {
 		(self.func)(self.arg.as_mut())
 	}
 }
 
-static FAST_WORK_POOL: Locked<LinkedList<Box<dyn Workable, Atomic>>> =
-	Locked::new(LinkedList::new());
-static SLOW_WORK_POOL: Locked<LinkedList<Box<dyn Workable, Atomic>>> =
-	Locked::new(LinkedList::new());
-static mut FAST_WORKER: MaybeUninit<SyncTask> = MaybeUninit::uninit();
+#[derive(Debug)]
+pub enum Error {
+	AllocError,
+	Yield,
+}
 
-pub fn schedule_slow_work<ArgType: 'static>(func: fn(&mut ArgType), arg: ArgType) {
-	let arg = Box::new_in(arg, Atomic);
-	let work = Box::new_in(Work::new(func, arg), Atomic);
+static FAST_WORK_POOL: Locked<LinkedList<Box<dyn Workable>>> = Locked::new(LinkedList::new());
+static SLOW_WORK_POOL: Locked<LinkedList<Box<dyn Workable>>> = Locked::new(LinkedList::new());
+
+pub fn schedule_slow_work<ArgType: 'static>(
+	func: fn(&mut ArgType) -> Result<(), Error>,
+	arg: ArgType,
+) {
+	let arg = Box::new(arg);
+	let work = Box::new(Work::new(func, arg));
 	let mut pool = SLOW_WORK_POOL.lock();
 	pool.push_back(work);
 }
 
-pub fn schedule_fast_work<ArgType: 'static>(func: fn(&mut ArgType), arg: ArgType) {
-	let arg = Box::new_in(arg, Atomic);
-	let work = Box::new_in(Work::new(func, arg), Atomic);
+pub fn schedule_fast_work<ArgType: 'static>(
+	func: fn(&mut ArgType) -> Result<(), Error>,
+	arg: ArgType,
+) {
+	let arg = Box::new(arg);
+	let work = Box::new(Work::new(func, arg));
 	let mut pool = FAST_WORK_POOL.lock();
 	pool.push_back(work);
 }
 
 pub fn fast_worker(_: usize) {
-	fn take_work() -> Option<Box<dyn Workable, Atomic>> {
+	fn take_work() -> Option<Box<dyn Workable>> {
 		let mut pool = FAST_WORK_POOL.lock();
 		pool.pop_front()
 	}
 
 	while let Some(mut w) = take_work() {
-		w.work()
+		w.work().expect("Any errors are not expected.");
 	}
 }
 
@@ -67,7 +76,7 @@ pub fn slow_worker(_: usize) {
 		fast_worker(0);
 		let works = {
 			let mut pool = SLOW_WORK_POOL.lock();
-			mem::replace(&mut *pool, LinkedList::new())
+			mem::take(&mut *pool)
 		};
 
 		if works.len() == 0 {
@@ -75,29 +84,37 @@ pub fn slow_worker(_: usize) {
 		}
 
 		for mut w in works {
-			w.work();
+			if let Err(e) = w.work() {
+				match e {
+					Error::AllocError => panic!("OOM"),
+					Error::Yield => SLOW_WORK_POOL.lock().push_back(w),
+				}
+			}
 		}
 	}
 }
 
-// irq_disabled
+// FIXME
+static mut FAST_WORKER: MaybeUninit<Arc<Task>> = MaybeUninit::uninit();
+
+// FIXME
 pub fn wakeup_fast_woker() {
 	let task = unsafe { FAST_WORKER.assume_init_mut().clone() };
 
-	{
-		let mut state = task.lock_state();
-		// already enqueued or running.
-		if *state != State::Exited {
-			return;
-		}
-		*state = State::Running;
+	let mut state = task.lock_state();
+	if *state == State::Running {
+		return;
 	}
+	*state = State::Running;
+	drop(state);
 
 	schedule_first(task);
 }
 
 pub fn init() -> Result<(), AllocError> {
 	let worker = Task::new_kernel(fast_worker as usize, 0)?;
+	*worker.lock_state() = State::Exited;
+
 	unsafe { FAST_WORKER.write(worker) };
 	Ok(())
 }
