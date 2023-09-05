@@ -7,32 +7,37 @@ use crate::mm::user::vma::{AreaFlag, UserAddressSpace};
 use crate::process::task::Task;
 use crate::syscall::errno::Errno;
 
-fn user_strlen(path: usize, vma: &UserAddressSpace) -> Result<usize, Errno> {
-	let mut i = 0;
+fn query_max_readable_len(start: usize, vma: &UserAddressSpace) -> usize {
+	let mut curr = start;
 
-	loop {
-		if i > PATH_MAX {
-			return Err(Errno::ENAMETOOLONG);
-		}
-
-		let ptr = path + i;
-		if !vma.query_flag(ptr, AreaFlag::Readable) {
-			return Err(Errno::EFAULT);
-		}
-
-		if unsafe { *(ptr as *const u8) } == 0 {
+	while let Some(area) = vma.find_area(curr) {
+		if !area.flags.contains(AreaFlag::Readable) {
 			break;
 		}
 
-		i += 1;
+		if PATH_MAX <= area.end - start {
+			return PATH_MAX;
+		}
+
+		curr = area.end;
 	}
 
-	if i == 0 {
-		// empty path
+	curr - start
+}
+
+fn user_strlen(path: usize, vma: &UserAddressSpace) -> Result<usize, Errno> {
+	let max_len = query_max_readable_len(path, vma);
+
+	let length = (0..max_len)
+		.map(|i| (path + i) as *const u8)
+		.position(|x| unsafe { *x } == 0)
+		.ok_or(Errno::EFAULT)?;
+
+	if length == 0 {
 		return Err(Errno::EINVAL);
 	}
 
-	Ok(i)
+	Ok(length)
 }
 
 pub fn verify_path(path: usize, task: &Arc<Task>) -> Result<&'_ [u8], Errno> {
