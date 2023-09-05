@@ -1,7 +1,7 @@
 use alloc::sync::Weak;
 use alloc::{collections::BTreeMap, sync::Arc};
 
-use crate::driver::tty::TTY;
+use crate::driver::tty::TTYFile;
 use crate::pr_debug;
 use crate::process::relation::{Pgid, Pid, Sid};
 use crate::sync::locked::Locked;
@@ -11,7 +11,7 @@ use super::pgroup::ProcessGroup;
 // TODO Hmm.. split lock?
 pub struct Session {
 	sid: Sid,
-	ctty: Option<Arc<Locked<TTY>>>,
+	ctty: Option<TTYFile>,
 	foreground: Option<Weak<ProcessGroup>>,
 	members: BTreeMap<Pgid, Weak<ProcessGroup>>,
 }
@@ -36,7 +36,7 @@ impl Session {
 		self.sid.as_raw() == pid.as_raw()
 	}
 
-	pub fn set_ctty(&mut self, tty: Arc<Locked<TTY>>) {
+	pub fn set_ctty(&mut self, tty: TTYFile) {
 		self.ctty = Some(tty)
 	}
 
@@ -79,7 +79,7 @@ impl Drop for Session {
 		pr_debug!("DROP: Session[{}]", self.sid.as_raw());
 
 		if let Some(ref tty) = self.ctty {
-			tty.lock().disconnect();
+			tty.lock_tty().disconnect();
 		}
 
 		Sid::deallocate(self.sid)

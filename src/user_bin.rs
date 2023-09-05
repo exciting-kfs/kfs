@@ -25,5 +25,6 @@ define_user_bin![
 	(TEST_PIPE, "test_pipe.bin"),
 	(TEST_SIG, "test_sig.bin"),
 	(TEST_SETXID, "test_setXid.bin"),
-	(TEST_SIGSTOPCONT, "test_sig_stop_cont.bin")
+	(TEST_SIGSTOPCONT, "test_sig_stop_cont.bin"),
+	(TEST_FILE, "test_file.bin")
 ];

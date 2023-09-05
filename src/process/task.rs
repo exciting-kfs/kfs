@@ -4,6 +4,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use alloc::sync::Arc;
 
 use crate::config::{USER_CODE_BASE, USTACK_BASE, USTACK_PAGES};
+use crate::fs::vfs::{VfsDirEntry, ROOT_DIR_ENTRY};
 use crate::interrupt::InterruptFrame;
 use crate::mm::user::memory::Memory;
 use crate::process::relation::family::zombie::Zombie;
@@ -18,6 +19,7 @@ use crate::syscall::wait::Who;
 
 use super::exit::ExitStatus;
 use super::fd_table::FdTable;
+use super::gid::Gid;
 use super::kstack::Stack;
 use super::process_tree::PROCESS_TREE;
 use super::relation::{Pgid, Pid, Relation, Sid};
@@ -41,6 +43,7 @@ pub struct Task {
 	state: Locked<State>,
 	pid: Pid,
 	uid: Uid,
+	gid: Gid,
 	user_ext: Option<UserTaskExt>,
 }
 
@@ -49,6 +52,7 @@ unsafe impl Send for Task {}
 
 pub struct UserTaskExt {
 	exec_called: AtomicBool,
+	cwd: Locked<Arc<VfsDirEntry>>,
 	memory: Locked<Memory>,
 	relation: Locked<Relation>,
 	fd_table: Arc<Locked<FdTable>>,
@@ -61,6 +65,10 @@ unsafe impl Send for UserTaskExt {}
 impl UserTaskExt {
 	pub fn lock_memory(&self) -> LockedGuard<'_, Memory> {
 		self.memory.lock()
+	}
+
+	pub fn lock_cwd(&self) -> LockedGuard<'_, Arc<VfsDirEntry>> {
+		self.cwd.lock()
 	}
 
 	pub fn lock_relation(&self) -> LockedGuard<'_, Relation> {
@@ -94,8 +102,10 @@ impl Task {
 			state: Locked::new(State::Running),
 			pid,
 			uid: Uid::from_raw(0),
+			gid: Gid::from_raw(0),
 			user_ext: Some(UserTaskExt {
 				exec_called: AtomicBool::new(false),
+				cwd: Locked::new(ROOT_DIR_ENTRY.lock().as_ref().unwrap().clone()),
 				memory: Locked::new(memory),
 				relation: Locked::new(Relation::new_init(w)),
 				fd_table: Arc::new(Locked::new(FdTable::new())),
@@ -122,6 +132,7 @@ impl Task {
 			state: Locked::new(State::Running),
 			pid,
 			uid: Uid::from_raw(0),
+			gid: Gid::from_raw(0),
 			user_ext: None,
 		});
 
@@ -131,12 +142,12 @@ impl Task {
 		task
 	}
 
-	#[inline(always)]
+	#[inline]
 	pub fn get_user_ext(&self) -> Option<&UserTaskExt> {
 		self.user_ext.as_ref()
 	}
 
-	#[inline(always)]
+	#[inline]
 	pub fn user_ext_ok_or<E>(&self, e: E) -> Result<&UserTaskExt, E> {
 		self.user_ext.as_ref().ok_or(e)
 	}
@@ -148,9 +159,11 @@ impl Task {
 		let kstack = self.kstack.clone_for_fork(frame)?;
 		let pid = Pid::allocate();
 		let uid = self.uid.clone();
+		let gid = self.gid.clone();
 
 		let user_ext = self.get_user_ext().unwrap();
 
+		let cwd = user_ext.lock_cwd().clone();
 		let memory = user_ext.lock_memory().clone()?;
 		let fd_table = user_ext.lock_fd_table().clone_for_fork();
 		let signal = user_ext.signal.clone_for_fork();
@@ -165,8 +178,10 @@ impl Task {
 				state: Locked::new(State::Running),
 				pid,
 				uid,
+				gid,
 				user_ext: Some(UserTaskExt {
 					exec_called: AtomicBool::new(false),
+					cwd: Locked::new(cwd),
 					memory: Locked::new(memory),
 					relation: Locked::new(relation),
 					fd_table: Arc::new(Locked::new(fd_table)),
@@ -196,8 +211,25 @@ impl Task {
 		self.uid.as_raw()
 	}
 
+	pub fn get_gid(&self) -> usize {
+		self.gid.as_raw()
+	}
+
 	pub fn set_uid(&self, new_uid: usize) -> Result<(), Errno> {
 		self.uid.set(new_uid)
+	}
+
+	pub fn set_gid(&self, new_gid: usize) -> Result<(), Errno> {
+		if self.get_gid() == new_gid {
+			return Ok(());
+		}
+
+		if self.get_uid() == 0 {
+			self.gid.set(new_gid);
+			return Ok(());
+		}
+
+		Err(Errno::EPERM)
 	}
 
 	pub fn get_pgid(&self) -> Pgid {
@@ -267,5 +299,9 @@ impl Task {
 
 		signal.recv_signal(info);
 		Ok(())
+	}
+
+	pub fn is_privileged(&self) -> bool {
+		self.is_kernel() || self.get_uid() == 0
 	}
 }

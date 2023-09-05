@@ -13,7 +13,7 @@ use self::console::{Console, SyncConsole};
 use super::ascii;
 
 use crate::config::CONSOLE_COUNTS;
-use crate::driver::tty::{SyncTTY, TTYFlag, TTY};
+use crate::driver::tty::{TTYFile, TTYFlag, TTY};
 use crate::driver::vga::text_vga::WINDOW_SIZE;
 use crate::input::key_event::Code;
 use crate::io::ChWrite;
@@ -25,7 +25,7 @@ pub static mut CONSOLE_MANAGER: MaybeUninit<ConsoleManager> = MaybeUninit::unini
 pub struct ConsoleManager {
 	foreground: Locked<usize>,
 	cons: Vec<SyncConsole>,
-	ttys: Vec<SyncTTY>,
+	ttys: Vec<TTYFile>,
 }
 
 impl ConsoleManager {
@@ -48,10 +48,10 @@ impl ConsoleManager {
 		}
 
 		for i in 0..CONSOLE_COUNTS {
-			ttys.push(Arc::new(Locked::new(TTY::new(
+			ttys.push(TTYFile::new(Arc::new(Locked::new(TTY::new(
 				cons[i].clone(),
 				TTYFlag::SANE,
-			))));
+			)))));
 		}
 
 		ConsoleManager {
@@ -63,7 +63,7 @@ impl ConsoleManager {
 
 	pub fn update(&self, code: Code) {
 		let foreground = self.foreground.lock();
-		let mut tty = self.ttys[*foreground].lock();
+		let mut tty = self.ttys[*foreground].lock_tty();
 		let _ = tty.write_one(code);
 	}
 
@@ -81,7 +81,7 @@ impl ConsoleManager {
 		}
 	}
 
-	pub fn get_tty(&self, id: usize) -> SyncTTY {
+	pub fn get_tty(&self, id: usize) -> TTYFile {
 		self.ttys[id].clone()
 	}
 }

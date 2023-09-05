@@ -7,7 +7,7 @@ use bitflags::bitflags;
 
 use crate::collection::LineBuffer;
 use crate::config::CONSOLE_COUNTS;
-use crate::file::{File, FileOps, OpenFlag};
+use crate::fs::vfs::{FileHandle, IOFlag};
 use crate::input::key_event::*;
 use crate::input::keyboard::KEYBOARD;
 use crate::io::{BlkRead, BlkWrite, ChRead, ChWrite, NoSpace};
@@ -16,7 +16,7 @@ use crate::process::signal::{poll_signal_queue, send_signal_to_foreground};
 use crate::process::task::State;
 use crate::scheduler::sleep::{sleep_and_yield, wake_up_foreground};
 use crate::scheduler::work::schedule_fast_work;
-use crate::sync::locked::Locked;
+use crate::sync::locked::{Locked, LockedGuard};
 use crate::syscall::errno::Errno;
 
 #[rustfmt::skip]
@@ -459,44 +459,63 @@ impl ChRead<u8> for TTY {
 impl BlkWrite for TTY {}
 impl BlkRead for TTY {}
 
-impl FileOps for Locked<TTY> {
-	fn read(&self, file: &Arc<File>, buf: &mut [u8]) -> Result<usize, Errno> {
-		let block = !file.open_flag.contains(OpenFlag::O_NONBLOCK);
-		let mut count = self.lock().read(buf);
-		while block && count == 0 {
-			unsafe { poll_signal_queue()? };
-			sleep_and_yield(State::Sleeping);
-			count += self.lock().read(buf);
-		}
-		Ok(count)
+#[derive(Clone)]
+pub struct TTYFile {
+	tty: Arc<Locked<TTY>>,
+}
+
+impl TTYFile {
+	pub fn new(tty: Arc<Locked<TTY>>) -> Self {
+		Self { tty }
 	}
 
-	fn write(&self, file: &Arc<File>, buf: &[u8]) -> Result<usize, Errno> {
-		let block = !file.open_flag.contains(OpenFlag::O_NONBLOCK);
-		let mut count = self.lock().write(buf);
-		while block && count == 0 {
-			unsafe { poll_signal_queue()? };
-			sleep_and_yield(State::Sleeping);
-			count += self.lock().write(buf);
-		}
-		Ok(count)
+	pub fn lock_tty(&self) -> LockedGuard<'_, TTY> {
+		self.tty.lock()
 	}
 }
 
-pub type SyncTTY = Arc<Locked<TTY>>;
+impl FileHandle for TTYFile {
+	fn read(&self, buf: &mut [u8], io_flags: IOFlag) -> Result<usize, Errno> {
+		let block = !io_flags.contains(IOFlag::O_NONBLOCK);
+		let mut count = self.lock_tty().read(buf);
+		while block && count == 0 {
+			unsafe { poll_signal_queue()? };
+			sleep_and_yield(State::Sleeping);
+			count += self.lock_tty().read(buf);
+		}
+		Ok(count)
+	}
 
-pub fn open(id: usize) -> Option<SyncTTY> {
+	fn write(&self, buf: &[u8], io_flags: IOFlag) -> Result<usize, Errno> {
+		let block = !io_flags.contains(IOFlag::O_NONBLOCK);
+		let mut count = self.lock_tty().write(buf);
+		while block && count == 0 {
+			unsafe { poll_signal_queue()? };
+			sleep_and_yield(State::Sleeping);
+			count += self.lock_tty().write(buf);
+		}
+		Ok(count)
+	}
+
+	fn lseek(&self, _offset: isize, _whence: crate::fs::vfs::Whence) -> Result<usize, Errno> {
+		Err(Errno::ESPIPE)
+	}
+}
+
+pub fn open(id: usize) -> Option<TTYFile> {
 	if id >= CONSOLE_COUNTS {
-		None
-	} else {
-		Some(unsafe { CONSOLE_MANAGER.assume_init_ref().get_tty(id) })
+		return None;
 	}
+
+	let tty = unsafe { CONSOLE_MANAGER.assume_init_ref().get_tty(id) };
+
+	Some(tty)
 }
 
-pub fn alloc() -> Option<SyncTTY> {
+pub fn alloc() -> Option<TTYFile> {
 	for id in 0..CONSOLE_COUNTS {
 		let tty = unsafe { CONSOLE_MANAGER.assume_init_ref().get_tty(id) };
-		let tty_lock = tty.lock();
+		let tty_lock = tty.lock_tty();
 		if let None = tty_lock.owner {
 			drop(tty_lock);
 			return Some(tty);

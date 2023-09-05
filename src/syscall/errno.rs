@@ -37,6 +37,8 @@ pub enum Errno {
 	EPIPE,
 	EDOM,
 	ERANGE,
+	ENAMETOOLONG,
+	ENOTEMPTY,
 }
 
 impl Errno {
@@ -63,7 +65,6 @@ fn desc(errno: Errno) -> &'static str {
 		ENOMEM => "Out of memory",
 		EACCES => "Permission denied",
 		EFAULT => "Bad address",
-		#[cfg(not(target_os = "haiku"))]
 		ENOTBLK => "Block device required",
 		EBUSY => "Device or resource busy",
 		EEXIST => "File exists",
@@ -84,5 +85,7 @@ fn desc(errno: Errno) -> &'static str {
 		EPIPE => "Broken pipe",
 		EDOM => "Math argument out of domain of func",
 		ERANGE => "Math result not representable",
+		ENAMETOOLONG => "Path name too long",
+		ENOTEMPTY => "Directory is not empty",
 	}
 }
