@@ -46,9 +46,9 @@ use scheduler::schedule_last;
 use scheduler::work::slow_worker;
 use test::{exit_qemu_with, TEST_ARRAY};
 
-use crate::driver::ide::dev_num::DevNum;
 use crate::driver::ide::dma::test::TEST_SECTOR_COUNT;
 use crate::driver::ide::get_ide_controller;
+use crate::driver::ide::ide_id::IdeId;
 use crate::interrupt::irq_disable;
 use crate::mm::alloc::page::get_available_pages;
 use crate::mm::constant::{MB, PAGE_SIZE, SECTOR_SIZE};
@@ -180,14 +180,14 @@ mod test_threads {
 
 	pub fn run_dma_test(_: usize) {
 		let tries = 5;
-		let dev_num = unsafe { DevNum::new_unchecked(1) };
+		let id = unsafe { IdeId::new_unchecked(1) };
 
-		let mut ide = get_ide_controller(dev_num);
+		let mut ide = get_ide_controller(id);
 		ide.ata.interrupt_pending();
 
 		for i in 0..tries {
-			// driver::ide::dma::test::write_dma_event(dev_num, i * 2);
-			driver::ide::dma::test::read_dma_event(dev_num, i * 2);
+			// driver::ide::dma::test::write_dma_event(id, i * 2);
+			driver::ide::dma::test::read_dma_event(id, i * 2);
 		}
 		drop(ide);
 

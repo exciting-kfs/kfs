@@ -1,16 +1,14 @@
-mod call_back;
-mod dma_req;
-
+pub mod call_back;
 pub mod dma_q;
+pub mod dma_req;
 pub mod event;
-
-use core::alloc::AllocError;
+pub mod wait_io;
 
 use crate::pr_debug;
 
 use self::{dma_q::get_dma_q, event::DmaInit};
 
-use super::dev_num::DevNum;
+use super::ide_id::IdeId;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum DmaOps {
@@ -18,16 +16,15 @@ pub enum DmaOps {
 	Write,
 }
 
-pub fn dma_schedule(dev_num: DevNum, event: DmaInit) -> Result<(), AllocError> {
-	let mut dma_q = get_dma_q(dev_num);
+pub fn dma_schedule(id: IdeId, event: DmaInit) {
+	let mut dma_q = get_dma_q(id);
 
 	if dma_q.is_idle() {
-		dma_q.start_with(dev_num, event);
+		dma_q.start_with(id, event);
 	} else {
-		dma_q.merge_insert(dev_num, event);
-		pr_debug!("DMA_Q[{}].len: {:?}", dev_num.channel(), dma_q.len());
+		dma_q.merge_insert(id, event);
+		pr_debug!("DMA_Q[{}].len: {:?}", id.channel(), dma_q.len());
 	}
-	Ok(())
 }
 
 pub mod test {
@@ -38,8 +35,8 @@ pub mod test {
 	use crate::{
 		driver::ide::{
 			block::{self, Block},
-			dev_num::DevNum,
 			dma::{dma_schedule, DmaInit},
+			ide_id::IdeId,
 			lba::LBA28,
 		},
 		pr_debug, printk,
@@ -49,7 +46,7 @@ pub mod test {
 
 	pub const TEST_SECTOR_COUNT: usize = 128;
 
-	pub fn write_dma_event(dev_num: DevNum, i: usize) {
+	pub fn write_dma_event(id: IdeId, i: usize) {
 		let begin = unsafe { LBA28::new_unchecked(i * TEST_SECTOR_COUNT) };
 		let end = unsafe { LBA28::new_unchecked((i + 1) * TEST_SECTOR_COUNT) };
 
@@ -73,10 +70,10 @@ pub mod test {
 		);
 
 		let dma = ReqInit::new(begin..end, cb);
-		dma_schedule(dev_num, DmaInit::Write(dma)).expect("OOM");
+		dma_schedule(id, DmaInit::Write(dma));
 	}
 
-	pub fn read_dma_event(dev_num: DevNum, i: usize) {
+	pub fn read_dma_event(id: IdeId, i: usize) {
 		let begin = unsafe { LBA28::new_unchecked(i * TEST_SECTOR_COUNT) };
 		let end = unsafe { LBA28::new_unchecked((i + 1) * TEST_SECTOR_COUNT) };
 
@@ -100,6 +97,6 @@ pub mod test {
 
 		let cb = CallBack::new(begin, Box::new(prepare), Box::new(cleanup));
 		let dma = ReqInit::new(begin..end, cb);
-		dma_schedule(dev_num, DmaInit::Read(dma)).expect("OOM");
+		dma_schedule(id, DmaInit::Read(dma));
 	}
 }

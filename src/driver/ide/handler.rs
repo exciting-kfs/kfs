@@ -11,7 +11,7 @@ use crate::{
 	scheduler::work::schedule_slow_work,
 };
 
-use super::{dev_num::DevNum, dma::dma_q::work, IDE};
+use super::{dma::dma_q::work, ide_id::IdeId, IDE};
 
 #[interrupt_handler]
 pub extern "C" fn handle_ide_ch0_impl(_frame: InterruptFrame) {
@@ -47,9 +47,9 @@ pub fn handle_ide_impl(channel: usize) {
 	} else {
 		// schedule work.
 		let num = channel * 2 + (is_secondary as usize);
-		let dev_num = unsafe { DevNum::new_unchecked(num) };
-		schedule_slow_work(work::do_next_dma, dev_num);
-		pr_debug!("ide handler: do_next_dma scheduled: {:?}", dev_num);
+		let id = unsafe { IdeId::new_unchecked(num) };
+		schedule_slow_work(work::do_next_dma, id);
+		pr_debug!("ide handler: do_next_dma scheduled: {:?}", id);
 	}
 
 	bmi.sync_data();

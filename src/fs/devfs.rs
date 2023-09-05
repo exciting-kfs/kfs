@@ -12,14 +12,14 @@ use crate::{
 use super::{
 	tmpfs::{TmpDir, TmpSb},
 	vfs::{
-		CachePolicy, DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident,
-		Permission, RawStat, SymLinkInode, VfsInode, Whence, ROOT_DIR_ENTRY,
+		CachePolicy, DirHandle, DirInode, FileHandle, FileInode, IOFlag, Ident, Permission,
+		PseudoFileSystem, RawStat, SymLinkInode, VfsInode, Whence, ROOT_DIR_ENTRY,
 	},
 };
 
 pub struct DevFs;
 
-impl FileSystem<TmpSb, DevDirInode> for DevFs {
+impl PseudoFileSystem<TmpSb, DevDirInode> for DevFs {
 	fn mount() -> Result<(Arc<TmpSb>, Arc<DevDirInode>), Errno> {
 		Ok((Arc::new(TmpSb), unsafe {
 			DEVFS_ROOT_DIR.assume_init_ref().clone()

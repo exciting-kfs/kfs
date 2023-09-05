@@ -43,8 +43,8 @@ impl LBA28 {
 		unsafe { LBA28::new_unchecked(((c * HPC + h) * SPT + (s - 1)) as usize) }
 	}
 
-	pub fn block_size_add(&self, block_size: BlockSize) -> Self {
-		*self + block_size.as_bytes() / SECTOR_SIZE
+	pub fn block_size_add(&self, block_size: BlockSize, count: usize) -> Self {
+		*self + block_size.as_bytes() * count / SECTOR_SIZE
 	}
 }
 

@@ -1,109 +1,73 @@
+pub mod entry;
+
 use core::{
-	fmt::{Display, LowerHex},
+	array,
+	fmt::LowerHex,
 	mem::MaybeUninit,
-	ops::Deref,
-	slice::Iter,
+	ops::{Deref, DerefMut},
 };
 
 use alloc::boxed::Box;
 
-use crate::{mm::constant::SECTOR_SIZE, pr_debug, sync::locked::Locked};
+use crate::{
+	mm::{constant::SECTOR_SIZE, util::next_align},
+	sync::locked::{Locked, LockedGuard},
+};
 
-use super::{dev_num::DevNum, get_ide_controller, lba::LBA28};
+use self::entry::{EntryIndex, MaybeEntry};
 
-#[repr(C)]
+use super::{
+	get_ide_controller,
+	ide_id::{IdeId, NR_IDE_DEV},
+	lba::LBA28,
+};
+
+pub const NR_PRIMARY: usize = 4;
+
+// TODO logical partition?
 #[derive(Debug)]
-pub struct PartitionEntry {
-	attribute: u8,
-	begin_h: u8,
-	begin_s: u8,
-	begin_c: u8,
-	pub partition_type: PartitionType,
-	last_h: u8,
-	last_s: u8,
-	last_c: u8,
-	begin_lba: u32,
-	sector_count: u32,
-}
-
-impl PartitionEntry {
-	pub fn begin(&self) -> Option<LBA28> {
-		if self.partition_type != PartitionType::Empty {
-			Some(unsafe { LBA28::new_unchecked(self.begin_lba as usize) })
-		} else {
-			None
-		}
-	}
-
-	pub fn end(&self) -> Option<LBA28> {
-		if self.partition_type != PartitionType::Empty {
-			let (c, h, s) = (self.last_c, self.last_h, self.last_s);
-			Some(LBA28::from_chs(c, h, s) + 1)
-		} else {
-			None
-		}
-	}
-}
-
-#[derive(Debug)]
-pub struct PartitionTable([PartitionEntry; 4]);
+struct PartitionTable([Locked<MaybeEntry>; NR_PRIMARY]);
 
 impl PartitionTable {
-	pub fn iter(&self) -> Iter<'_, PartitionEntry> {
-		self.0.iter()
+	const fn empty() -> Self {
+		Self([
+			Locked::new(MaybeEntry::empty()),
+			Locked::new(MaybeEntry::empty()),
+			Locked::new(MaybeEntry::empty()),
+			Locked::new(MaybeEntry::empty()),
+		])
+	}
+
+	fn new(entries: [MaybeEntry; 4]) -> Self {
+		Self(array::from_fn(|i| Locked::new(entries[i].clone())))
 	}
 }
 
 impl Deref for PartitionTable {
-	type Target = [PartitionEntry; 4];
+	type Target = [Locked<MaybeEntry>; 4];
 	fn deref(&self) -> &Self::Target {
 		&self.0
 	}
 }
 
-impl Display for PartitionTable {
-	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-		for (i, e) in self.0.iter().enumerate() {
-			if e.partition_type == PartitionType::Empty {
-				continue;
-			}
-			write!(f, "Entry[{i}]:\n")?;
-			write!(f, "\tattr: {:x},", e.attribute)?;
-			write!(f, "\ttype: {:x}\n", e.partition_type)?;
-			write!(
-				f,
-				"\tbegin CHS: ({:x}, {:x}, {:x})\n",
-				e.begin_c, e.begin_h, e.begin_s
-			)?;
-			write!(
-				f,
-				"\tlast  CHS: ({:x}, {:x}, {:x})\n",
-				e.last_c, e.last_h, e.last_s
-			)?;
-			write!(f, "\tbegin LBA: {:x}\n", e.begin_lba)?;
-			write!(
-				f,
-				"\tlast  LBA: {:x}\n",
-				LBA28::from_chs(e.last_c, e.last_h, e.last_s)
-			)?;
-			write!(f, "\tsector count: {:x}\n", e.sector_count)?;
-		}
-		Ok(())
+impl DerefMut for PartitionTable {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		&mut self.0
 	}
 }
 
-pub static PART_TABLE: [Locked<Option<Box<PartitionTable>>>; 4] = [
-	Locked::new(None),
-	Locked::new(None),
-	Locked::new(None),
-	Locked::new(None),
+static mut PART_TABLE: [PartitionTable; NR_PRIMARY] = [
+	PartitionTable::empty(),
+	PartitionTable::empty(),
+	PartitionTable::empty(),
+	PartitionTable::empty(),
 ];
 
 const BOOT_SECTOR_MAGIC: u16 = 0xaa55;
 const BOOT_SECTOR_OFFSET: usize = 0x1fe / 2;
-const PARTITION_TABLE_OFFSET: usize = 0x1be / 2;
+const PART_TABLE_OFFSET: usize = 0x1be / 2;
 
-fn read_partition_table(dev: DevNum) -> Option<Box<PartitionTable>> {
+fn read_partition_table(dev: IdeId) -> Option<[MaybeEntry; 4]> {
 	let ide = get_ide_controller(dev);
 
 	let mut sector = Box::new_uninit_slice(1);
@@ -116,35 +80,34 @@ fn read_partition_table(dev: DevNum) -> Option<Box<PartitionTable>> {
 		return None;
 	}
 
-	let mut part_table: Box<MaybeUninit<PartitionTable>> = Box::new_uninit();
+	let mut part_table: MaybeUninit<[MaybeEntry; 4]> = MaybeUninit::uninit();
 	unsafe {
 		part_table
 			.as_mut_ptr()
 			.cast::<u16>()
-			.copy_from_nonoverlapping(&sector[0][PARTITION_TABLE_OFFSET], 32)
+			.copy_from_nonoverlapping(&sector[0][PART_TABLE_OFFSET], 32)
 	};
 
 	Some(unsafe { part_table.assume_init() })
 }
 
-pub fn init(devices: [Option<DevNum>; 4]) {
-	for (dev, entry) in devices.into_iter().zip(PART_TABLE.iter()) {
+pub fn init(devices: [Option<IdeId>; NR_IDE_DEV]) {
+	for dev in devices {
 		if let Some(dev) = dev {
-			*entry.lock() = read_partition_table(dev);
+			if let Some(entries) = read_partition_table(dev) {
+				unsafe { PART_TABLE[dev.index()] = PartitionTable::new(entries) }
+			}
 		}
 	}
 }
 
 pub fn byte_to_sector_count(byte: usize) -> usize {
-	(byte - 1) / SECTOR_SIZE + 1
+	next_align(byte, SECTOR_SIZE) / SECTOR_SIZE
 }
 
-fn print_partition_table() {
-	for (i, tab) in PART_TABLE.iter().enumerate() {
-		if let Some(t) = &*tab.lock() {
-			pr_debug!("{}:\n{}", i, t);
-		}
-	}
+// TODO hda1 => a: minor, 1: entry index
+pub fn get_partition_entry<'a>(id: IdeId, ei: EntryIndex) -> LockedGuard<'a, MaybeEntry> {
+	unsafe { PART_TABLE[id.index()][ei.index()].lock() }
 }
 
 /// From fdisk & [Partition Type](https://en.wikipedia.org/wiki/Partition_type)

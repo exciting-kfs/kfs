@@ -20,13 +20,22 @@ pub struct Block<T: ?Sized = ()> {
 	_p: PhantomData<T>,
 }
 
+#[derive(Clone, Copy)]
 pub struct BlockSize {
 	kb: usize,
 }
 
 impl BlockSize {
-	const MAX_KB: usize = 64;
-	pub fn from_bytes(bytes: usize) -> Option<BlockSize> {
+	pub const MAX_KB: usize = 64;
+	pub const MAX_BYTE: usize = 64 * KB;
+	pub const BLOCK_SIZE_MAX: BlockSize = unsafe { BlockSize::new_unchecked(Self::MAX_BYTE) };
+
+	pub const unsafe fn new_unchecked(bytes: usize) -> BlockSize {
+		let kb = next_align(bytes, KB) / KB;
+		BlockSize { kb }
+	}
+
+	pub const fn from_bytes(bytes: usize) -> Option<BlockSize> {
 		let kb = next_align(bytes, KB) / KB;
 		if 1 <= kb && kb <= Self::MAX_KB {
 			Some(BlockSize { kb })
@@ -35,12 +44,16 @@ impl BlockSize {
 		}
 	}
 
-	pub fn from_sector_count(count: usize) -> Option<BlockSize> {
+	pub const fn from_sector_count(count: usize) -> Option<BlockSize> {
 		Self::from_bytes(count * SECTOR_SIZE)
 	}
 
 	pub fn as_bytes(&self) -> usize {
 		self.kb * KB
+	}
+
+	pub fn sector_count(&self) -> usize {
+		self.as_bytes() / SECTOR_SIZE
 	}
 
 	fn layout(&self) -> Layout {

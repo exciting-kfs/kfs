@@ -6,8 +6,7 @@ use core::{
 use alloc::collections::LinkedList;
 
 use crate::{
-	driver::ide::{dev_num::DevNum, IdeController},
-	pr_debug,
+	driver::ide::{ide_id::IdeId, IdeController},
 	scheduler::work::schedule_slow_work,
 	sync::locked::{Locked, LockedGuard},
 };
@@ -17,7 +16,7 @@ use super::{dma_req::ReqInit, event::DmaRun, DmaInit};
 static DMA_Q: [Locked<DmaQ>; 2] = [Locked::new(DmaQ::new(0)), Locked::new(DmaQ::new(1))];
 
 pub struct DmaQ {
-	prev: DevNum,
+	prev: IdeId,
 	scheduled: Option<DmaRun>,
 	queue: [LinkedList<DmaInit>; 2],
 }
@@ -25,7 +24,7 @@ pub struct DmaQ {
 impl DmaQ {
 	pub const fn new(channel: usize) -> Self {
 		Self {
-			prev: unsafe { DevNum::new_unchecked(channel * 2) },
+			prev: unsafe { IdeId::new_unchecked(channel * 2) },
 			scheduled: None,
 			queue: [LinkedList::new(), LinkedList::new()],
 		}
@@ -74,14 +73,14 @@ impl DmaQ {
 		ret
 	}
 
-	pub fn start_with(&mut self, dev: DevNum, event: DmaInit) {
+	pub fn start_with(&mut self, dev: IdeId, event: DmaInit) {
 		self.prev = dev.pair();
 		self.queue[dev.index_in_channel()].push_front(event);
 		schedule_slow_work(work::do_next_dma, dev);
-		pr_debug!("dma_schedule: start_dma scheduled");
+		// pr_debug!("dma_schedule: start_dma scheduled");
 	}
 
-	pub fn merge_insert(&mut self, dev: DevNum, event: DmaInit) {
+	pub fn merge_insert(&mut self, dev: IdeId, event: DmaInit) {
 		let index = dev.index_in_channel();
 		let queue = &mut self.queue[index];
 
@@ -118,33 +117,32 @@ impl DmaQ {
 /// # Caution
 ///
 /// - lock order: ide - dma_q
-pub fn get_dma_q<'a>(dev_num: DevNum) -> LockedGuard<'a, DmaQ> {
-	DMA_Q[dev_num.channel()].lock()
+pub fn get_dma_q<'a>(id: IdeId) -> LockedGuard<'a, DmaQ> {
+	DMA_Q[id.channel()].lock()
 }
 
 pub mod work {
 	use crate::{
 		driver::ide::{
-			dev_num::DevNum, dma::dma_q::get_dma_q, get_ide_controller, try_get_ide_controller,
+			dma::dma_q::get_dma_q, get_ide_controller, ide_id::IdeId, try_get_ide_controller,
 		},
-		printk,
 		scheduler::work::Error,
 	};
 
 	const LOCK_TRY: usize = 3;
 
-	pub fn retry_dma(dev_num: &mut DevNum) -> Result<(), Error> {
-		let ide = get_ide_controller(*dev_num);
-		let mut dma_q = get_dma_q(*dev_num);
+	pub fn retry_dma(id: &mut IdeId) -> Result<(), Error> {
+		let ide = get_ide_controller(*id);
+		let mut dma_q = get_dma_q(*id);
 
 		dma_q.retry(ide);
 		Ok(())
 	}
 
-	pub fn do_next_dma(dev_num: &mut DevNum) -> Result<(), Error> {
-		printk!(".");
-		let ide = try_get_ide_controller(*dev_num, LOCK_TRY).map_err(|_| Error::Yield)?;
-		let mut dma_q = get_dma_q(*dev_num);
+	pub fn do_next_dma(id: &mut IdeId) -> Result<(), Error> {
+		// printk!(".");
+		let ide = try_get_ide_controller(*id, LOCK_TRY).map_err(|_| Error::Yield)?;
+		let mut dma_q = get_dma_q(*id);
 
 		dma_q.do_next(ide).map_err(|_| Error::AllocError)
 	}
