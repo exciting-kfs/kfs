@@ -13,13 +13,6 @@ use crate::{
 	util::bitrange::{BitData, BitRange},
 };
 
-pub struct AtaController {
-	command: Port,
-	control: Port,
-	is_2nd_dev: bool,
-	intr_pending: bool,
-}
-
 #[repr(align(512))]
 pub struct RawSector([u16; 256]);
 
@@ -34,6 +27,13 @@ impl Deref for RawSector {
 	fn deref(&self) -> &Self::Target {
 		&self.0
 	}
+}
+
+pub struct AtaController {
+	command: Port,
+	control: Port,
+	is_2nd_dev: bool,
+	intr_pending: bool,
 }
 
 impl AtaController {
@@ -75,31 +75,19 @@ impl AtaController {
 		self.is_2nd_dev = dev_num.index_in_channel() == 1;
 	}
 
-	pub fn interrupt_pending(&self) -> bool {
-		self.intr_pending
-	}
-
 	pub fn interrupt_resolve(&mut self) {
 		self.intr_pending = false;
 	}
 
-	pub fn write_dma(&mut self, lba: LBA28, sector_count: u16) {
-		self.do_command(Command::WriteDMA, lba, sector_count);
+	// TODO for test
+	pub fn interrupt_pending(&mut self) {
 		self.intr_pending = true;
 	}
 
-	pub fn read_dma(&mut self, lba: LBA28, sector_count: u16) {
-		self.do_command(Command::ReadDMA, lba, sector_count);
+	pub fn do_dma(&mut self, command: Command, lba: LBA28, sector_count: u16) {
+		debug_assert!(command == Command::ReadDma || command == Command::WriteDma);
+		self.do_command(command, lba, sector_count);
 		self.intr_pending = true;
-	}
-
-	// HI0 ~ HI4
-	pub fn do_command(&self, command: Command, lba: LBA28, sector_count: u16) {
-		self.device_select();
-
-		self.write_lba28(lba);
-		self.write_sector_count(sector_count);
-		self.write_command(command);
 	}
 
 	pub fn output(&self) -> AtaOutput {
@@ -182,6 +170,15 @@ impl AtaController {
 	#[inline]
 	fn is_drdy(status: u8) -> bool {
 		status & Self::SIG_DRDY > 0
+	}
+
+	// HI0 ~ HI4
+	fn do_command(&self, command: Command, lba: LBA28, sector_count: u16) {
+		self.device_select();
+
+		self.write_lba28(lba);
+		self.write_sector_count(sector_count);
+		self.write_command(command);
 	}
 
 	fn wait<F: Fn(u8) -> bool>(&self, condition: F) {
@@ -276,16 +273,27 @@ impl AtaOutput {
 			+ AtaController::LBA_LOW_RANGE.fit(self.lba_low as usize)) as u32
 	}
 
+	#[inline]
 	pub fn is_error(&self) -> bool {
 		self.status & 0x1 == 0x1
+	}
+
+	#[inline]
+	pub fn is_primary(&self) -> bool {
+		self.device & (1 << 4) != (1 << 4)
+	}
+
+	#[inline]
+	pub fn is_secondary(&self) -> bool {
+		!self.is_primary()
 	}
 }
 
 impl Display for AtaOutput {
 	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-		let dev = match self.device & (1 << 4) == (1 << 4) {
-			true => "secondary",
-			false => "primary",
+		let dev = match self.is_primary() {
+			true => "primary",
+			false => "secondary",
 		};
 
 		write!(f, "[ATA OUTPUT]\n")?;
@@ -302,8 +310,8 @@ impl Display for AtaOutput {
 #[derive(PartialEq, Eq, Debug)]
 #[repr(u8)]
 pub enum Command {
-	ReadDMA = 0xc8,
-	WriteDMA = 0xca,
+	ReadDma = 0xc8,
+	WriteDma = 0xca,
 	ReadSectors = 0x20,
 	IdentifyDevice = 0xec,
 	ExcuteDeviceDiagnostic = 0x90,

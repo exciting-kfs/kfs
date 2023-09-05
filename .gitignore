@@ -2,6 +2,7 @@
 /target
 /userspace/build
 rescue.iso
+hello.txt
 
 # mac os finder cache
 .DS_Store

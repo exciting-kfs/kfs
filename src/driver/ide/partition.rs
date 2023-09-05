@@ -101,7 +101,7 @@ fn read_partition_table(dev: DevNum) -> Option<Box<PartitionTable>> {
 	let ide = get_ide_controller(dev);
 
 	let mut sector = Box::new_uninit_slice(1);
-	ide.read_sectors(LBA28::new(0), &mut sector);
+	ide.ata.read_sectors(LBA28::new(0), &mut sector);
 
 	let sector = unsafe { sector.assume_init() };
 

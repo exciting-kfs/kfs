@@ -1,4 +1,4 @@
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[repr(transparent)]
 pub struct DevNum(usize);
 
@@ -26,6 +26,11 @@ impl DevNum {
 	#[inline]
 	pub fn is_primary(&self) -> bool {
 		self.0 % 2 == 0
+	}
+
+	#[inline]
+	pub fn is_secondary(&self) -> bool {
+		self.0 % 2 == 1
 	}
 
 	pub fn pair(&self) -> DevNum {

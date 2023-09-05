@@ -8,30 +8,36 @@ mod prd;
 
 pub mod block;
 pub mod dev_num;
+pub mod dma;
+pub mod handler;
 pub mod lba;
 pub mod partition;
 
 use core::{array, mem::MaybeUninit, ptr::NonNull};
 
-use kfs_macro::interrupt_handler;
-
 use crate::{
-	driver::{apic::local::LOCAL_APIC, bus::pci::header::HeaderType0, ide::bmide::BMIDE},
-	interrupt::InterruptFrame,
+	driver::ide::bmide::BMIDE,
 	mm::{
 		alloc::{page::alloc_pages, virt::io_allocate, Zone},
 		constant::PAGE_SIZE,
 		util::virt_to_phys,
 	},
-	pr_debug, pr_warn,
-	sync::locked::{Locked, LockedGuard},
+	pr_debug,
+	scheduler::context::yield_now,
+	sync::{
+		locked::{Locked, LockedGuard},
+		TryLockFail,
+	},
 };
 
 use self::{dev_num::DevNum, prd::PRD};
 
-use super::bus::{
-	ata::AtaController,
-	pci::{self, find_device, ClassCode},
+use super::{
+	apic::io::{set_irq_mask, IDE_PRIMARY_IRQ, IDE_SECONDARY_IRQ},
+	bus::{
+		ata::AtaController,
+		pci::{self, ClassCode},
+	},
 };
 
 const IDE_CLASS_CODE: ClassCode = ClassCode {
@@ -39,31 +45,41 @@ const IDE_CLASS_CODE: ClassCode = ClassCode {
 	sub_class: 0x01,
 };
 
-static ATA_IDE: [Locked<AtaController>; 2] = [
-	Locked::new(AtaController::new(0x1f0, 0x3f6)), // CH: P
-	Locked::new(AtaController::new(0x170, 0x376)), // CH: S
+pub /* TODO for test*/ static IDE: [Locked<IdeController>; 2] = [
+	Locked::new(IdeController::new(AtaController::new(0x1f0, 0x3f6))), // CH: P
+	Locked::new(IdeController::new(AtaController::new(0x170, 0x376))), // CH: S
 ];
 
+pub struct IdeController {
+	pub ata: AtaController,
+	pub bmi: MaybeUninit<BMIDE>,
+}
+
+impl IdeController {
+	const fn new(ata: AtaController) -> Self {
+		Self {
+			ata,
+			bmi: MaybeUninit::uninit(),
+		}
+	}
+}
+
 pub fn init() -> Result<(), pci::Error> {
-	// PCI CONFIGURATION SPACE
-	let bdf = find_device(IDE_CLASS_CODE)?;
-	let h0 = HeaderType0::get(&bdf)?;
-	bdf.set_busmaster(true);
+	let bmide = BMIDE::for_each_channel()?;
 
-	// BUS MASTER IDE
-	let bmide_port = match h0.bar4 & 0x1 == 0x1 {
-		true => h0.bar4 & 0xffff_fffc,
-		false => h0.bar4 & 0xffff_fff0,
-	};
-	BMIDE::init(bmide_port as u16);
+	IDE.iter().zip(bmide).for_each(|(ide, bmi)| unsafe {
+		let in_ide = &mut ide.lock().bmi;
+		in_ide.write(bmi);
+		in_ide.assume_init_mut().load_prd_table();
+	});
 
-	// PARTITION TABLE
+	// PART TABLE
 	let existed = array::from_fn(|i| {
 		let dev = DevNum::new(i);
 		let ide = get_ide_controller(dev);
-		let output = ide.self_diagnosis();
+		let output = ide.ata.self_diagnosis();
 
-		ide.set_interrupt(false);
+		ide.ata.set_interrupt(false);
 		(output.error == 0x01).then_some(dev)
 	});
 	partition::init(existed);
@@ -77,67 +93,60 @@ pub fn init() -> Result<(), pci::Error> {
 pub fn enable_interrupt() {
 	for i in 0..4 {
 		let ide = get_ide_controller(DevNum::new(i));
-		ide.set_interrupt(true);
+		ide.ata.set_interrupt(true);
 	}
+
+	set_irq_mask(IDE_PRIMARY_IRQ, false).expect("ide irq");
+	set_irq_mask(IDE_SECONDARY_IRQ, false).expect("ide irq");
 }
 
-pub fn get_ide_controller(dev_num: DevNum) -> LockedGuard<'static, AtaController> {
+pub fn get_ide_controller(dev_num: DevNum) -> LockedGuard<'static, IdeController> {
 	debug_assert!(dev_num.index() < 4, "invalid ide controller");
 	let channel = dev_num.channel();
 
-	let mut ide = ATA_IDE[channel].lock();
+	let mut ide = IDE[channel].lock();
 
-	while ide.interrupt_pending() {
+	while !ide.ata.is_idle() {
 		drop(ide);
-		ide = ATA_IDE[channel].lock();
+		yield_now();
+		ide = IDE[channel].lock();
 	}
-	ide.set_device(dev_num);
+
+	ide.ata.set_device(dev_num);
 
 	ide
 }
 
-pub fn get_busmaster_ide(dev_num: DevNum) -> LockedGuard<'static, MaybeUninit<BMIDE>> {
+pub fn try_get_ide_controller(
+	dev_num: DevNum,
+	try_count: usize,
+) -> Result<LockedGuard<'static, IdeController>, TryLockFail> {
 	debug_assert!(dev_num.index() < 4, "invalid ide controller");
+	let channel = dev_num.channel();
 
-	BMIDE[dev_num.channel()].lock()
-}
+	let mut ide = IDE[channel].lock();
+	let mut count = 0;
 
-#[interrupt_handler]
-pub extern "C" fn handle_ide_impl(_frame: InterruptFrame) {
-	const CHANNEL: usize = 0;
-
-	pr_warn!("ide");
-	let lock = BMIDE[CHANNEL].lock();
-	let bmi = unsafe { lock.assume_init_ref() };
-
-	let mut ide = ATA_IDE[CHANNEL].lock();
-	let output = ide.output();
-
-	if bmi.is_error() || output.is_error() {
-		let bdf = find_device(IDE_CLASS_CODE).unwrap();
-		let h0 = HeaderType0::get(&bdf).unwrap();
-
-		pr_debug!("{}", ide.output());
-		pr_debug!("{}", bmi);
-
-		pr_debug!("pci: conf: status: {:x?}", h0.common.status);
-		pr_debug!("pci: conf: command: {:x?}", h0.common.command);
-
-		panic!("IDE ERROR"); // TODO is it fine?
+	while count < try_count {
+		if ide.ata.is_idle() {
+			ide.ata.set_device(dev_num);
+			return Ok(ide);
+		}
+		drop(ide);
+		yield_now();
+		ide = IDE[channel].lock();
+		count += 1;
 	}
 
-	bmi.sync_data();
-	bmi.clear();
-	bmi.stop();
-
-	ide.interrupt_resolve();
-
-	LOCAL_APIC.end_of_interrupt();
+	Err(TryLockFail)
 }
 
 pub mod test {
 
-	use crate::driver::ide::lba::LBA28;
+	use crate::driver::{
+		bus::ata::Command,
+		ide::{dma::DmaOps, lba::LBA28},
+	};
 
 	const DEV_NUM: usize = 1;
 
@@ -175,10 +184,10 @@ pub mod test {
 
 	pub fn test_write_dma() {
 		let page = alloc_pages(0, Zone::High).expect("OOM");
-		let mut lock = BMIDE[0].lock();
-		let bmi = unsafe { lock.assume_init_mut() };
+		let mut ide = get_ide_controller(DevNum::new(1));
+		let bmi = unsafe { ide.bmi.assume_init_mut() };
 		set_prd_table(bmi, page);
-		bmi.set_dma_write();
+		bmi.set_dma(DmaOps::Write);
 
 		pr_debug!("{}", bmi);
 
@@ -191,11 +200,11 @@ pub mod test {
 			.for_each(|(i, c)| buf[i] = *c);
 
 		// ATA - DO DMA: WRITE DMA
-		let mut ide = get_ide_controller(DevNum::new(1));
-		ide.write_dma(LBA28::new(0), 1);
+		ide.ata.do_dma(Command::WriteDma, LBA28::new(0), 1);
 
-		pr_debug!("{}", ide.output());
+		pr_debug!("{}", ide.ata.output());
 
+		let bmi = unsafe { ide.bmi.assume_init_mut() };
 		bmi.start();
 
 		pr_debug!("{}", bmi);
@@ -203,23 +212,23 @@ pub mod test {
 
 	pub fn test_read_dma() {
 		let page = alloc_pages(0, Zone::High).expect("OOM");
-		let mut lock = BMIDE[0].lock();
-		let bmi = unsafe { lock.assume_init_mut() };
+		let mut ide = get_ide_controller(DevNum::new(1));
+		let bmi = unsafe { ide.bmi.assume_init_mut() };
 
 		set_prd_table(bmi, page);
-		bmi.set_dma_read();
+		bmi.set_dma(DmaOps::Read);
 
 		pr_debug!("{}", bmi);
 
 		clear_paper(page);
 
 		// ATA - DO DMA: READ DMA
-		let mut ide = get_ide_controller(DevNum::new(1));
-		pr_debug!("test_read_dma: {}", ide.output());
+		pr_debug!("test_read_dma: {}", ide.ata.output());
 
-		ide.read_dma(LBA28::new(0), 1);
-		pr_debug!("{}", ide.output());
+		ide.ata.do_dma(Command::ReadDma, LBA28::new(0), 1);
+		pr_debug!("{}", ide.ata.output());
 
+		let bmi = unsafe { ide.bmi.assume_init_mut() };
 		bmi.start();
 
 		pr_debug!("{}", bmi);

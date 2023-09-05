@@ -46,14 +46,17 @@ pub fn init() -> Result<(), IOAPICError> {
 	let mut keyboard_redir = apic.read_redir(KEYBOARD_IRQ)?;
 	let mut serial_com1 = apic.read_redir(SERIAL_COM1_IRQ)?;
 	let mut ide_primary = apic.read_redir(IDE_PRIMARY_IRQ)?;
+	let mut ide_secondary = apic.read_redir(IDE_SECONDARY_IRQ)?;
 
 	keyboard_redir.set_default(0x21);
 	serial_com1.set_default(0x23);
-	ide_primary.set_default(0x24);
+	ide_primary.set_default(0x24).set_mask(true);
+	ide_secondary.set_default(0x25).set_mask(true);
 
 	apic.write_redir(KEYBOARD_IRQ, keyboard_redir)?;
 	apic.write_redir(SERIAL_COM1_IRQ, serial_com1)?;
 	apic.write_redir(IDE_PRIMARY_IRQ, ide_primary)?;
+	apic.write_redir(IDE_SECONDARY_IRQ, ide_secondary)?;
 
 	disable_8259_pic();
 

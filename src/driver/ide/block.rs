@@ -32,7 +32,7 @@ impl Size {
 			Self::KB(kb) => (*kb) * KB,
 		};
 
-		debug_assert!(size <= 64 * KB);
+		debug_assert!(size <= 64 * KB, "{}", size);
 
 		unsafe { Layout::from_size_align_unchecked(size, SECTOR_SIZE) }
 	}

@@ -1,10 +1,14 @@
-use core::{fmt::Display, mem::MaybeUninit, ptr::addr_of};
+use core::{fmt::Display, ptr::addr_of};
 
-use crate::{io::pmio::Port, mm::util::virt_to_phys, sync::locked::Locked};
+use alloc::vec::Vec;
 
-use super::prd::PRD;
+use crate::{
+	driver::bus::pci::{self, find_device, header::HeaderType0},
+	io::pmio::Port,
+	mm::util::virt_to_phys,
+};
 
-pub static BMIDE: [Locked<MaybeUninit<BMIDE>>; 2] = [Locked::uninit(), Locked::uninit()]; // channel
+use super::{block::Block, dma::DmaOps, prd::PRD, IDE_CLASS_CODE};
 
 /// BUS MASTER IDE
 pub struct BMIDE {
@@ -22,20 +26,22 @@ impl BMIDE {
 	const STATUS: u16 = 0x2;
 	const PRDTR: u16 = 0x4;
 
-	pub fn init(port: u16) {
-		let mut bmide0 = BMIDE[0].lock();
-		let mut bmide1 = BMIDE[1].lock();
+	pub fn for_each_channel() -> Result<[BMIDE; 2], pci::Error> {
+		// PCI CONFIGURATION SPACE
+		let bdf = find_device(IDE_CLASS_CODE)?;
+		let h0 = HeaderType0::get(&bdf)?;
+		bdf.set_busmaster(true);
 
-		bmide0.write(BMIDE::new(port, false));
-		bmide1.write(BMIDE::new(port + 0x08, true));
+		// BUS MASTER IDE
+		let port = match h0.bar4 & 0x1 == 0x1 {
+			true => h0.bar4 & 0xffff_fffc,
+			false => h0.bar4 & 0xffff_fff0,
+		} as u16;
 
-		unsafe {
-			bmide0.assume_init_ref().load_prd_table();
-			bmide1.assume_init_ref().load_prd_table();
-		}
+		Ok([BMIDE::new(port, false), BMIDE::new(port + 0x08, true)])
 	}
 
-	pub const fn new(base: u16, is_2nd_channel: bool) -> Self {
+	const fn new(base: u16, is_2nd_channel: bool) -> Self {
 		Self {
 			base: Port::new(base),
 			is_2nd_channel,
@@ -47,11 +53,21 @@ impl BMIDE {
 		&mut self.prd_table
 	}
 
-	fn write_status(&self, data: u8) {
+	pub fn set_prd_table(&mut self, blocks: &Vec<Block>) {
+		let prdt = &mut self.prd_table;
+
+		// set BMIDE
+		for (i, block) in blocks.iter().enumerate() {
+			prdt[i] = PRD::new(block.as_phys_addr(), block.size() as u16);
+		}
+		prdt[blocks.len() - 1].set_eot(true);
+	}
+
+	fn write_status(&mut self, data: u8) {
 		self.base.add(Self::STATUS).write_byte(data);
 	}
 
-	fn write_command(&self, data: u8) {
+	fn write_command(&mut self, data: u8) {
 		self.base.add(Self::COMMAND).write_byte(data);
 	}
 
@@ -63,18 +79,18 @@ impl BMIDE {
 		self.base.add(Self::STATUS).read_byte()
 	}
 
-	#[inline(always)]
+	#[inline]
 	fn dma_init_status(&self) -> u8 {
 		Self::STATUS_CLEAR | (1 << 5) << self.is_2nd_channel as u8
 	}
 
-	pub fn set_dma_read(&self) {
-		self.write_command(1 << 3);
-		self.write_status(self.dma_init_status());
-	}
+	pub fn set_dma(&mut self, ops: DmaOps) {
+		let command = match ops {
+			DmaOps::Read => 1 << 3,
+			DmaOps::Write => 0,
+		};
 
-	pub fn set_dma_write(&self) {
-		self.write_command(0);
+		self.write_command(command);
 		self.write_status(self.dma_init_status());
 	}
 
@@ -82,15 +98,15 @@ impl BMIDE {
 		self.read_status();
 	}
 
-	pub fn clear(&self) {
+	pub fn clear(&mut self) {
 		self.write_status(Self::STATUS_CLEAR);
 	}
 
-	pub fn start(&self) {
+	pub fn start(&mut self) {
 		self.write_command(self.read_command() | 0x01);
 	}
 
-	pub fn stop(&self) {
+	pub fn stop(&mut self) {
 		self.write_command(self.read_command() & 0xfe);
 	}
 
@@ -98,7 +114,7 @@ impl BMIDE {
 		(self.read_status() & Self::ERROR_BIT) == Self::ERROR_BIT
 	}
 
-	pub fn load_prd_table(&self) {
+	pub fn load_prd_table(&mut self) {
 		let paddr = virt_to_phys(addr_of!(self.prd_table) as usize);
 		self.base.add(Self::PRDTR).write_u32(paddr as u32);
 	}
