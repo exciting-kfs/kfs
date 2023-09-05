@@ -1,5 +1,7 @@
 pub mod dma_q;
 pub mod event;
+pub mod read;
+pub mod write;
 
 use core::alloc::AllocError;
 
@@ -43,7 +45,7 @@ pub mod test {
 		pr_debug, printk,
 	};
 
-	use super::{event::CallBack, *};
+	use super::{event::CallBack, read::ReadDma, write::WriteDma};
 
 	pub const TEST_SECTOR_COUNT: usize = 128;
 
@@ -71,8 +73,8 @@ pub mod test {
 			}),
 		);
 
-		let dma = Event::new(DmaOps::Write, begin, end, cb);
-		dma_schedule(dev_num, dma).expect("OOM");
+		let dma = WriteDma::new(begin, end, cb);
+		dma_schedule(dev_num, Event::Write(dma)).expect("OOM");
 	}
 
 	pub fn read_dma_event(dev_num: DevNum, i: usize) {
@@ -103,7 +105,7 @@ pub mod test {
 			}),
 		);
 
-		let dma = Event::new(DmaOps::Read, begin, end, cb);
-		dma_schedule(dev_num, dma).expect("OOM");
+		let dma = ReadDma::new(begin, end, cb);
+		dma_schedule(dev_num, Event::Read(dma)).expect("OOM");
 	}
 }

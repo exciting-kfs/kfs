@@ -4,12 +4,11 @@ use alloc::{boxed::Box, collections::BTreeMap, vec::Vec};
 
 use crate::{
 	driver::ide::{block::Block, lba::LBA28, IdeController},
-	mm::constant::{KB, SECTOR_SIZE},
 	pr_debug,
 	sync::locked::LockedGuard,
 };
 
-use super::DmaOps;
+use super::{read::ReadDma, write::WriteDma, DmaOps};
 
 #[derive(Default)]
 pub struct CallBack {
@@ -25,7 +24,7 @@ impl CallBack {
 		}
 	}
 
-	fn merge(&mut self, cb: Self) {
+	pub fn merge(&mut self, cb: Self) {
 		let Self {
 			mut prologue,
 			mut epilogue,
@@ -35,29 +34,16 @@ impl CallBack {
 	}
 }
 
-pub struct Event {
-	pub(super) kind: DmaOps,
-	pub(super) begin: LBA28,
-	pub(super) end: LBA28,
-	own: Vec<Block>,
-	cb: CallBack,
+pub enum Event {
+	Read(ReadDma),
+	Write(WriteDma),
 }
 
 impl Event {
 	pub const MAX_KB: usize = 128;
 
-	pub fn new(kind: DmaOps, begin: LBA28, end: LBA28, cb: CallBack) -> Self {
-		Self {
-			kind,
-			begin,
-			end,
-			own: Vec::new(),
-			cb,
-		}
-	}
-
 	pub fn prepare(&mut self) -> Result<Vec<Block>, AllocError> {
-		let callbacks = take(&mut self.cb.prologue);
+		let callbacks = take(&mut self.callback().prologue);
 		let results = callbacks.into_iter().map(|(_, cb)| cb());
 		let mut blocks = Vec::new();
 
@@ -67,19 +53,9 @@ impl Event {
 		Ok(blocks)
 	}
 
-	pub fn cleanup(self) {
-		let Self {
-			kind: _,
-			begin: _,
-			end: _,
-			own,
-			cb,
-		} = self;
-
-		let CallBack {
-			prologue: _,
-			epilogue,
-		} = cb;
+	pub fn cleanup(mut self) {
+		let own = take(self.own());
+		let epilogue = take(&mut self.callback().epilogue);
 
 		epilogue
 			.into_iter()
@@ -90,51 +66,62 @@ impl Event {
 	pub fn perform(&mut self, mut ide: LockedGuard<'_, IdeController>, blocks: Vec<Block>) {
 		pr_debug!("+++++ perform called +++++");
 
+		let ops = match self {
+			Event::Read(_) => DmaOps::Read,
+			Event::Write(_) => DmaOps::Write,
+		};
+
 		// (write)cache writeback for blocks
 		let bmi = unsafe { ide.bmi.assume_init_mut() };
 		bmi.set_prd_table(&blocks);
-		bmi.set_dma(self.kind);
+		bmi.set_dma(ops);
 
-		self.own = blocks;
+		*self.own() = blocks;
 
 		let ata = &mut ide.ata;
-		ata.do_dma(self.kind, self.begin, self.count() as u16);
+		ata.do_dma(ops, self.begin(), self.count() as u16);
 
 		unsafe { ide.bmi.assume_init_mut().start() };
 	}
 
 	pub fn retry(&mut self, ide: LockedGuard<'_, IdeController>) {
-		let blocks = take(&mut self.own);
+		let blocks = take(self.own());
 		self.perform(ide, blocks);
 	}
 
-	fn count(&self) -> usize {
-		self.end - self.begin
-	}
-
-	pub fn kilo_bytes(&self) -> usize {
-		self.count() * SECTOR_SIZE / KB
-	}
-
 	pub fn merge(&mut self, event: Self) {
-		debug_assert!(self.kind == event.kind); // ?
-
-		let Self {
-			kind: _,
-			begin,
-			end,
-			own: _,
-			cb,
-		} = event;
-
-		self.cb.merge(cb);
-
-		if self.begin > begin {
-			self.begin = begin
+		match (self, event) {
+			(&mut Event::Read(ref mut r1), Event::Read(r2)) => r1.merge(r2),
+			(&mut Event::Write(ref mut r1), Event::Write(r2)) => r1.merge(r2),
+			_ => {}
 		}
+	}
 
-		if self.end < end {
-			self.end = end
+	fn callback(&mut self) -> &mut CallBack {
+		match self {
+			Event::Read(r) => &mut r.cb,
+			Event::Write(w) => &mut w.cb,
+		}
+	}
+
+	fn own(&mut self) -> &mut Vec<Block> {
+		match self {
+			Event::Read(r) => &mut r.own,
+			Event::Write(w) => &mut w.own,
+		}
+	}
+
+	fn begin(&self) -> LBA28 {
+		match self {
+			Event::Read(r) => r.begin,
+			Event::Write(w) => w.begin,
+		}
+	}
+
+	pub fn count(&self) -> usize {
+		match self {
+			Event::Read(r) => r.count(),
+			Event::Write(w) => w.count(),
 		}
 	}
 }

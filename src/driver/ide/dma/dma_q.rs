@@ -8,7 +8,7 @@ use crate::{
 	sync::locked::{Locked, LockedGuard},
 };
 
-use super::{DmaOps, Event};
+use super::Event;
 
 static DMA_Q: [Locked<DmaQ>; 2] = [Locked::new(DmaQ::new()), Locked::new(DmaQ::new())];
 
@@ -76,12 +76,12 @@ impl DmaQ {
 		let index = dev.index_in_channel();
 		let queue = &mut self.queue[index];
 
-		let merge_condition = |in_q: &&mut Event| match (in_q.kind, event.kind) {
-			(DmaOps::Write, DmaOps::Write) => {
+		let merge_condition = |in_q: &&mut Event| match (in_q, &event) {
+			(Event::Write(in_q), Event::Write(event)) => {
 				(in_q.kilo_bytes() + event.kilo_bytes() <= Event::MAX_KB)
 					&& (in_q.begin == event.end || in_q.end == event.begin)
 			}
-			(DmaOps::Read, DmaOps::Read) => {
+			(Event::Read(in_q), Event::Read(event)) => {
 				(in_q.kilo_bytes() + event.kilo_bytes() <= Event::MAX_KB)
 					&& (in_q.begin == event.end || in_q.end == event.begin)
 			}
