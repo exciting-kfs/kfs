@@ -1,127 +1,123 @@
-use core::{alloc::AllocError, mem::take};
+use core::alloc::AllocError;
 
-use alloc::{boxed::Box, collections::BTreeMap, vec::Vec};
+use crate::{driver::ide::IdeController, pr_debug, sync::locked::LockedGuard};
 
-use crate::{
-	driver::ide::{block::Block, lba::LBA28, IdeController},
-	pr_debug,
-	sync::locked::LockedGuard,
+use super::{
+	dma_req::{ReqInit, ReqReady},
+	DmaOps,
 };
 
-use super::{read::ReadDma, write::WriteDma, DmaOps};
-
-#[derive(Default)]
-pub struct CallBack {
-	pub prologue: BTreeMap<LBA28, Box<dyn FnOnce() -> Result<Block, AllocError>>>,
-	pub epilogue: BTreeMap<LBA28, Box<dyn FnOnce(Block) -> ()>>,
+pub enum DmaInit {
+	Read(ReqInit),
+	Write(ReqInit),
 }
 
-impl CallBack {
-	pub fn new() -> Self {
-		Self {
-			prologue: BTreeMap::new(),
-			epilogue: BTreeMap::new(),
-		}
-	}
-
-	pub fn merge(&mut self, cb: Self) {
-		let Self {
-			mut prologue,
-			mut epilogue,
-		} = cb;
-		self.prologue.append(&mut prologue);
-		self.epilogue.append(&mut epilogue);
-	}
-}
-
-pub enum Event {
-	Read(ReadDma),
-	Write(WriteDma),
-}
-
-impl Event {
+impl DmaInit {
 	pub const MAX_KB: usize = 128;
 
-	pub fn prepare(&mut self) -> Result<Vec<Block>, AllocError> {
-		let callbacks = take(&mut self.callback().prologue);
-		let results = callbacks.into_iter().map(|(_, cb)| cb());
-		let mut blocks = Vec::new();
+	pub fn prepare(self) -> Result<DmaReady, AllocError> {
+		let (ops, inner) = self.divide();
+		let ReqInit { range, cb } = inner;
 
-		for b in results {
-			blocks.push(b?);
+		match cb.prepare() {
+			Ok((blocks, cleanup)) => {
+				let req = ReqReady {
+					range,
+					blocks,
+					cleanup,
+				};
+				Ok(match ops {
+					DmaOps::Read => DmaReady::Read(req),
+					DmaOps::Write => DmaReady::Write(req),
+				})
+			}
+			Err(mut cleanup) => {
+				cleanup.iter_mut().for_each(|cb| cb(Err(AllocError)));
+				Err(AllocError)
+			}
 		}
-		Ok(blocks)
 	}
 
-	pub fn cleanup(mut self) {
-		let own = take(self.own());
-		let epilogue = take(&mut self.callback().epilogue);
-
-		epilogue
-			.into_iter()
-			.zip(own)
-			.for_each(|((_, cb), block)| cb(block));
+	pub(super) fn inner(&mut self) -> &mut ReqInit {
+		match self {
+			DmaInit::Read(req) => req,
+			DmaInit::Write(req) => req,
+		}
 	}
 
-	pub fn perform(&mut self, mut ide: LockedGuard<'_, IdeController>, blocks: Vec<Block>) {
+	pub(super) fn divide(self) -> (DmaOps, ReqInit) {
+		match self {
+			DmaInit::Read(req) => (DmaOps::Read, req),
+			DmaInit::Write(req) => (DmaOps::Write, req),
+		}
+	}
+}
+
+pub enum DmaReady {
+	Read(ReqReady),
+	Write(ReqReady),
+}
+
+impl DmaReady {
+	pub fn perform(self, mut ide: LockedGuard<'_, IdeController>) -> DmaRun {
 		pr_debug!("+++++ perform called +++++");
-
-		let ops = match self {
-			Event::Read(_) => DmaOps::Read,
-			Event::Write(_) => DmaOps::Write,
-		};
+		let (ops, inner) = self.divide();
 
 		// (write)cache writeback for blocks
 		let bmi = unsafe { ide.bmi.assume_init_mut() };
-		bmi.set_prd_table(&blocks);
+		bmi.set_prd_table(&inner.blocks);
 		bmi.set_dma(ops);
 
-		*self.own() = blocks;
-
 		let ata = &mut ide.ata;
-		ata.do_dma(ops, self.begin(), self.count() as u16);
+		ata.do_dma(ops, inner.range.start, inner.count() as u16);
 
 		unsafe { ide.bmi.assume_init_mut().start() };
-	}
 
-	pub fn retry(&mut self, ide: LockedGuard<'_, IdeController>) {
-		let blocks = take(self.own());
-		self.perform(ide, blocks);
-	}
-
-	pub fn merge(&mut self, event: Self) {
-		match (self, event) {
-			(&mut Event::Read(ref mut r1), Event::Read(r2)) => r1.merge(r2),
-			(&mut Event::Write(ref mut r1), Event::Write(r2)) => r1.merge(r2),
-			_ => {}
+		match ops {
+			DmaOps::Read => DmaRun::Read(inner),
+			DmaOps::Write => DmaRun::Write(inner),
 		}
 	}
 
-	fn callback(&mut self) -> &mut CallBack {
+	fn divide(self) -> (DmaOps, ReqReady) {
 		match self {
-			Event::Read(r) => &mut r.cb,
-			Event::Write(w) => &mut w.cb,
+			DmaReady::Read(req) => (DmaOps::Read, req),
+			DmaReady::Write(req) => (DmaOps::Write, req),
+		}
+	}
+}
+
+pub enum DmaRun {
+	Read(ReqReady),
+	Write(ReqReady),
+}
+
+impl DmaRun {
+	pub fn cleanup(self) {
+		let inner = self.inner();
+
+		let ReqReady {
+			range: _,
+			blocks: own,
+			cleanup,
+		} = inner;
+
+		own.into_iter()
+			.zip(cleanup)
+			.for_each(|(block, mut cb)| cb(Ok(block)))
+	}
+
+	pub fn ready(self) -> DmaReady {
+		match self {
+			DmaRun::Read(req) => DmaReady::Read(req),
+			DmaRun::Write(req) => DmaReady::Write(req),
 		}
 	}
 
-	fn own(&mut self) -> &mut Vec<Block> {
+	fn inner(self) -> ReqReady {
 		match self {
-			Event::Read(r) => &mut r.own,
-			Event::Write(w) => &mut w.own,
-		}
-	}
-
-	fn begin(&self) -> LBA28 {
-		match self {
-			Event::Read(r) => r.begin,
-			Event::Write(w) => w.begin,
-		}
-	}
-
-	pub fn count(&self) -> usize {
-		match self {
-			Event::Read(r) => r.count(),
-			Event::Write(w) => w.count(),
+			DmaRun::Read(req) => req,
+			DmaRun::Write(req) => req,
 		}
 	}
 }

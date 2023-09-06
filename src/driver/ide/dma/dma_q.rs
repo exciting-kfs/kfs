@@ -1,4 +1,7 @@
-use core::alloc::AllocError;
+use core::{
+	alloc::AllocError,
+	mem::{replace, take},
+};
 
 use alloc::collections::LinkedList;
 
@@ -9,14 +12,14 @@ use crate::{
 	sync::locked::{Locked, LockedGuard},
 };
 
-use super::Event;
+use super::{dma_req::ReqInit, event::DmaRun, DmaInit};
 
 static DMA_Q: [Locked<DmaQ>; 2] = [Locked::new(DmaQ::new(0)), Locked::new(DmaQ::new(1))];
 
 pub struct DmaQ {
 	prev: DevNum,
-	scheduled: Option<Event>,
-	queue: [LinkedList<Event>; 2],
+	scheduled: Option<DmaRun>,
+	queue: [LinkedList<DmaInit>; 2],
 }
 
 impl DmaQ {
@@ -29,33 +32,36 @@ impl DmaQ {
 	}
 
 	pub fn is_idle(&self) -> bool {
-		self.scheduled.is_none()
+		!(self.scheduled.is_some() || self.queue[0].len() > 0 || self.queue[1].len() > 0)
 	}
 
-	pub fn schedule_next(&mut self) {
-		pr_debug!("schedule next: len {:?}", self.len());
-		let next = self.pop_front();
-		let prev = core::mem::replace(&mut self.scheduled, next);
+	pub fn do_next(&mut self, ide: LockedGuard<'_, IdeController>) -> Result<(), AllocError> {
+		let running = match self.pop_front() {
+			Some(next) => {
+				let ready = next.prepare()?;
+				let running = ready.perform(ide);
+				Some(running)
+			}
+			None => None,
+		};
+
+		let prev = replace(&mut self.scheduled, running);
 
 		if let Some(ev) = prev {
 			ev.cleanup();
 		}
-	}
 
-	pub fn retry_scheduled(&mut self, ide: LockedGuard<'_, IdeController>) {
-		let ev = self
-			.scheduled
-			.as_mut()
-			.expect("already scheduled dma event");
-		ev.retry(ide);
-	}
-
-	pub fn do_scheduled(&mut self, ide: LockedGuard<'_, IdeController>) -> Result<(), AllocError> {
-		if let Some(ev) = self.scheduled.as_mut() {
-			let blocks = ev.prepare()?;
-			ev.perform(ide, blocks);
-		}
 		Ok(())
+	}
+
+	pub fn retry(&mut self, ide: LockedGuard<'_, IdeController>) {
+		let ev = take(&mut self.scheduled);
+
+		if let Some(running) = ev {
+			let ready = running.ready();
+			let running = ready.perform(ide);
+			self.scheduled = Some(running)
+		}
 	}
 
 	// for debug
@@ -68,38 +74,32 @@ impl DmaQ {
 		ret
 	}
 
-	pub fn start_with(&mut self, dev: DevNum, event: Event) {
+	pub fn start_with(&mut self, dev: DevNum, event: DmaInit) {
 		self.prev = dev.pair();
 		self.queue[dev.index_in_channel()].push_front(event);
-		self.schedule_next();
-		schedule_slow_work(work::start_dma, dev);
+		schedule_slow_work(work::do_next_dma, dev);
 		pr_debug!("dma_schedule: start_dma scheduled");
 	}
 
-	pub fn merge_insert(&mut self, dev: DevNum, event: Event) {
+	pub fn merge_insert(&mut self, dev: DevNum, event: DmaInit) {
 		let index = dev.index_in_channel();
 		let queue = &mut self.queue[index];
 
-		let merge_condition = |in_q: &&mut Event| match (in_q, &event) {
-			(Event::Write(in_q), Event::Write(event)) => {
-				(in_q.kilo_bytes() + event.kilo_bytes() <= Event::MAX_KB)
-					&& (in_q.begin == event.end || in_q.end == event.begin)
-			}
-			(Event::Read(in_q), Event::Read(event)) => {
-				(in_q.kilo_bytes() + event.kilo_bytes() <= Event::MAX_KB)
-					&& (in_q.begin == event.end || in_q.end == event.begin)
-			}
+		let merge_condition = |in_q: &&mut DmaInit| match (in_q, &event) {
+			(DmaInit::Write(in_q), DmaInit::Write(req)) => ReqInit::can_merge(in_q, &req),
+			(DmaInit::Read(in_q), DmaInit::Read(req)) => ReqInit::can_merge(in_q, &req),
 			_ => false,
 		};
 
 		if let Some(e) = queue.iter_mut().find(|e| merge_condition(e)) {
-			e.merge(event);
+			let (_, req) = event.divide();
+			e.inner().merge(req)
 		} else {
 			queue.push_back(event);
 		}
 	}
 
-	fn pop_front(&mut self) -> Option<Event> {
+	fn pop_front(&mut self) -> Option<DmaInit> {
 		let pair = self.prev.pair();
 		let pair_i = pair.index_in_channel();
 		let prev_i = self.prev.index_in_channel();
@@ -127,34 +127,25 @@ pub mod work {
 		driver::ide::{
 			dev_num::DevNum, dma::dma_q::get_dma_q, get_ide_controller, try_get_ide_controller,
 		},
-		pr_warn, printk,
+		printk,
 		scheduler::work::Error,
 	};
 
 	const LOCK_TRY: usize = 3;
 
-	pub fn start_dma(dev_num: &mut DevNum) -> Result<(), Error> {
-		printk!(".");
-		let ide = try_get_ide_controller(*dev_num, LOCK_TRY).map_err(|_| Error::Yield)?;
-		let mut dma_q = get_dma_q(*dev_num);
-
-		dma_q.do_scheduled(ide).map_err(|_| Error::AllocError)
-	}
-
 	pub fn retry_dma(dev_num: &mut DevNum) -> Result<(), Error> {
 		let ide = get_ide_controller(*dev_num);
 		let mut dma_q = get_dma_q(*dev_num);
 
-		dma_q.retry_scheduled(ide);
+		dma_q.retry(ide);
 		Ok(())
 	}
 
 	pub fn do_next_dma(dev_num: &mut DevNum) -> Result<(), Error> {
-		pr_warn!("do next dma work: {:?}", dev_num);
+		printk!(".");
 		let ide = try_get_ide_controller(*dev_num, LOCK_TRY).map_err(|_| Error::Yield)?;
 		let mut dma_q = get_dma_q(*dev_num);
 
-		dma_q.schedule_next();
-		dma_q.do_scheduled(ide).map_err(|_| Error::AllocError)
+		dma_q.do_next(ide).map_err(|_| Error::AllocError)
 	}
 }
