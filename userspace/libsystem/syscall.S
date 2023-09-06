@@ -35,7 +35,7 @@ SYSCALL _exit,          1,              1
 SYSCALL fork,           2,              0
 SYSCALL read,           3,              3
 SYSCALL write,          4,              3
-SYSCALL open,           5,              0 ; FIXME
+SYSCALL open,           5,              3
 SYSCALL close,          6,              1
 SYSCALL waitpid,        7,              3
 SYSCALL creat,          8,              2
@@ -69,4 +69,3 @@ SYSCALL getgid,         200,            0
 SYSCALL chown,          212,            3
 SYSCALL setuid,         213,            1
 SYSCALL setgid,         214,            1
-SYSCALL open2,          999,            3

@@ -79,7 +79,6 @@ int main(void) {
 	close(0);
 	close(1);
 	close(2);
-	open();
 	print_id("after setsid");
 	next_test();
 

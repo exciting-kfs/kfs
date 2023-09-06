@@ -90,7 +90,7 @@ void builtin_ls(int idx) {
 		buf[0] = '.';
 		buf[1] = '\0';
 	}
-	int fd = open2(buf, O_DIRECTORY | O_RDONLY | O_CLOEXEC, 0777);
+	int fd = open(buf, O_DIRECTORY | O_RDONLY | O_CLOEXEC, 0777);
 	if (fd < 0) {
 		show_error("ls: open", fd);
 		return;
@@ -123,7 +123,7 @@ void builtin_cat(int idx) {
 	char buf[4096];
 
 	idx = extract(idx, buf);
-	int fd = open2(buf, O_RDONLY);
+	int fd = open(buf, O_RDONLY);
 	if (fd < 0) {
 		show_error("cat: open", fd);
 		return;
@@ -146,7 +146,7 @@ void builtin_touch(int idx) {
 	char buf[4096];
 
 	idx = extract(idx, buf);
-	int fd = open2(buf, O_CREAT | O_EXCL, 0777);
+	int fd = open(buf, O_CREAT | O_EXCL, 0777);
 	if (fd < 0) {
 		show_error("touch: open", fd);
 		return;
@@ -168,7 +168,7 @@ void builtin_write(int idx) {
 	char buf[4096];
 
 	idx = extract(idx, buf);
-	int fd = open2(buf, O_WRONLY);
+	int fd = open(buf, O_WRONLY);
 	if (fd < 0) {
 		show_error("write: open", fd);
 		return;

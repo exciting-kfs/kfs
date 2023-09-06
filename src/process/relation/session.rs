@@ -1,7 +1,7 @@
 use alloc::sync::Weak;
 use alloc::{collections::BTreeMap, sync::Arc};
 
-use crate::driver::tty::TTYFile;
+use crate::driver::terminal::TTYFile;
 use crate::pr_debug;
 use crate::process::relation::{Pgid, Pid, Sid};
 use crate::sync::locked::Locked;

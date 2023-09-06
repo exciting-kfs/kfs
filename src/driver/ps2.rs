@@ -3,16 +3,16 @@ pub mod keyboard;
 
 use kfs_macro::interrupt_handler;
 
-use crate::config::CONSOLE_COUNTS;
 use crate::driver::apic::local::LOCAL_APIC;
-use crate::driver::console::{console_screen_draw, CONSOLE_MANAGER};
 use crate::driver::ide::IDE;
 use crate::driver::ps2::keyboard::{get_raw_scancode, into_key_event};
+use crate::driver::terminal::{console_screen_draw, get_foreground_tty, set_foreground_tty};
 use crate::input::{
 	self,
 	key_event::{Code, KeyKind},
 };
 use crate::interrupt::InterruptFrame;
+use crate::io::ChWrite;
 use crate::pr_err;
 use crate::scheduler::work::schedule_fast_work;
 use crate::{acpi::IAPC_BOOT_ARCH, io::pmio::Port};
@@ -113,20 +113,18 @@ pub extern "C" fn handle_keyboard_impl(_frame: InterruptFrame) {
 		}
 		input::keyboard::change_state(ev);
 
-		unsafe {
-			if ev.pressed() {
-				let cm = CONSOLE_MANAGER.assume_init_ref();
-				cm.update(ev.key);
+		if ev.pressed() {
+			let tty = get_foreground_tty();
 
-				if let KeyKind::Function(v) = ev.identify() {
-					let idx = v.index() as usize;
+			if let KeyKind::Function(v) = ev.identify() {
+				let idx = v.index() as usize;
 
-					if idx < CONSOLE_COUNTS {
-						cm.set_foreground(idx);
-					}
-				}
+				set_foreground_tty(idx);
+			} else {
+				let _ = tty.lock_tty().write_one(ev.key);
 			}
 		}
+
 		schedule_fast_work(console_screen_draw, ());
 		// wakeup_fast_woker();
 	});

@@ -40,7 +40,7 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::{arch::asm, panic::PanicInfo};
-use driver::tty;
+use driver::terminal::get_foreground_tty;
 use fs::vfs::{AccessFlag, IOFlag, VfsFileHandle, VfsHandle};
 use interrupt::kthread_init;
 use process::task::Task;
@@ -92,11 +92,11 @@ fn run_test() -> ! {
 }
 
 fn open_default_fd(task: &mut Arc<Task>) {
-	let tty = tty::open(0).unwrap();
+	let tty = get_foreground_tty();
 	let ext = task.get_user_ext().expect("user task");
 	let sess = &ext.lock_relation().get_session();
 
-	tty.lock_tty().connect(Arc::downgrade(sess));
+	let _ = tty.lock_tty().connect(sess);
 	sess.lock().set_ctty(tty.clone());
 
 	let mut fd_table = ext.lock_fd_table();
@@ -167,7 +167,7 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	mm::alloc::phys::init();
 	mm::alloc::virt::init();
 
-	driver::console::console_manager::init();
+	driver::terminal::init();
 	driver::bus::pci::enumerate();
 
 	acpi::init();

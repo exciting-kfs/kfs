@@ -2,6 +2,7 @@ pub mod path;
 pub mod syscall;
 pub mod vfs;
 
+mod devfs;
 mod tmpfs;
 
 use crate::fs::vfs::FileSystem;

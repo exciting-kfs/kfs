@@ -15,8 +15,7 @@
 #define O_NONBLOCK (04000)
 #define O_SYNC (010000)
 
-int open();
-int open2(const char *path, int flags, ...);
+int open(const char *path, int flags, ...);
 int creat(const char *path, int mode);
 
 #endif // _FCNTL_H
