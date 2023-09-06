@@ -12,12 +12,11 @@ use tmpfs::TmpFs;
 use self::vfs::{VfsDirEntry, ROOT_DIR_ENTRY};
 
 pub fn init() -> Result<(), Errno> {
-	let tmpfs = TmpFs;
-	let inode = tmpfs.mount()?;
-	let name = Rc::new(Vec::new());
+	let (sb, inode) = TmpFs::mount()?;
 
+	let name = Rc::new(Vec::new());
 	let _ = ROOT_DIR_ENTRY.lock().insert(Arc::new_cyclic(|w| {
-		VfsDirEntry::new(name, inode, w.clone())
+		VfsDirEntry::new(name, inode, w.clone(), sb, true)
 	}));
 
 	Ok(())

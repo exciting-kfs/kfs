@@ -10,8 +10,8 @@ use alloc::{
 use crate::{process::task::Task, sync::locked::Locked, syscall::errno::Errno};
 
 use super::{
-	AccessFlag, DirInode, FileInode, IOFlag, Permission, RawStat, VfsDirHandle, VfsFileHandle,
-	VfsHandle, VfsInode,
+	AccessFlag, DirInode, FileInode, IOFlag, Permission, RawStat, SuperBlock, VfsDirHandle,
+	VfsFileHandle, VfsHandle, VfsInode, ROOT_DIR_ENTRY,
 };
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -133,14 +133,21 @@ pub struct VfsFileEntry {
 	name: Rc<Vec<u8>>,
 	inode: Arc<dyn FileInode>,
 	parent: Weak<VfsDirEntry>,
+	super_block: Arc<dyn SuperBlock>,
 }
 
 impl VfsFileEntry {
-	pub fn new(name: Rc<Vec<u8>>, inode: Arc<dyn FileInode>, parent: Weak<VfsDirEntry>) -> Self {
+	pub fn new(
+		name: Rc<Vec<u8>>,
+		inode: Arc<dyn FileInode>,
+		parent: Weak<VfsDirEntry>,
+		super_block: Arc<dyn SuperBlock>,
+	) -> Self {
 		Self {
 			name,
 			inode,
 			parent,
+			super_block,
 		}
 	}
 
@@ -211,20 +218,28 @@ pub struct VfsDirEntry {
 	name: Rc<Vec<u8>>,
 	inode: Arc<dyn DirInode>,
 	parent: Weak<VfsDirEntry>,
-	sub_mount: Locked<BTreeMap<Ident, Arc<VfsDirEntry>>>,
 	sub_tree: Locked<BTreeMap<Ident, VfsEntry>>,
 	next_mount: Option<Arc<VfsDirEntry>>,
+	super_block: Arc<dyn SuperBlock>,
+	is_mount_point: bool,
 }
 
 impl VfsDirEntry {
-	pub fn new(name: Rc<Vec<u8>>, inode: Arc<dyn DirInode>, parent: Weak<VfsDirEntry>) -> Self {
+	pub fn new(
+		name: Rc<Vec<u8>>,
+		inode: Arc<dyn DirInode>,
+		parent: Weak<VfsDirEntry>,
+		super_block: Arc<dyn SuperBlock>,
+		is_mount_point: bool,
+	) -> Self {
 		Self {
 			name,
 			inode,
 			parent,
-			sub_mount: Locked::default(),
 			sub_tree: Locked::default(),
+			super_block,
 			next_mount: None,
+			is_mount_point,
 		}
 	}
 
@@ -294,6 +309,7 @@ impl VfsDirEntry {
 			Rc::new(name.to_vec()),
 			file_inode,
 			Arc::downgrade(self),
+			Arc::clone(&self.super_block),
 		));
 
 		let _ = self.insert_child(VfsEntry::File(file_entry.clone()));
@@ -315,6 +331,8 @@ impl VfsDirEntry {
 			Rc::new(name.to_vec()),
 			dir_inode,
 			Arc::downgrade(self),
+			Arc::clone(&self.super_block),
+			false,
 		));
 
 		let _ = self.insert_child(VfsEntry::Dir(dir_entry.clone()));
@@ -346,12 +364,7 @@ impl VfsDirEntry {
 		self.inode
 			.access(task.get_uid(), task.get_gid(), Permission::ANY_EXECUTE)?;
 
-		// lookup mount point first
-		if let Some(x) = self.sub_mount.lock().get(name) {
-			return Ok(VfsEntry::Dir(x.clone()));
-		}
-
-		// then cached dir entry
+		// lookup cached entry
 		if let Some(x) = self.sub_tree.lock().get(name) {
 			return Ok(x.clone());
 		}
@@ -362,17 +375,108 @@ impl VfsDirEntry {
 				Rc::new(name.to_vec()),
 				inode,
 				Arc::downgrade(self),
+				Arc::clone(&self.super_block),
+				false,
 			))),
 			VfsInode::File(inode) => VfsEntry::File(Arc::new(VfsFileEntry::new(
 				Rc::new(name.to_vec()),
 				inode,
 				Arc::downgrade(self),
+				Arc::clone(&self.super_block),
 			))),
 		})?;
 
 		self.sub_tree.lock().insert(node.get_name(), node.clone());
 
 		Ok(node)
+	}
+
+	pub fn is_mount_point(&self) -> bool {
+		self.is_mount_point
+	}
+
+	fn do_absolute_root_mount(mut self) {
+		let new_dentry = Arc::new_cyclic(|parent| {
+			self.parent = parent.clone();
+
+			self
+		});
+
+		ROOT_DIR_ENTRY.lock().replace(new_dentry);
+	}
+
+	fn do_sub_mount(mut self, parent: Arc<Self>) {
+		let new_dentry = Arc::new({
+			self.parent = Arc::downgrade(&parent);
+
+			self
+		});
+
+		let mut sub_tree = parent.sub_tree.lock();
+		sub_tree.remove::<[u8]>(new_dentry.get_name().borrow());
+		sub_tree.insert(new_dentry.get_name(), VfsEntry::Dir(new_dentry.clone()));
+	}
+
+	pub fn mount(
+		self: &Arc<Self>,
+		inode: Arc<dyn DirInode>,
+		super_block: Arc<dyn SuperBlock>,
+		task: &Arc<Task>,
+	) -> Result<(), Errno> {
+		if !task.is_privileged() {
+			return Err(Errno::EPERM);
+		}
+
+		let parent = self.parent_dir(task)?;
+		let new_dentry = VfsDirEntry {
+			name: Rc::clone(&self.name),
+			inode,
+			parent: Weak::default(),
+			sub_tree: Locked::default(),
+			next_mount: Some(self.clone()),
+			super_block,
+			is_mount_point: true,
+		};
+
+		match Arc::ptr_eq(self, &parent) {
+			true => new_dentry.do_absolute_root_mount(),
+			false => new_dentry.do_sub_mount(parent),
+		};
+
+		Ok(())
+	}
+
+	fn do_absolute_root_unmount(successor: Arc<Self>) {
+		ROOT_DIR_ENTRY.lock().replace(successor);
+	}
+
+	fn do_sub_unmount(successor: Arc<Self>, parent: Arc<Self>) {
+		let mut sub_tree = parent.sub_tree.lock();
+		sub_tree.remove::<[u8]>(successor.get_name().borrow());
+		sub_tree.insert(successor.get_name(), VfsEntry::Dir(successor.clone()));
+	}
+
+	pub fn unmount(self: Arc<Self>, task: &Arc<Task>) -> Result<(), Errno> {
+		if !task.is_privileged() {
+			return Err(Errno::EPERM);
+		}
+
+		if !self.is_mount_point() {
+			return Err(Errno::EINVAL);
+		}
+
+		let parent = self.parent_dir(task)?;
+		let successor = self
+			.next_mount
+			.clone()
+			.expect("mount point must have successor");
+
+		match Arc::ptr_eq(&self, &parent) {
+			true => Self::do_absolute_root_unmount(successor),
+			false => Self::do_sub_unmount(successor, parent),
+		};
+
+		Ok(())
 	}
 
 	fn remove_child(&self, name: &[u8]) -> Result<(), Errno> {

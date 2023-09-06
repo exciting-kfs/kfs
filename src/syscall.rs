@@ -95,6 +95,8 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 		18 => sys_stat(frame.ebx, frame.ecx),
 		19 => sys_lseek(frame.ebx as isize, frame.ecx as isize, frame.edx as isize),
 		20 => sys_getpid(),
+		21 => sys_mount(frame.ebx, frame.ecx),
+		22 => sys_umount(frame.ebx),
 		37 => sys_kill(frame.ebx as isize, frame.ecx as isize),
 		39 => sys_mkdir(frame.ebx, frame.ecx as u32),
 		40 => sys_rmdir(frame.ebx),

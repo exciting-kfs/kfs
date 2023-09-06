@@ -7,7 +7,7 @@ use crate::mm::user::vma::{AreaFlag, UserAddressSpace};
 use crate::process::task::Task;
 use crate::syscall::errno::Errno;
 
-fn query_max_readable_len(start: usize, vma: &UserAddressSpace) -> usize {
+fn query_max_readable_len(start: usize, vma: &UserAddressSpace, limit: usize) -> usize {
 	let mut curr = start;
 
 	while let Some(area) = vma.find_area(curr) {
@@ -15,8 +15,8 @@ fn query_max_readable_len(start: usize, vma: &UserAddressSpace) -> usize {
 			break;
 		}
 
-		if PATH_MAX <= area.end - start {
-			return PATH_MAX;
+		if limit <= area.end - start {
+			return limit;
 		}
 
 		curr = area.end;
@@ -25,17 +25,13 @@ fn query_max_readable_len(start: usize, vma: &UserAddressSpace) -> usize {
 	curr - start
 }
 
-fn user_strlen(path: usize, vma: &UserAddressSpace) -> Result<usize, Errno> {
-	let max_len = query_max_readable_len(path, vma);
+fn user_strlen(path: usize, vma: &UserAddressSpace, limit: usize) -> Result<usize, Errno> {
+	let max_len = query_max_readable_len(path, vma, limit);
 
 	let length = (0..max_len)
 		.map(|i| (path + i) as *const u8)
 		.position(|x| unsafe { *x } == 0)
 		.ok_or(Errno::EFAULT)?;
-
-	if length == 0 {
-		return Err(Errno::EINVAL);
-	}
 
 	Ok(length)
 }
@@ -48,9 +44,26 @@ pub fn verify_path(path: usize, task: &Arc<Task>) -> Result<&'_ [u8], Errno> {
 
 	let vma = memory.get_vma();
 
-	let length = user_strlen(path, vma)?;
+	let length = user_strlen(path, vma, PATH_MAX)?;
+
+	if length == 0 {
+		return Err(Errno::EINVAL);
+	}
 
 	Ok(unsafe { from_raw_parts(path as *const u8, length) })
+}
+
+pub fn verify_string(string: usize, task: &Arc<Task>, limit: usize) -> Result<&'_ [u8], Errno> {
+	let memory = task
+		.get_user_ext()
+		.expect("must be user process")
+		.lock_memory();
+
+	let vma = memory.get_vma();
+
+	let length = user_strlen(string, vma, limit)?;
+
+	Ok(unsafe { from_raw_parts(string as *const u8, length) })
 }
 
 fn verify_region(
