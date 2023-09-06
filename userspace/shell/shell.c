@@ -5,6 +5,7 @@
 #include "kfs/ft.h"
 #include "kfs/internal/prelude.h"
 #include "kfs/kernel.h"
+#include "sys/mount.h"
 
 char line_buf[8192] = {42};
 
@@ -284,6 +285,32 @@ void builtin_chown(int idx) {
 	}
 }
 
+void builtin_mount(int idx) {
+	char buf1[2048];
+	char buf2[2048];
+
+	idx = extract(idx, buf1);
+	idx = ignore_ws(idx);
+
+	idx = extract(idx, buf2);
+	idx = ignore_ws(idx);
+
+	int ret = mount(buf1, buf2);
+	if (ret < 0) {
+		show_error("mount: mount", ret);
+	}
+}
+
+void builtin_umount(int idx) {
+	char buf[4096];
+
+	idx = extract(idx, buf);
+	int ret = umount(buf);
+	if (ret != 0) {
+		show_error("umount: umount", ret);
+	}
+}
+
 int main(void) {
 	for (;;) {
 		ft_putstr("sh==> ");
@@ -311,6 +338,10 @@ int main(void) {
 			builtin_chmod(ignore_ws(5));
 		} else if (STREQ("chown", line_buf, line_len)) {
 			builtin_chown(ignore_ws(5));
+		} else if (STREQ("mount", line_buf, line_len)) {
+			builtin_mount(ignore_ws(5));
+		} else if (STREQ("umount", line_buf, line_len)) {
+			builtin_umount(ignore_ws(6));
 		} else {
 			extract(0, line_buf);
 			ft_putstr("sh: ");

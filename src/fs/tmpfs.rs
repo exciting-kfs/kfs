@@ -6,8 +6,8 @@ use alloc::vec::Vec;
 use alloc::{boxed::Box, collections::BTreeMap};
 
 use super::vfs::{
-	DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident, RawStat, VfsInode,
-	Whence,
+	DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident, RawStat, SuperBlock,
+	VfsInode, Whence,
 };
 use crate::fs::vfs::{KfsDirent, Permission};
 use crate::mm::util::next_align;
@@ -17,14 +17,19 @@ use crate::syscall::errno::Errno;
 
 pub struct TmpFs;
 
-impl FileSystem for TmpFs {
-	fn mount(&self) -> Result<Arc<dyn DirInode>, Errno> {
-		Ok(TmpDirInode::new(
-			Permission::from_bits_truncate(0o755),
-			0,
-			0,
+impl FileSystem<TmpSb, Locked<TmpDirInode>> for TmpFs {
+	fn mount() -> Result<(Arc<TmpSb>, Arc<Locked<TmpDirInode>>), Errno> {
+		Ok((
+			Arc::new(TmpSb),
+			TmpDirInode::new(Permission::from_bits_truncate(0o755), 0, 0),
 		))
 	}
+}
+
+pub struct TmpSb;
+
+impl SuperBlock for TmpSb {
+	fn sync(&self) {}
 }
 
 #[derive(Clone)]

@@ -46,6 +46,8 @@ SYSCALL chmod,          15,             2
 SYSCALL stat,           18,             2
 SYSCALL lseek,          19,             3
 SYSCALL getpid,         20,             0
+SYSCALL mount,          21,             2 ; FIXME
+SYSCALL umount,         22,             1
 SYSCALL kill,           37,             2
 SYSCALL mkdir,          39,             2
 SYSCALL rmdir,          40,             1
