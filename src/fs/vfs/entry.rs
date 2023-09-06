@@ -466,10 +466,7 @@ impl VfsDirEntry {
 		}
 
 		let parent = self.parent_dir(task)?;
-		let successor = self
-			.next_mount
-			.clone()
-			.expect("mount point must have successor");
+		let successor = self.next_mount.clone().ok_or(Errno::EBUSY)?;
 
 		match Arc::ptr_eq(&self, &parent) {
 			true => Self::do_absolute_root_unmount(successor),

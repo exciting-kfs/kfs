@@ -11,7 +11,6 @@ use super::vfs::{
 };
 use crate::fs::vfs::{KfsDirent, Permission};
 use crate::mm::util::next_align;
-use crate::pr_warn;
 use crate::process::task::CURRENT;
 use crate::sync::locked::Locked;
 use crate::syscall::errno::Errno;
