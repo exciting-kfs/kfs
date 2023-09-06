@@ -35,7 +35,8 @@ INTERRUPT_HANDLER handle_double_fault,          handle_double_fault_impl,       
 INTERRUPT_HANDLER handle_timer,                 handle_timer_impl,              FALSE
 INTERRUPT_HANDLER handle_keyboard,              handle_keyboard_impl,           FALSE
 INTERRUPT_HANDLER handle_serial,                handle_serial_impl,             FALSE
-INTERRUPT_HANDLER handle_ide,                   handle_ide_impl,                FALSE
+INTERRUPT_HANDLER handle_ide_ch0,               handle_ide_ch0_impl,            FALSE
+INTERRUPT_HANDLER handle_ide_ch1,               handle_ide_ch1_impl,            FALSE
 INTERRUPT_HANDLER handle_syscall,               handle_syscall_impl,            FALSE
 
 global handle_interrupt

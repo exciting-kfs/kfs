@@ -7,7 +7,7 @@ use core::{
 use super::lock::{spinlock::SpinLock, TryLockFail};
 
 #[derive(Debug)]
-pub struct Locked<T> {
+pub struct Locked<T: ?Sized> {
 	inner: SpinLock,
 	value: UnsafeCell<T>,
 }
@@ -61,7 +61,9 @@ impl<T> Locked<T> {
 			value: UnsafeCell::new(value),
 		}
 	}
+}
 
+impl<T: ?Sized> Locked<T> {
 	pub fn lock(&self) -> LockedGuard<'_, T> {
 		self.inner.lock();
 		unsafe { LockedGuard::new(self) }
@@ -87,23 +89,23 @@ impl<T> Locked<T> {
 	}
 }
 
-pub struct LockedGuard<'lock, T> {
+pub struct LockedGuard<'lock, T: ?Sized> {
 	locked: &'lock Locked<T>,
 }
 
-impl<'lock, T> LockedGuard<'lock, T> {
+impl<'lock, T: ?Sized> LockedGuard<'lock, T> {
 	pub unsafe fn new(locked: &'lock Locked<T>) -> Self {
 		Self { locked }
 	}
 }
 
-impl<'lock, T> Drop for LockedGuard<'lock, T> {
+impl<'lock, T: ?Sized> Drop for LockedGuard<'lock, T> {
 	fn drop(&mut self) {
 		self.locked.inner.unlock();
 	}
 }
 
-impl<'lock, T> Deref for LockedGuard<'lock, T> {
+impl<'lock, T: ?Sized> Deref for LockedGuard<'lock, T> {
 	type Target = T;
 
 	fn deref(&self) -> &Self::Target {
@@ -111,7 +113,7 @@ impl<'lock, T> Deref for LockedGuard<'lock, T> {
 	}
 }
 
-impl<'lock, T> DerefMut for LockedGuard<'lock, T> {
+impl<'lock, T: ?Sized> DerefMut for LockedGuard<'lock, T> {
 	fn deref_mut(&mut self) -> &mut Self::Target {
 		unsafe { &mut *self.locked.value.get() }
 	}

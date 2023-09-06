@@ -2,25 +2,32 @@ use core::fmt::LowerHex;
 
 use crate::mm::constant::SECTOR_SIZE;
 
+use super::block::BlockSize;
+
 /// Logical Block Address
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 #[repr(transparent)]
 pub struct LBA28(usize);
 
-const LBA28_END: u32 = 1 << 28;
-
 impl LBA28 {
-	pub fn new(value: usize) -> Self {
-		debug_assert!(value < LBA28_END as usize, "invalid LBA value");
+	const END: u32 = 1 << 28;
+	pub fn new(value: usize) -> Option<Self> {
+		if value as u32 > Self::END {
+			None
+		} else {
+			Some(Self(value))
+		}
+	}
+
+	pub unsafe fn new_unchecked(value: usize) -> Self {
 		LBA28(value)
 	}
 
 	pub fn end() -> Self {
-		LBA28(LBA28_END as usize)
+		LBA28(Self::END as usize)
 	}
 
 	pub fn as_raw(&self) -> usize {
-		debug_assert!(self.0 < LBA28_END as usize, "invalid LBA value");
 		self.0
 	}
 
@@ -33,12 +40,11 @@ impl LBA28 {
 		let s = s as isize & 0x3f;
 		let h = h as isize;
 
-		LBA28::new(((c * HPC + h) * SPT + (s - 1)) as usize)
+		unsafe { LBA28::new_unchecked(((c * HPC + h) * SPT + (s - 1)) as usize) }
 	}
 
-	pub fn byte_add(&self, byte: usize) -> Self {
-		debug_assert!(byte % SECTOR_SIZE == 0, "invalid byte offset");
-		*self + byte / SECTOR_SIZE
+	pub fn block_size_add(&self, block_size: BlockSize) -> Self {
+		*self + block_size.as_bytes() / SECTOR_SIZE
 	}
 }
 
@@ -51,10 +57,10 @@ impl LowerHex for LBA28 {
 impl core::ops::Add<usize> for LBA28 {
 	type Output = LBA28;
 	fn add(self, rhs: usize) -> Self::Output {
-		if self.0 + rhs >= LBA28_END as usize {
+		if self.0 + rhs >= Self::END as usize {
 			LBA28::end()
 		} else {
-			LBA28::new(self.0 + rhs)
+			unsafe { LBA28::new_unchecked(self.0 + rhs) }
 		}
 	}
 }

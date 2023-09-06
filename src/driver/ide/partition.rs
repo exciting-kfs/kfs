@@ -27,15 +27,21 @@ pub struct PartitionEntry {
 }
 
 impl PartitionEntry {
-	pub fn begin(&self) -> LBA28 {
-		debug_assert!(self.partition_type != PartitionType::Empty);
-		LBA28::new(self.begin_lba as usize)
+	pub fn begin(&self) -> Option<LBA28> {
+		if self.partition_type != PartitionType::Empty {
+			Some(unsafe { LBA28::new_unchecked(self.begin_lba as usize) })
+		} else {
+			None
+		}
 	}
 
-	pub fn end(&self) -> LBA28 {
-		debug_assert!(self.partition_type != PartitionType::Empty);
-		let (c, h, s) = (self.last_c, self.last_h, self.last_s);
-		LBA28::from_chs(c, h, s) + 1
+	pub fn end(&self) -> Option<LBA28> {
+		if self.partition_type != PartitionType::Empty {
+			let (c, h, s) = (self.last_c, self.last_h, self.last_s);
+			Some(LBA28::from_chs(c, h, s) + 1)
+		} else {
+			None
+		}
 	}
 }
 
@@ -101,7 +107,8 @@ fn read_partition_table(dev: DevNum) -> Option<Box<PartitionTable>> {
 	let ide = get_ide_controller(dev);
 
 	let mut sector = Box::new_uninit_slice(1);
-	ide.read_sectors(LBA28::new(0), &mut sector);
+	ide.ata
+		.read_sectors(unsafe { LBA28::new_unchecked(0) }, &mut sector);
 
 	let sector = unsafe { sector.assume_init() };
 

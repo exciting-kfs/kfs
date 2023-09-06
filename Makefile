@@ -118,7 +118,7 @@ re : clean
 	@$(MAKE) all
 
 .PHONY : run
-run : all
+run : all hello.txt
 	@scripts/qemu.sh $(RESCUE_IMG) $(HDD_IMG) stdio -monitor pty
 
 .PHONY : debug debug-display
@@ -219,3 +219,6 @@ $(RESCUE_IMG) : $(KERNEL_BIN) $(shell find $(RESUCE_SRC_ROOT) -type f) $(KERNEL_
 $(HDD_IMG) : scripts/hdd/make-hdd.sh
 	@echo "[-] creating disk.img"
 	@scripts/hdd/make-hdd.sh $@
+
+hello.txt: 
+	@dd if=/dev/zero of=hello.txt bs=1024 count=1024

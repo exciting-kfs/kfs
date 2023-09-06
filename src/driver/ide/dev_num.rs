@@ -1,10 +1,17 @@
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[repr(transparent)]
 pub struct DevNum(usize);
 
 impl DevNum {
-	pub const fn new(num: usize) -> Self {
-		debug_assert!(num < 4);
+	pub const fn new(num: usize) -> Option<Self> {
+		if num < 4 {
+			Some(DevNum(num))
+		} else {
+			None
+		}
+	}
+
+	pub const unsafe fn new_unchecked(num: usize) -> Self {
 		DevNum(num)
 	}
 
@@ -26,6 +33,11 @@ impl DevNum {
 	#[inline]
 	pub fn is_primary(&self) -> bool {
 		self.0 % 2 == 0
+	}
+
+	#[inline]
+	pub fn is_secondary(&self) -> bool {
+		self.0 % 2 == 1
 	}
 
 	pub fn pair(&self) -> DevNum {

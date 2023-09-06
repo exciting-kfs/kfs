@@ -8,9 +8,9 @@
 #![feature(asm_const)]
 #![feature(variant_count)]
 #![feature(extract_if)]
-#![feature(dropck_eyepatch)]
 #![feature(maybe_uninit_as_bytes)]
 #![feature(slice_as_chunks)]
+#![feature(unboxed_closures)]
 
 extern crate alloc;
 
@@ -49,9 +49,12 @@ use scheduler::schedule_last;
 use scheduler::work::slow_worker;
 use test::{exit_qemu_with, TEST_ARRAY};
 
+use crate::driver::ide::dev_num::DevNum;
+use crate::driver::ide::dma::test::TEST_SECTOR_COUNT;
+use crate::driver::ide::get_ide_controller;
 use crate::interrupt::irq_disable;
 use crate::mm::alloc::page::get_available_pages;
-use crate::mm::constant::{MB, PAGE_SIZE};
+use crate::mm::constant::{MB, PAGE_SIZE, SECTOR_SIZE};
 
 pub static RUN_TIME: AtomicBool = AtomicBool::new(false);
 
@@ -88,17 +91,6 @@ fn run_test() -> ! {
 	exit_qemu_with(0);
 }
 
-fn idle() -> ! {
-	kthread_init();
-	loop {
-		yield_now();
-	}
-}
-
-fn halt() {
-	unsafe { asm!("hlt") }
-}
-
 fn open_default_fd(task: &mut Arc<Task>) {
 	let tty = tty::open(0).unwrap();
 	let ext = task.get_user_ext().expect("user task");
@@ -123,6 +115,8 @@ fn open_default_fd(task: &mut Arc<Task>) {
 fn run_process() -> ! {
 	// let stat = Task::new_kernel(show_page_stat as usize, 0).expect("OOM");
 	// TASK_QUEUE.lock().push_back(stat);
+	// let dma_test = Task::new_kernel(test_threads::run_dma_test as usize, 0).expect("OOM");
+	// schedule_last(dma_test);
 
 	let worker = Task::new_kernel(slow_worker as usize, 0).expect("OOM");
 	let mut init = process::get_init_task();
@@ -134,19 +128,16 @@ fn run_process() -> ! {
 	idle();
 }
 
-extern "C" fn repeat_x(x: usize) -> ! {
+fn idle() -> ! {
+	kthread_init();
+
 	loop {
-		pr_info!("FROM X={}", x);
-		unsafe { asm!("hlt") }
+		yield_now();
 	}
 }
 
-extern "C" fn show_page_stat(_: usize) -> ! {
-	loop {
-		let pages = get_available_pages();
-		pr_info!("AVAILABLE PAGES: {} ({} MB)", pages, pages * PAGE_SIZE / MB);
-		yield_now();
-	}
+fn halt() {
+	unsafe { asm!("hlt") }
 }
 
 unsafe fn kernel_boot_alloc(bi_header: usize, magic: u32) {
@@ -181,20 +172,48 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 
 	acpi::init();
 
-	driver::apic::io::init().expect("io apic init");
-	driver::ps2::init().expect("failed to init PS/2");
-	driver::ide::init().expect("IDE controller initialization.");
+	driver::apic::io::init().expect("IO APIC init.");
+	driver::ps2::init().expect("PS/2 controller init.");
+	driver::ide::init().expect("IDE controller init.");
 
 	unsafe { x86::init() };
 	fs::init().expect("failed to mount /");
 	process::init();
-	scheduler::work::init().expect("worker thread init");
 
 	RUN_TIME.store(true, Ordering::Relaxed);
+	driver::ide::enable_interrupt();
 	driver::serial::ext_init().expect("serial COM1 that will be used at run time.");
 
 	match cfg!(ktest) {
 		true => run_test(),
 		false => run_process(),
 	};
+}
+
+mod test_threads {
+	use super::*;
+
+	pub fn run_dma_test(_: usize) {
+		let tries = 5;
+		let dev_num = unsafe { DevNum::new_unchecked(1) };
+
+		let mut ide = get_ide_controller(dev_num);
+		ide.ata.interrupt_pending();
+
+		for i in 0..tries {
+			// driver::ide::dma::test::write_dma_event(dev_num, i * 2);
+			driver::ide::dma::test::read_dma_event(dev_num, i * 2);
+		}
+		drop(ide);
+
+		pr_debug!("REQUEST: {} bytes", TEST_SECTOR_COUNT * SECTOR_SIZE * tries);
+	}
+
+	pub extern "C" fn show_page_stat(_: usize) -> ! {
+		loop {
+			let pages = get_available_pages();
+			pr_info!("AVAILABLE PAGES: {} ({} MB)", pages, pages * PAGE_SIZE / MB);
+			yield_now();
+		}
+	}
 }
