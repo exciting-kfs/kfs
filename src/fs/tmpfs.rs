@@ -6,8 +6,8 @@ use alloc::vec::Vec;
 use alloc::{boxed::Box, collections::BTreeMap};
 
 use super::vfs::{
-	DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident, RawStat, SuperBlock,
-	VfsInode, Whence,
+	CachePolicy, DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident, RawStat,
+	SuperBlock, VfsInode, Whence,
 };
 use crate::fs::vfs::{KfsDirent, Permission};
 use crate::mm::util::next_align;
@@ -281,14 +281,14 @@ impl DirInode for Locked<TmpDirInode> {
 		}
 	}
 
-	fn lookup(&self, name: &[u8]) -> Result<VfsInode, Errno> {
+	fn lookup(&self, name: &[u8]) -> Result<(CachePolicy, VfsInode), Errno> {
 		let this = self.lock();
 
 		this.sub_files
 			.get(name)
 			.cloned()
 			.ok_or(Errno::ENOENT)
-			.map(|x| x.into())
+			.map(|x| (CachePolicy::Never, x.into()))
 	}
 
 	fn rmdir(&self, name: &[u8]) -> Result<(), Errno> {
