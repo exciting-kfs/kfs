@@ -10,8 +10,8 @@ use alloc::{
 use crate::{process::task::Task, sync::locked::Locked, syscall::errno::Errno};
 
 use super::{
-	AccessFlag, DirInode, FileInode, IOFlag, Permission, RawStat, SuperBlock, VfsDirHandle,
-	VfsFileHandle, VfsHandle, VfsInode, ROOT_DIR_ENTRY,
+	AccessFlag, CachePolicy, DirInode, FileInode, IOFlag, Permission, RawStat, SuperBlock,
+	VfsDirHandle, VfsFileHandle, VfsHandle, VfsInode, ROOT_DIR_ENTRY,
 };
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -370,7 +370,9 @@ impl VfsDirEntry {
 		}
 
 		// slow path. lookup directally
-		let node = self.inode.lookup(name).map(|x| match x {
+		let (cache_policy, inode) = self.inode.lookup(name)?;
+
+		let entry = match inode {
 			VfsInode::Dir(inode) => VfsEntry::Dir(Arc::new(VfsDirEntry::new(
 				Rc::new(name.to_vec()),
 				inode,
@@ -384,11 +386,13 @@ impl VfsDirEntry {
 				Arc::downgrade(self),
 				Arc::clone(&self.super_block),
 			))),
-		})?;
+		};
 
-		self.sub_tree.lock().insert(node.get_name(), node.clone());
+		if let CachePolicy::Always = cache_policy {
+			self.sub_tree.lock().insert(entry.get_name(), entry.clone());
+		}
 
-		Ok(node)
+		Ok(entry)
 	}
 
 	pub fn is_mount_point(&self) -> bool {

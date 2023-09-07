@@ -12,8 +12,8 @@ use crate::{
 use super::{
 	tmpfs::{TmpDir, TmpSb},
 	vfs::{
-		DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident, Permission, RawStat,
-		VfsInode, Whence, ROOT_DIR_ENTRY,
+		CachePolicy, DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident,
+		Permission, RawStat, VfsInode, Whence, ROOT_DIR_ENTRY,
 	},
 };
 
@@ -103,12 +103,12 @@ impl DirInode for DevDirInode {
 		Err(Errno::EPERM)
 	}
 
-	fn lookup(&self, name: &[u8]) -> Result<VfsInode, Errno> {
+	fn lookup(&self, name: &[u8]) -> Result<(CachePolicy, VfsInode), Errno> {
 		self.devices
 			.get(name)
 			.cloned()
 			.ok_or(Errno::ENOENT)
-			.map(|x| VfsInode::File(x))
+			.map(|x| (CachePolicy::Never, VfsInode::File(x)))
 	}
 
 	fn mkdir(&self, _name: &[u8], _perm: Permission) -> Result<Arc<dyn DirInode>, Errno> {
