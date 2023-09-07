@@ -30,6 +30,10 @@ pub fn sys_rmdir(path: usize) -> Result<usize, Errno> {
 
 	let entry = lookup_dir_entry(path, current)?;
 
+	if entry.is_mount_point() {
+		return Err(Errno::EPERM);
+	}
+
 	let parent_dir = entry.parent_dir(current)?;
 
 	parent_dir.rmdir(entry.get_name().borrow(), current)?;
