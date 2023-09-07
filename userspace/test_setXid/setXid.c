@@ -79,6 +79,9 @@ int main(void) {
 	close(0);
 	close(1);
 	close(2);
+	open("/dev/tty2", O_RDWR);
+	open("/dev/tty2", O_RDWR);
+	open("/dev/tty2", O_RDWR);
 	print_id("after setsid");
 	next_test();
 

@@ -21,7 +21,7 @@ impl FileSystem<TmpSb, Locked<TmpDirInode>> for TmpFs {
 	fn mount() -> Result<(Arc<TmpSb>, Arc<Locked<TmpDirInode>>), Errno> {
 		Ok((
 			Arc::new(TmpSb),
-			TmpDirInode::new(Permission::from_bits_truncate(0o755), 0, 0),
+			TmpDirInode::new_shared(Permission::from_bits_truncate(0o755), 0, 0),
 		))
 	}
 }
@@ -205,13 +205,17 @@ pub struct TmpDirInode {
 }
 
 impl TmpDirInode {
-	pub fn new(perm: Permission, owner: usize, group: usize) -> Arc<Locked<Self>> {
-		Arc::new(Locked::new(Self {
+	pub fn new(perm: Permission, owner: usize, group: usize) -> Self {
+		Self {
 			sub_files: BTreeMap::new(),
 			perm,
 			owner,
 			group,
-		}))
+		}
+	}
+
+	pub fn new_shared(perm: Permission, owner: usize, group: usize) -> Arc<Locked<Self>> {
+		Arc::new(Locked::new(Self::new(perm, owner, group)))
 	}
 
 	fn is_empty(&self) -> bool {
@@ -267,7 +271,7 @@ impl DirInode for Locked<TmpDirInode> {
 		match this.sub_files.entry(ident) {
 			Vacant(v) => {
 				let current = unsafe { CURRENT.get_mut() };
-				let new_dir = TmpDirInode::new(perm, current.get_uid(), current.get_gid());
+				let new_dir = TmpDirInode::new_shared(perm, current.get_uid(), current.get_gid());
 
 				v.insert(TmpInode::Dir(new_dir.clone()));
 
