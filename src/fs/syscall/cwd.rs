@@ -1,7 +1,7 @@
 use crate::{
 	fs::{
 		path::Path,
-		vfs::{lookup_entry, Permission},
+		vfs::{lookup_entry_follow, Permission},
 	},
 	process::task::CURRENT,
 	syscall::errno::Errno,
@@ -15,7 +15,7 @@ pub fn sys_chdir(path: usize) -> Result<usize, Errno> {
 	let path = verify_path(path, current)?;
 	let path = Path::new(path);
 
-	let dir = lookup_entry(path, current).and_then(|x| x.downcast_dir())?;
+	let dir = lookup_entry_follow(&path, current).and_then(|x| x.downcast_dir())?;
 
 	dir.access(Permission::ANY_EXECUTE, current)?;
 

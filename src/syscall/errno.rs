@@ -39,6 +39,7 @@ pub enum Errno {
 	ERANGE,
 	ENAMETOOLONG,
 	ENOTEMPTY,
+	ELOOP,
 }
 
 impl Errno {
@@ -87,5 +88,6 @@ fn desc(errno: Errno) -> &'static str {
 		ERANGE => "Math result not representable",
 		ENAMETOOLONG => "Path name too long",
 		ENOTEMPTY => "Directory is not empty",
+		ELOOP => "too many levels of symbolic links",
 	}
 }

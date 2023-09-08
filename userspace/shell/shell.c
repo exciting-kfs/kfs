@@ -311,6 +311,22 @@ void builtin_umount(int idx) {
 	}
 }
 
+void builtin_symlink(int idx) {
+	char buf1[2048];
+	char buf2[2048];
+
+	idx = extract(idx, buf1);
+	idx = ignore_ws(idx);
+
+	idx = extract(idx, buf2);
+	idx = ignore_ws(idx);
+
+	int ret = symlink(buf1, buf2);
+	if (ret < 0) {
+		show_error("symlink: symlink", ret);
+	}
+}
+
 int main(void) {
 	for (;;) {
 		ft_putstr("sh==> ");
@@ -342,6 +358,8 @@ int main(void) {
 			builtin_mount(ignore_ws(5));
 		} else if (STREQ("umount", line_buf, line_len)) {
 			builtin_umount(ignore_ws(6));
+		} else if (STREQ("symlink", line_buf, line_len)) {
+			builtin_symlink(ignore_ws(7));
 		} else {
 			extract(0, line_buf);
 			ft_putstr("sh: ");

@@ -13,7 +13,7 @@ use super::{
 	tmpfs::{TmpDir, TmpSb},
 	vfs::{
 		CachePolicy, DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident,
-		Permission, RawStat, VfsInode, Whence, ROOT_DIR_ENTRY,
+		Permission, RawStat, SymLinkInode, VfsInode, Whence, ROOT_DIR_ENTRY,
 	},
 };
 
@@ -119,15 +119,15 @@ impl DirInode for DevDirInode {
 		Err(Errno::EPERM)
 	}
 
-	fn create(
-		&self,
-		_name: &[u8],
-		_perm: Permission,
-	) -> Result<Arc<dyn super::vfs::FileInode>, Errno> {
+	fn create(&self, _name: &[u8], _perm: Permission) -> Result<Arc<dyn FileInode>, Errno> {
 		Err(Errno::EPERM)
 	}
 
 	fn unlink(&self, _name: &[u8]) -> Result<(), Errno> {
+		Err(Errno::EPERM)
+	}
+
+	fn symlink(&self, _target: &[u8], _name: &[u8]) -> Result<Arc<dyn SymLinkInode>, Errno> {
 		Err(Errno::EPERM)
 	}
 }

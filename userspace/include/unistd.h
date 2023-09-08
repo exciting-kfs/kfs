@@ -30,6 +30,7 @@ int setuid(uid_t uid);
 int chdir(const char *path);
 int rmdir(const char *path);
 int unlink(const char *path);
+int symlink(const char *target, const char *linkpath);
 
 #define SEEK_SET 0
 #define SEEK_CUR 1

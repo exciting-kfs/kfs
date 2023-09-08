@@ -1,7 +1,7 @@
 use alloc::{boxed::Box, sync::Arc};
 use bitflags::bitflags;
 
-use crate::syscall::errno::Errno;
+use crate::{fs::path::Path, syscall::errno::Errno};
 
 use super::{DirHandle, FileHandle};
 
@@ -107,6 +107,7 @@ impl Permission {
 pub enum VfsInode {
 	File(Arc<dyn FileInode>),
 	Dir(Arc<dyn DirInode>),
+	SymLink(Arc<dyn SymLinkInode>),
 }
 
 #[repr(C)]
@@ -165,6 +166,7 @@ pub trait DirInode {
 	fn rmdir(&self, name: &[u8]) -> Result<(), Errno>;
 	fn create(&self, name: &[u8], perm: Permission) -> Result<Arc<dyn FileInode>, Errno>;
 	fn unlink(&self, name: &[u8]) -> Result<(), Errno>;
+	fn symlink(&self, target: &[u8], name: &[u8]) -> Result<Arc<dyn SymLinkInode>, Errno>;
 }
 
 pub trait FileInode {
@@ -183,4 +185,8 @@ pub trait FileInode {
 		Ok(())
 	}
 	fn truncate(&self, length: isize) -> Result<(), Errno>;
+}
+
+pub trait SymLinkInode {
+	fn target(&self) -> &Path;
 }
