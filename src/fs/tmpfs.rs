@@ -5,9 +5,10 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use alloc::{boxed::Box, collections::BTreeMap};
 
+use super::path::Path;
 use super::vfs::{
 	CachePolicy, DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident, RawStat,
-	SuperBlock, VfsInode, Whence,
+	SuperBlock, SymLinkInode, VfsInode, Whence,
 };
 use crate::fs::vfs::{KfsDirent, Permission};
 use crate::mm::util::next_align;
@@ -36,6 +37,7 @@ impl SuperBlock for TmpSb {
 pub enum TmpInode {
 	Dir(Arc<Locked<TmpDirInode>>),
 	File(Arc<TmpFileInode>),
+	SymLink(Arc<TmpSymLink>),
 }
 
 impl Into<VfsInode> for TmpInode {
@@ -43,6 +45,7 @@ impl Into<VfsInode> for TmpInode {
 		match self {
 			TmpInode::Dir(d) => VfsInode::Dir(d),
 			TmpInode::File(f) => VfsInode::File(f),
+			TmpInode::SymLink(s) => VfsInode::SymLink(s),
 		}
 	}
 }
@@ -301,12 +304,13 @@ impl DirInode for Locked<TmpDirInode> {
 			Occupied(o) => Ok(o),
 		}?;
 
+		use TmpInode::*;
 		match entry.get() {
-			TmpInode::Dir(d) => match d.lock().is_empty() {
+			Dir(d) => match d.lock().is_empty() {
 				true => Ok(()),
 				false => Err(Errno::ENOTEMPTY),
 			},
-			TmpInode::File(_) => Err(Errno::ENOTDIR),
+			File(_) | SymLink(_) => Err(Errno::ENOTDIR),
 		}?;
 
 		entry.remove();
@@ -338,18 +342,47 @@ impl DirInode for Locked<TmpDirInode> {
 
 		let ident = Ident::new(name);
 		let entry = match this.sub_files.entry(ident) {
-			Vacant(_) => Err(Errno::EEXIST),
+			Vacant(_) => Err(Errno::ESRCH),
 			Occupied(o) => Ok(o),
 		}?;
 
+		use TmpInode::*;
 		match entry.get() {
-			TmpInode::Dir(_) => Err(Errno::EISDIR),
-			TmpInode::File(_) => Ok(()),
+			Dir(_) => Err(Errno::EISDIR),
+			File(_) | SymLink(_) => Ok(()),
 		}?;
 
 		entry.remove();
 
 		Ok(())
+	}
+
+	fn symlink(&self, target: &[u8], name: &[u8]) -> Result<Arc<dyn SymLinkInode>, Errno> {
+		use alloc::collections::btree_map::Entry::*;
+		let mut this = self.lock();
+
+		let ident = Ident::new(name);
+
+		let symlink = Arc::new(TmpSymLink {
+			target: Path::new(target),
+		});
+
+		match this.sub_files.entry(ident) {
+			Vacant(v) => v.insert(TmpInode::SymLink(symlink.clone())),
+			Occupied(_) => return Err(Errno::EEXIST),
+		};
+
+		Ok(symlink)
+	}
+}
+
+pub struct TmpSymLink {
+	target: Path,
+}
+
+impl SymLinkInode for TmpSymLink {
+	fn target(&self) -> &Path {
+		&self.target
 	}
 }
 

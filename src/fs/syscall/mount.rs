@@ -2,7 +2,7 @@ use crate::{
 	fs::{
 		path::Path,
 		tmpfs::TmpFs,
-		vfs::{lookup_dir_entry, FileSystem},
+		vfs::{lookup_entry_nofollow, FileSystem},
 	},
 	process::task::CURRENT,
 	syscall::errno::Errno,
@@ -15,7 +15,7 @@ pub fn sys_mount(path: usize, fs_name: usize) -> Result<usize, Errno> {
 
 	let path = verify_path(path, current)?;
 	let path = Path::new(path);
-	let entry = lookup_dir_entry(path, current)?;
+	let entry = lookup_entry_nofollow(&path, current).and_then(|x| x.downcast_dir())?;
 
 	let fs_name = verify_string(fs_name, current, 256)?;
 
@@ -32,7 +32,7 @@ pub fn sys_umount(path: usize) -> Result<usize, Errno> {
 
 	let path = verify_path(path, current)?;
 	let path = Path::new(path);
-	let entry = lookup_dir_entry(path, current)?;
+	let entry = lookup_entry_nofollow(&path, current).and_then(|x| x.downcast_dir())?;
 
 	entry.unmount(current).map(|_| 0)
 }

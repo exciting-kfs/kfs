@@ -58,6 +58,7 @@ SYSCALL getppid,        64,             0
 SYSCALL getpgrp,        65,             0
 SYSCALL setsid,         66,             0
 SYSCALL sigaction,      67,             3
+SYSCALL symlink,        83,             2
 SYSCALL truncate,       92,             2
 SYSCALL getpgid,        132,            1
 SYSCALL getdents,       141,            3

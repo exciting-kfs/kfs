@@ -1,5 +1,5 @@
 use crate::fs::path::Path;
-use crate::fs::vfs::{lookup_dir_entry, Permission};
+use crate::fs::vfs::{lookup_entry_follow, Permission};
 use crate::process::task::CURRENT;
 use crate::syscall::errno::Errno;
 
@@ -15,7 +15,7 @@ pub fn sys_mkdir(path: usize, perm: u32) -> Result<usize, Errno> {
 
 	let new_dir_name = path.pop_component().ok_or(Errno::EEXIST)?;
 
-	let base_dir = lookup_dir_entry(path, current)?;
+	let base_dir = lookup_entry_follow(&path, current).and_then(|x| x.downcast_dir())?;
 
 	base_dir.mkdir(&new_dir_name, perm, current)?;
 

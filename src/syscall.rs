@@ -117,6 +117,7 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 				frame.edx as *mut SigAction,
 			)
 		}
+		83 => sys_symlink(frame.ebx, frame.ecx),
 		92 => sys_truncate(frame.ebx, frame.ecx as isize),
 		119 => {
 			// pr_info!("syscall: sigreturn: {:p}", &frame);

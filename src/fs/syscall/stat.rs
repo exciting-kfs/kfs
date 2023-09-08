@@ -3,7 +3,7 @@ use core::mem::{align_of, size_of};
 use alloc::sync::Arc;
 
 use crate::fs::path::Path;
-use crate::fs::vfs::{lookup_entry, RawStat};
+use crate::fs::vfs::{lookup_entry_follow, RawStat};
 use crate::process::task::{Task, CURRENT};
 use crate::syscall::errno::Errno;
 
@@ -31,7 +31,7 @@ pub fn sys_stat(path: usize, stat_buf: usize) -> Result<usize, Errno> {
 	let path = verify_path(path, current)?;
 	let path = Path::new(path);
 
-	let entry = lookup_entry(path, current)?;
+	let entry = lookup_entry_follow(&path, current)?;
 
 	let stat = entry.stat()?;
 

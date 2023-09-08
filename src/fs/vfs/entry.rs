@@ -7,11 +7,11 @@ use alloc::{
 	vec::Vec,
 };
 
-use crate::{process::task::Task, sync::locked::Locked, syscall::errno::Errno};
+use crate::{fs::path::Path, process::task::Task, sync::locked::Locked, syscall::errno::Errno};
 
 use super::{
 	AccessFlag, CachePolicy, DirInode, FileInode, IOFlag, Permission, RawStat, SuperBlock,
-	VfsDirHandle, VfsFileHandle, VfsHandle, VfsInode, ROOT_DIR_ENTRY,
+	SymLinkInode, VfsDirHandle, VfsFileHandle, VfsHandle, VfsInode, ROOT_DIR_ENTRY,
 };
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -30,14 +30,70 @@ impl Borrow<[u8]> for Ident {
 }
 
 #[derive(Clone)]
-pub enum VfsEntry {
+pub enum VfsRealEntry {
 	File(Arc<VfsFileEntry>),
 	Dir(Arc<VfsDirEntry>),
 }
 
+#[derive(Clone)]
+pub enum VfsEntry {
+	Real(VfsRealEntry),
+	SymLink(Arc<VfsSymLinkEntry>),
+}
+
 impl VfsEntry {
+	pub fn unwrap_real(self) -> VfsRealEntry {
+		use VfsEntry::*;
+		match self {
+			Real(r) => r,
+			SymLink(_) => panic!("expected Real(..) but got SymLink(..)"),
+		}
+	}
+
+	pub fn new_dir(dir: Arc<VfsDirEntry>) -> Self {
+		VfsEntry::Real(VfsRealEntry::Dir(dir))
+	}
+
+	pub fn new_file(file: Arc<VfsFileEntry>) -> Self {
+		VfsEntry::Real(VfsRealEntry::File(file))
+	}
+
+	pub fn get_name(&self) -> Ident {
+		use VfsEntry::*;
+		match self {
+			Real(r) => r.get_name(),
+			SymLink(s) => s.get_name(),
+		}
+	}
+
 	pub fn parent_dir(&self, task: &Arc<Task>) -> Result<Arc<VfsDirEntry>, Errno> {
 		use VfsEntry::*;
+		match self {
+			Real(r) => r.parent_dir(task),
+			SymLink(s) => s.parent_dir(task),
+		}
+	}
+
+	pub fn downcast_dir(self) -> Result<Arc<VfsDirEntry>, Errno> {
+		use VfsEntry::*;
+		match self {
+			Real(r) => r.downcast_dir(),
+			SymLink(_) => Err(Errno::ENOTDIR),
+		}
+	}
+
+	pub fn downcast_file(self) -> Result<Arc<VfsFileEntry>, Errno> {
+		use VfsEntry::*;
+		match self {
+			Real(r) => r.downcast_file(),
+			SymLink(_) => Err(Errno::EISDIR),
+		}
+	}
+}
+
+impl VfsRealEntry {
+	pub fn parent_dir(&self, task: &Arc<Task>) -> Result<Arc<VfsDirEntry>, Errno> {
+		use VfsRealEntry::*;
 		match self {
 			File(f) => f.parent_dir(task),
 			Dir(d) => d.parent_dir(task),
@@ -63,7 +119,7 @@ impl VfsEntry {
 		let perm = read_perm | write_perm;
 		self.access(perm, task)?;
 
-		use VfsEntry::*;
+		use VfsRealEntry::*;
 		let handle = match self {
 			File(f) => VfsHandle::File(f.open(io_flags, access_flags)),
 			Dir(d) => VfsHandle::Dir(d.open(io_flags, access_flags)),
@@ -73,7 +129,7 @@ impl VfsEntry {
 	}
 
 	pub fn get_name(&self) -> Ident {
-		use VfsEntry::*;
+		use VfsRealEntry::*;
 		match self {
 			File(f) => f.get_name(),
 			Dir(d) => d.get_name(),
@@ -81,7 +137,7 @@ impl VfsEntry {
 	}
 
 	pub fn stat(&self) -> Result<RawStat, Errno> {
-		use VfsEntry::*;
+		use VfsRealEntry::*;
 		match self {
 			File(f) => f.stat(),
 			Dir(d) => d.stat(),
@@ -89,7 +145,7 @@ impl VfsEntry {
 	}
 
 	pub fn access(&self, perm: Permission, task: &Arc<Task>) -> Result<(), Errno> {
-		use VfsEntry::*;
+		use VfsRealEntry::*;
 		match self {
 			File(f) => f.access(perm, task),
 			Dir(d) => d.access(perm, task),
@@ -97,7 +153,7 @@ impl VfsEntry {
 	}
 
 	pub fn chmod(&self, perm: Permission, task: &Arc<Task>) -> Result<(), Errno> {
-		use VfsEntry::*;
+		use VfsRealEntry::*;
 		match self {
 			File(f) => f.chmod(perm, task),
 			Dir(d) => d.chmod(perm, task),
@@ -105,7 +161,7 @@ impl VfsEntry {
 	}
 
 	pub fn chown(&self, owner: usize, group: usize, task: &Arc<Task>) -> Result<(), Errno> {
-		use VfsEntry::*;
+		use VfsRealEntry::*;
 		match self {
 			File(f) => f.chown(owner, group, task),
 			Dir(d) => d.chown(owner, group, task),
@@ -113,7 +169,7 @@ impl VfsEntry {
 	}
 
 	pub fn downcast_dir(self) -> Result<Arc<VfsDirEntry>, Errno> {
-		use VfsEntry::*;
+		use VfsRealEntry::*;
 		match self {
 			File(_) => Err(Errno::ENOTDIR),
 			Dir(d) => Ok(d),
@@ -121,11 +177,52 @@ impl VfsEntry {
 	}
 
 	pub fn downcast_file(self) -> Result<Arc<VfsFileEntry>, Errno> {
-		use VfsEntry::*;
+		use VfsRealEntry::*;
 		match self {
 			File(f) => Ok(f),
 			Dir(_) => Err(Errno::EISDIR),
 		}
+	}
+}
+
+pub struct VfsSymLinkEntry {
+	name: Rc<Vec<u8>>,
+	inode: Arc<dyn SymLinkInode>,
+	parent: Weak<VfsDirEntry>,
+	super_block: Arc<dyn SuperBlock>,
+}
+
+impl VfsSymLinkEntry {
+	pub fn new(
+		name: Rc<Vec<u8>>,
+		inode: Arc<dyn SymLinkInode>,
+		parent: Weak<VfsDirEntry>,
+		super_block: Arc<dyn SuperBlock>,
+	) -> Self {
+		Self {
+			name,
+			inode,
+			parent,
+			super_block,
+		}
+	}
+
+	pub fn target(&self) -> &Path {
+		self.inode.target()
+	}
+
+	pub fn parent_dir(&self, task: &Arc<Task>) -> Result<Arc<VfsDirEntry>, Errno> {
+		let parent = self.parent.upgrade().ok_or(Errno::ENOENT)?;
+
+		parent
+			.inode
+			.access(task.get_uid(), task.get_gid(), Permission::ANY_EXECUTE)?;
+
+		Ok(parent)
+	}
+
+	pub fn get_name(&self) -> Ident {
+		Ident(self.name.clone())
 	}
 }
 
@@ -312,7 +409,7 @@ impl VfsDirEntry {
 			Arc::clone(&self.super_block),
 		));
 
-		let _ = self.insert_child(VfsEntry::File(file_entry.clone()));
+		// let _ = self.insert_child(VfsEntry::new_file(file_entry.clone()));
 
 		Ok(file_entry)
 	}
@@ -335,7 +432,7 @@ impl VfsDirEntry {
 			false,
 		));
 
-		let _ = self.insert_child(VfsEntry::Dir(dir_entry.clone()));
+		// let _ = self.insert_child(VfsEntry::new_dir(dir_entry.clone()));
 
 		Ok(dir_entry)
 	}
@@ -360,6 +457,24 @@ impl VfsDirEntry {
 		Ok(())
 	}
 
+	pub fn symlink(
+		self: &Arc<Self>,
+		target: &[u8],
+		name: &[u8],
+		task: &Arc<Task>,
+	) -> Result<Arc<VfsSymLinkEntry>, Errno> {
+		self.access(Permission::ANY_EXECUTE | Permission::ANY_WRITE, task)?;
+
+		let inode = self.inode.symlink(target, name)?;
+
+		Ok(Arc::new(VfsSymLinkEntry::new(
+			Rc::new(name.to_vec()),
+			inode,
+			Arc::downgrade(self),
+			Arc::clone(&self.super_block),
+		)))
+	}
+
 	pub fn lookup(self: &Arc<Self>, name: &[u8], task: &Arc<Task>) -> Result<VfsEntry, Errno> {
 		self.inode
 			.access(task.get_uid(), task.get_gid(), Permission::ANY_EXECUTE)?;
@@ -373,14 +488,20 @@ impl VfsDirEntry {
 		let (cache_policy, inode) = self.inode.lookup(name)?;
 
 		let entry = match inode {
-			VfsInode::Dir(inode) => VfsEntry::Dir(Arc::new(VfsDirEntry::new(
+			VfsInode::Dir(inode) => VfsEntry::new_dir(Arc::new(VfsDirEntry::new(
 				Rc::new(name.to_vec()),
 				inode,
 				Arc::downgrade(self),
 				Arc::clone(&self.super_block),
 				false,
 			))),
-			VfsInode::File(inode) => VfsEntry::File(Arc::new(VfsFileEntry::new(
+			VfsInode::File(inode) => VfsEntry::new_file(Arc::new(VfsFileEntry::new(
+				Rc::new(name.to_vec()),
+				inode,
+				Arc::downgrade(self),
+				Arc::clone(&self.super_block),
+			))),
+			VfsInode::SymLink(inode) => VfsEntry::SymLink(Arc::new(VfsSymLinkEntry::new(
 				Rc::new(name.to_vec()),
 				inode,
 				Arc::downgrade(self),
@@ -418,7 +539,7 @@ impl VfsDirEntry {
 
 		let mut sub_tree = parent.sub_tree.lock();
 		sub_tree.remove::<[u8]>(new_dentry.get_name().borrow());
-		sub_tree.insert(new_dentry.get_name(), VfsEntry::Dir(new_dentry.clone()));
+		sub_tree.insert(new_dentry.get_name(), VfsEntry::new_dir(new_dentry.clone()));
 	}
 
 	pub fn mount(
@@ -457,7 +578,7 @@ impl VfsDirEntry {
 	fn do_sub_unmount(successor: Arc<Self>, parent: Arc<Self>) {
 		let mut sub_tree = parent.sub_tree.lock();
 		sub_tree.remove::<[u8]>(successor.get_name().borrow());
-		sub_tree.insert(successor.get_name(), VfsEntry::Dir(successor.clone()));
+		sub_tree.insert(successor.get_name(), VfsEntry::new_dir(successor.clone()));
 	}
 
 	pub fn unmount(self: Arc<Self>, task: &Arc<Task>) -> Result<(), Errno> {
