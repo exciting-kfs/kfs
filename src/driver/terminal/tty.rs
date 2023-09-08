@@ -5,8 +5,12 @@ use alloc::collections::VecDeque;
 use alloc::sync::{Arc, Weak};
 use bitflags::bitflags;
 
+use super::ascii::constants::*;
+use super::console::Console;
+use super::console_screen_draw;
+
 use crate::collection::LineBuffer;
-use crate::config::CONSOLE_COUNTS;
+use crate::driver::vga::text_vga::WINDOW_SIZE;
 use crate::fs::vfs::{FileHandle, IOFlag};
 use crate::input::key_event::*;
 use crate::input::keyboard::KEYBOARD;
@@ -81,8 +85,6 @@ static CURSOR: [&[u8]; 8] = [
 	b"\x1b[H",	b"\x1b[F",
 ];
 
-use super::console::console_manager::console::SyncConsole;
-use super::console::{ascii_constants::*, console_screen_draw, CONSOLE_MANAGER};
 #[rustfmt::skip]
 static CONTROL: [u8; 33] = [
 	0x7f, 0x00, 0x01, 0x02,  ETX,  EOF, 0x05, 0x06, 0x07,
@@ -159,10 +161,10 @@ fn convert_control(code: ControlCode) -> Option<&'static [u8]> {
 pub struct TTY {
 	flag: TTYFlag,
 	control: ControlChars,
-	console: SyncConsole,
+	console: Console,
 	line_buffer: LineBuffer<4096>,
 	into_process: VecDeque<u8>,
-	owner: Option<Weak<Locked<Session>>>,
+	session: Weak<Locked<Session>>,
 }
 
 struct ControlChars {
@@ -214,25 +216,35 @@ impl TTYFlag {
 }
 
 impl TTY {
-	pub fn new(console: SyncConsole, flag: TTYFlag) -> Self {
+	pub fn new(flag: TTYFlag) -> Self {
 		Self {
 			flag,
 			control: ControlChars::default(),
-			console,
 			line_buffer: LineBuffer::new(),
 			into_process: VecDeque::new(),
-			owner: None,
+			session: Weak::default(),
+			console: Console::buffer_reserved(WINDOW_SIZE),
 		}
 	}
 
-	pub fn connect(&mut self, sess: Weak<Locked<Session>>) {
-		self.owner = Some(sess)
+	pub fn connect(&mut self, sess: &Arc<Locked<Session>>) -> Result<(), Errno> {
+		if let Some(_) = self.session.upgrade() {
+			return Err(Errno::EPERM);
+		}
+
+		self.session = Arc::downgrade(sess);
+
+		Ok(())
 	}
 
 	pub fn disconnect(&mut self) {
-		self.owner = None;
+		self.session = Weak::default();
 		self.line_buffer.clear();
 		self.into_process.clear();
+	}
+
+	pub fn draw(&self) {
+		self.console.draw();
 	}
 
 	fn input_convert<'a>(&self, data: Code, buf: &'a mut [u8]) -> Option<&'a [u8]> {
@@ -282,7 +294,6 @@ impl TTY {
 	/// - 1b (ESC) => `^[`
 	/// - 7f (DEL) => `^?`
 	fn do_echo(&mut self, buf: &[u8]) -> Result<(), NoSpace> {
-		let mut console = self.console.lock();
 		let c = buf[0];
 		let echo_ctl = self.flag.contains(TTYFlag::EchoCtl);
 		let echo_e = self.flag.contains(TTYFlag::EchoE | TTYFlag::Icanon);
@@ -290,27 +301,27 @@ impl TTY {
 		let icanon = self.flag.contains(TTYFlag::Icanon);
 
 		if let (DEL, true) = (c, echo_e) {
-			console.write(&CURSOR[2]);
-			console.write_one(c)?;
+			self.console.write(&CURSOR[2]);
+			self.console.write_one(c)?;
 			return Ok(());
 		}
 
 		if let (NAK, true) = (c, echo_k) {
-			console.write(b"\x1b[2K");
-			console.write_one(CR)?;
+			self.console.write(b"\x1b[2K");
+			self.console.write_one(CR)?;
 			return Ok(());
 		}
 
 		for c in buf.iter().map(|b| *b) {
 			if let (CR, true) | (LF, true) = (c, icanon) {
-				console.write_one(c)?;
+				self.console.write_one(c)?;
 			} else {
 				match (is_control(c), echo_ctl) {
 					(true, true) => {
-						console.write_one(b'^')?;
-						console.write_one((b'@' + c) & !(1 << 7))?;
+						self.console.write_one(b'^')?;
+						self.console.write_one((b'@' + c) & !(1 << 7))?;
 					}
-					_ => console.write_one(c)?,
+					_ => self.console.write_one(c)?,
 				}
 			}
 		}
@@ -322,7 +333,6 @@ impl TTY {
 	// EOF, '^D'
 	fn do_icanon(&mut self, buf: &[u8], code: Code) {
 		let c = buf[0];
-		let mut console = self.console.lock();
 
 		match c {
 			DEL => self.line_buffer.backspace(),
@@ -337,7 +347,7 @@ impl TTY {
 						buf.iter().for_each(|b| self.line_buffer.put_char(*b))
 					}
 					(KeyKind::Cursor(c), false) => {
-						console.write(&CURSOR[c.index() as usize]);
+						self.console.write(&CURSOR[c.index() as usize]);
 					}
 					(_, _) => {}
 				}
@@ -363,9 +373,7 @@ impl TTY {
 			_ => unreachable!(),
 		};
 
-		if let Some(ref owner) = self.owner {
-			send_signal_to_foreground(owner, num, SigCode::SI_KERNEL).expect("invalid session.");
-		}
+		let _ = send_signal_to_foreground(&self.session, num, SigCode::SI_KERNEL);
 	}
 
 	fn is_signal(&self, c: u8) -> bool {
@@ -423,9 +431,7 @@ impl ChWrite<Code> for TTY {
 		}
 
 		// wake_up on event
-		if let Some(ref owner) = self.owner {
-			wake_up_foreground(owner, State::Sleeping);
-		}
+		wake_up_foreground(&self.session, State::Sleeping);
 
 		Ok(())
 	}
@@ -437,9 +443,8 @@ impl ChWrite<u8> for TTY {
 		let mut buf = [data, 0];
 		let iter = self.output_convert(&mut buf, 1);
 
-		for c in iter.iter().map(|b| *b) {
-			let mut console = self.console.lock();
-			console.write_one(c)?
+		for c in iter.iter() {
+			self.console.write_one(*c)?
 		}
 
 		schedule_fast_work(console_screen_draw, ());
@@ -500,28 +505,6 @@ impl FileHandle for TTYFile {
 	fn lseek(&self, _offset: isize, _whence: crate::fs::vfs::Whence) -> Result<usize, Errno> {
 		Err(Errno::ESPIPE)
 	}
-}
-
-pub fn open(id: usize) -> Option<TTYFile> {
-	if id >= CONSOLE_COUNTS {
-		return None;
-	}
-
-	let tty = unsafe { CONSOLE_MANAGER.assume_init_ref().get_tty(id) };
-
-	Some(tty)
-}
-
-pub fn alloc() -> Option<TTYFile> {
-	for id in 0..CONSOLE_COUNTS {
-		let tty = unsafe { CONSOLE_MANAGER.assume_init_ref().get_tty(id) };
-		let tty_lock = tty.lock_tty();
-		if let None = tty_lock.owner {
-			drop(tty_lock);
-			return Some(tty);
-		}
-	}
-	None
 }
 
 fn is_printable(c: u8) -> bool {

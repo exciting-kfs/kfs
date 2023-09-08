@@ -9,12 +9,12 @@ int main(void) {
 
 	// mkdir("/dir1", 0777);
 	// mkdir("/dir2", 0777);
-	int fd = open2("/abc", O_CREAT | O_EXCL | O_RDWR, 0777);
+	int fd = open("/abc", O_CREAT | O_EXCL | O_RDWR, 0777);
 	const char buf[] = "0123456789";
 	write(fd, buf, 10);
 	close(fd);
 	truncate("/abc", 5);
-	fd = open2("/abc", O_RDONLY);
+	fd = open("/abc", O_RDONLY);
 
 	char ch;
 	int ret;

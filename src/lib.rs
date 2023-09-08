@@ -36,12 +36,9 @@ mod user_bin;
 mod util;
 mod x86;
 
-use alloc::boxed::Box;
-use alloc::sync::Arc;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::{arch::asm, panic::PanicInfo};
-use driver::tty;
-use fs::vfs::{AccessFlag, IOFlag, VfsFileHandle, VfsHandle};
+use fs::devfs;
 use interrupt::kthread_init;
 use process::task::Task;
 use scheduler::context::yield_now;
@@ -91,46 +88,30 @@ fn run_test() -> ! {
 	exit_qemu_with(0);
 }
 
-fn open_default_fd(task: &mut Arc<Task>) {
-	let tty = tty::open(0).unwrap();
-	let ext = task.get_user_ext().expect("user task");
-	let sess = &ext.lock_relation().get_session();
-
-	tty.lock_tty().connect(Arc::downgrade(sess));
-	sess.lock().set_ctty(tty.clone());
-
-	let mut fd_table = ext.lock_fd_table();
-	let file = VfsHandle::File(Arc::new(VfsFileHandle::new(
-		None,
-		Box::new(tty.clone()),
-		IOFlag::empty(),
-		AccessFlag::O_RDWR,
-	)));
-
-	fd_table.alloc_fd(file.clone());
-	fd_table.alloc_fd(file.clone());
-	fd_table.alloc_fd(file.clone());
-}
-
 fn run_process() -> ! {
 	// let stat = Task::new_kernel(show_page_stat as usize, 0).expect("OOM");
-	// TASK_QUEUE.lock().push_back(stat);
-	// let dma_test = Task::new_kernel(test_threads::run_dma_test as usize, 0).expect("OOM");
-	// schedule_last(dma_test);
+	// schedule_last(stat);
+
+	let init = process::get_init_task();
+	schedule_last(init);
 
 	let worker = Task::new_kernel(slow_worker as usize, 0).expect("OOM");
-	let mut init = process::get_init_task();
-	open_default_fd(&mut init);
-
-	schedule_last(init);
 	schedule_last(worker);
 
 	idle();
 }
 
+fn show_page_stat() {
+	let pages = get_available_pages();
+	printk!(
+		"\rAVAILABLE PAGES: {} ({} MB)",
+		pages,
+		pages * PAGE_SIZE / MB
+	);
+}
+
 fn idle() -> ! {
 	kthread_init();
-
 	loop {
 		yield_now();
 	}
@@ -167,7 +148,7 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	mm::alloc::phys::init();
 	mm::alloc::virt::init();
 
-	driver::console::console_manager::init();
+	driver::terminal::init();
 	driver::bus::pci::enumerate();
 
 	acpi::init();
@@ -178,7 +159,11 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 
 	unsafe { x86::init() };
 	fs::init().expect("failed to mount /");
+
 	process::init();
+	devfs::init().expect("failed to mount /dev");
+
+	scheduler::work::init().expect("worker thread init");
 
 	RUN_TIME.store(true, Ordering::Relaxed);
 	driver::ide::enable_interrupt();

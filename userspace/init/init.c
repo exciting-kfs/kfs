@@ -1,6 +1,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include "fcntl.h"
 #include "kfs/ft.h"
 
 const char *tests[] = {
@@ -37,6 +38,9 @@ void waitpid_verbose(pid_t pid, const char *test_name) {
 }
 
 int main(void) {
+	open("/dev/tty1", O_RDWR);
+	open("/dev/tty1", O_RDWR);
+	open("/dev/tty1", O_RDWR);
 
 	for (const char **p = tests; *p; p++) {
 		int pid = fork();

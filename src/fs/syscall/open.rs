@@ -45,7 +45,7 @@ fn lookup_or_create(
 	}
 }
 
-pub fn sys_open2(path: usize, flags: i32, perm: u32) -> Result<usize, Errno> {
+pub fn sys_open(path: usize, flags: i32, perm: u32) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_ref() };
 
 	let access_flags = AccessFlag::from_bits_truncate(flags);
@@ -87,5 +87,5 @@ pub fn sys_creat(path: usize, perm: u32) -> Result<usize, Errno> {
 	let flags =
 		CreationFlag::O_CREAT.bits() | CreationFlag::O_TRUNC.bits() | AccessFlag::O_RDONLY.bits();
 
-	sys_open2(path, flags, perm)
+	sys_open(path, flags, perm)
 }

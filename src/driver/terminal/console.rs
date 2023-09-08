@@ -21,18 +21,13 @@
 //! 	- CSI N m: alter character display properties. (see console/ascii)
 //! 	- CSI N ~: pc style extra keys. (see driver/tty)
 
-use alloc::sync::Arc;
-use alloc::vec::Vec;
-
 use super::ascii::{constants::*, Ascii, AsciiParser};
 use super::cursor::Cursor;
 
 use crate::collection::WrapQueue;
 use crate::driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
-use crate::io::{BlkWrite, ChWrite, NoSpace};
-
 use crate::driver::vga::text_vga::{HEIGHT as WINDOW_HEIGHT, WIDTH as WINDOW_WIDTH, WINDOW_SIZE};
-use crate::sync::locked::Locked;
+use crate::io::{BlkWrite, ChWrite, NoSpace};
 
 pub const BUFFER_HEIGHT: usize = WINDOW_HEIGHT * 4;
 pub const BUFFER_WIDTH: usize = WINDOW_WIDTH;
@@ -331,8 +326,3 @@ impl ChWrite<u8> for Console {
 }
 
 impl BlkWrite for Console {}
-
-pub type SyncConsole = Arc<Locked<Console>>;
-pub static mut CONSOLE_ARRAY: Vec<SyncConsole> = Vec::new();
-
-pub fn init() {}

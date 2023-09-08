@@ -22,7 +22,7 @@ pub use getdents::sys_getdents;
 pub use lseek::sys_lseek;
 pub use mkdir::sys_mkdir;
 pub use mount::{sys_mount, sys_umount};
-pub use open::{sys_creat, sys_open2};
+pub use open::{sys_creat, sys_open};
 pub use read::sys_read;
 pub use stat::{sys_fstat, sys_stat};
 pub use truncate::sys_truncate;

@@ -8,13 +8,8 @@ pub mod wait;
 
 use core::mem::transmute;
 
-use alloc::boxed::Box;
-use alloc::sync::Arc;
-
 use crate::driver::pipe::sys_pipe;
-use crate::driver::tty;
 use crate::fs::syscall::*;
-use crate::fs::vfs::{AccessFlag, IOFlag, VfsFileHandle, VfsHandle};
 use crate::interrupt::InterruptFrame;
 
 use crate::mm::user::mmap::sys_mmap;
@@ -84,7 +79,7 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 			// pr_debug!("syscall: write");
 			sys_write(frame.ebx as isize, frame.ecx, frame.edx)
 		}
-		5 => sys_open(),
+		5 => sys_open(frame.ebx, frame.ecx as i32, frame.edx as u32),
 		6 => sys_close(frame.ebx as isize),
 		7 => sys_waitpid(frame.ebx as isize, frame.ecx as *mut isize, frame.edx),
 		8 => sys_creat(frame.ebx, frame.ecx as u32),
@@ -145,7 +140,6 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 		212 => sys_chown(frame.ebx, frame.ecx, frame.edx),
 		213 => sys_setuid(frame.ebx),
 		214 => sys_setgid(frame.ebx),
-		999 => sys_open2(frame.ebx, frame.ecx as i32, frame.edx as u32),
 		_ => {
 			pr_info!("syscall: the syscall {} is unsupported.", frame.eax);
 			Ok(0)
@@ -169,27 +163,27 @@ pub fn restore_syscall_return(result: isize) -> Result<usize, Errno> {
 }
 
 // FIXME Rough implementation for test.
-pub fn sys_open() -> Result<usize, Errno> {
-	let ext = unsafe { CURRENT.get_mut() }.user_ext_ok_or(Errno::EPERM)?;
-	let tty = tty::alloc().ok_or(Errno::UnknownErrno)?;
-	let sess = &ext.lock_relation().get_session();
+// pub fn sys_open() -> Result<usize, Errno> {
+// 	let ext = unsafe { CURRENT.get_mut() }.user_ext_ok_or(Errno::EPERM)?;
+// 	let tty = tty::alloc().ok_or(Errno::UnknownErrno)?;
+// 	let sess = &ext.lock_relation().get_session();
 
-	// TODO Atomic
-	tty.lock_tty().connect(Arc::downgrade(sess));
-	sess.lock().set_ctty(tty.clone());
+// 	// TODO Atomic
+// 	tty.lock_tty().connect(Arc::downgrade(sess));
+// 	sess.lock().set_ctty(tty.clone());
 
-	let mut fd_table = ext.lock_fd_table();
+// 	let mut fd_table = ext.lock_fd_table();
 
-	let handle = VfsHandle::File(Arc::new(VfsFileHandle::new(
-		None,
-		Box::new(tty),
-		IOFlag::empty(),
-		AccessFlag::O_RDWR,
-	)));
+// 	let handle = VfsHandle::File(Arc::new(VfsFileHandle::new(
+// 		None,
+// 		Box::new(tty),
+// 		IOFlag::empty(),
+// 		AccessFlag::O_RDWR,
+// 	)));
 
-	let _ = fd_table.alloc_fd(handle.clone()).ok_or(Errno::ENFILE)?;
+// 	let _ = fd_table.alloc_fd(handle.clone()).ok_or(Errno::ENFILE)?;
 
-	let fd = fd_table.alloc_fd(handle.clone()).ok_or(Errno::ENFILE)?;
+// 	let fd = fd_table.alloc_fd(handle.clone()).ok_or(Errno::ENFILE)?;
 
-	Ok(fd.index())
-}
+// 	Ok(fd.index())
+// }
