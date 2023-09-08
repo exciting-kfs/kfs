@@ -12,8 +12,8 @@ use crate::{
 use super::{
 	tmpfs::{TmpDir, TmpSb},
 	vfs::{
-		DirHandle, DirInode, FileHandle, FileInode, FileSystem, Ident, Permission, RawStat,
-		VfsInode, ROOT_DIR_ENTRY,
+		DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident, Permission, RawStat,
+		VfsInode, Whence, ROOT_DIR_ENTRY,
 	},
 };
 
@@ -52,6 +52,14 @@ pub fn init() -> Result<(), Errno> {
 			.devices
 			.insert(ident, Arc::new(DevTTYFile::new(get_tty(i).unwrap())));
 	}
+
+	dev_root_dir
+		.devices
+		.insert(Ident::new(b"null"), Arc::new(DevNull));
+
+	dev_root_dir
+		.devices
+		.insert(Ident::new(b"zero"), Arc::new(DevZero));
 
 	unsafe { DEVFS_ROOT_DIR.write(Arc::new(dev_root_dir)) };
 
@@ -167,5 +175,93 @@ impl FileInode for DevTTYFile {
 
 	fn truncate(&self, _length: isize) -> Result<(), Errno> {
 		Err(Errno::EPERM)
+	}
+}
+
+struct DevNull;
+
+impl FileInode for DevNull {
+	fn open(&self) -> Box<dyn FileHandle> {
+		Box::new(DevNull)
+	}
+
+	fn stat(&self) -> Result<RawStat, Errno> {
+		Ok(RawStat {
+			perm: 0o666,
+			uid: 0,
+			gid: 0,
+			size: 0,
+		})
+	}
+
+	fn chown(&self, _owner: usize, _group: usize) -> Result<(), Errno> {
+		Err(Errno::EPERM)
+	}
+
+	fn chmod(&self, _perm: Permission) -> Result<(), Errno> {
+		Err(Errno::EPERM)
+	}
+
+	fn truncate(&self, _length: isize) -> Result<(), Errno> {
+		Err(Errno::EPERM)
+	}
+}
+
+impl FileHandle for DevNull {
+	fn read(&self, _buf: &mut [u8], _flags: IOFlag) -> Result<usize, Errno> {
+		Ok(0)
+	}
+
+	fn write(&self, buf: &[u8], _flags: IOFlag) -> Result<usize, Errno> {
+		Ok(buf.len())
+	}
+
+	fn lseek(&self, _offset: isize, _whence: Whence) -> Result<usize, Errno> {
+		Ok(0)
+	}
+}
+
+struct DevZero;
+
+impl FileInode for DevZero {
+	fn open(&self) -> Box<dyn FileHandle> {
+		Box::new(DevZero)
+	}
+
+	fn stat(&self) -> Result<RawStat, Errno> {
+		Ok(RawStat {
+			perm: 0o666,
+			uid: 0,
+			gid: 0,
+			size: 0,
+		})
+	}
+
+	fn chown(&self, _owner: usize, _groupp: usize) -> Result<(), Errno> {
+		Err(Errno::EPERM)
+	}
+
+	fn chmod(&self, _perm: Permission) -> Result<(), Errno> {
+		Err(Errno::EPERM)
+	}
+
+	fn truncate(&self, _length: isize) -> Result<(), Errno> {
+		Err(Errno::EPERM)
+	}
+}
+
+impl FileHandle for DevZero {
+	fn read(&self, buf: &mut [u8], _flags: IOFlag) -> Result<usize, Errno> {
+		buf.fill(0);
+
+		Ok(buf.len())
+	}
+
+	fn write(&self, buf: &[u8], _flags: IOFlag) -> Result<usize, Errno> {
+		Ok(buf.len())
+	}
+
+	fn lseek(&self, _offset: isize, _whence: Whence) -> Result<usize, Errno> {
+		Ok(0)
 	}
 }
