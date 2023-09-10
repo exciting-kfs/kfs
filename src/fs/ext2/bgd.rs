@@ -76,26 +76,4 @@ impl BGDT {
 		}
 		None
 	}
-
-	// pub fn find_for_free_inode(&mut self) -> Option<&mut BGD> {
-	// 	for chunk in self.0.iter_mut() {
-	// 		for bgd in chunk.iter_mut() {
-	// 			if bgd.free_inodes_count != 0 {
-	// 				return Some(bgd);
-	// 			}
-	// 		}
-	// 	}
-	// 	None
-	// }
-
-	// pub fn find_for_free_block(&mut self) -> Option<&mut BGD> {
-	// 	for chunk in self.0.iter_mut() {
-	// 		for bgd in chunk.iter_mut() {
-	// 			if bgd.free_blocks_count != 0 {
-	// 				return Some(bgd);
-	// 			}
-	// 		}
-	// 	}
-	// 	None
-	// }
 }
