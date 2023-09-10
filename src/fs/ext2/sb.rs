@@ -19,8 +19,8 @@ use crate::{
 	fs::vfs,
 	process::task::CURRENT,
 	sync::{
-		lock_rw::LockRW,
-		locked::{Locked, LockedGuard},
+		lock_rw::{LockRW, ReadLockGuard},
+		locked::Locked,
 	},
 	write_field,
 };
@@ -40,7 +40,7 @@ pub enum Error {
 
 pub struct SuperBlock {
 	pub ide_id: IdeId,
-	pub entry: LockedGuard<'static, MaybeEntry>,
+	pub entry: ReadLockGuard<'static, MaybeEntry>,
 	pub info: LockRW<SuperBlockInfo>,
 	pub bgd_table: LockRW<BGDT>,
 	pub inode_cache: Locked<BTreeMap<Inum, Arc<LockRW<Inode>>>>,

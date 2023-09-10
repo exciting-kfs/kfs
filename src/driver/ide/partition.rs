@@ -11,7 +11,7 @@ use alloc::boxed::Box;
 
 use crate::{
 	mm::{constant::SECTOR_SIZE, util::next_align},
-	sync::locked::{Locked, LockedGuard},
+	sync::lock_rw::{LockRW, ReadLockGuard},
 };
 
 use self::entry::{EntryIndex, MaybeEntry};
@@ -26,25 +26,25 @@ pub const NR_PRIMARY: usize = 4;
 
 // TODO logical partition?
 #[derive(Debug)]
-struct PartitionTable([Locked<MaybeEntry>; NR_PRIMARY]);
+struct PartitionTable([LockRW<MaybeEntry>; NR_PRIMARY]);
 
 impl PartitionTable {
 	const fn empty() -> Self {
 		Self([
-			Locked::new(MaybeEntry::empty()),
-			Locked::new(MaybeEntry::empty()),
-			Locked::new(MaybeEntry::empty()),
-			Locked::new(MaybeEntry::empty()),
+			LockRW::new(MaybeEntry::empty()),
+			LockRW::new(MaybeEntry::empty()),
+			LockRW::new(MaybeEntry::empty()),
+			LockRW::new(MaybeEntry::empty()),
 		])
 	}
 
 	fn new(entries: [MaybeEntry; 4]) -> Self {
-		Self(array::from_fn(|i| Locked::new(entries[i].clone())))
+		Self(array::from_fn(|i| LockRW::new(entries[i].clone())))
 	}
 }
 
 impl Deref for PartitionTable {
-	type Target = [Locked<MaybeEntry>; 4];
+	type Target = [LockRW<MaybeEntry>; 4];
 	fn deref(&self) -> &Self::Target {
 		&self.0
 	}
@@ -106,8 +106,8 @@ pub fn byte_to_sector_count(byte: usize) -> usize {
 }
 
 // TODO hda1 => a: minor, 1: entry index
-pub fn get_partition_entry<'a>(id: IdeId, ei: EntryIndex) -> LockedGuard<'a, MaybeEntry> {
-	unsafe { PART_TABLE[id.index()][ei.index()].lock() }
+pub fn get_partition_entry<'a>(id: IdeId, ei: EntryIndex) -> ReadLockGuard<'a, MaybeEntry> {
+	unsafe { PART_TABLE[id.index()][ei.index()].read_lock() }
 }
 
 /// From fdisk & [Partition Type](https://en.wikipedia.org/wiki/Partition_type)
