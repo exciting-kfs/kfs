@@ -56,7 +56,7 @@ impl LockRW<Inode> {
 	pub fn downcast_file(self: Arc<Self>) -> Result<FileInode, CastError> {
 		let inode = self.read_lock();
 
-		match inode.info.mode {
+		match inode.info.mode & 0xf000 {
 			0x4000 => Err(CastError::NotDir),
 			_ => {
 				drop(inode);

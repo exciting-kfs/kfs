@@ -1,6 +1,7 @@
 use core::{
 	alloc::AllocError,
 	fmt::{Debug, Display},
+	mem::size_of,
 };
 
 use alloc::{boxed::Box, collections::BTreeMap, sync::Arc};
@@ -310,7 +311,7 @@ impl BitMap {
 	}
 
 	pub fn find_free_space(&mut self) -> Option<usize> {
-		let bitmap = unsafe { self.inner.as_slice(self.inner.size()) };
+		let bitmap = unsafe { self.inner.as_slice(self.inner.size() / size_of::<usize>()) };
 
 		for (i, x) in bitmap.iter().enumerate() {
 			let x = *x;
@@ -323,7 +324,7 @@ impl BitMap {
 	}
 
 	fn toggle_bitmap(&mut self, idx: usize) {
-		let bitmap = unsafe { self.inner.as_slice(self.inner.size()) };
+		let bitmap = unsafe { self.inner.as_slice(self.inner.size() / size_of::<usize>()) };
 
 		let idx_h = idx / usize::BITS as usize;
 		let idx_l = idx % usize::BITS as usize;
