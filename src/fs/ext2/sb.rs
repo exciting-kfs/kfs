@@ -1,7 +1,6 @@
 use core::{
 	alloc::AllocError,
 	fmt::{Debug, Display},
-	mem::size_of,
 };
 
 use alloc::{boxed::Box, collections::BTreeMap, sync::Arc};
@@ -296,44 +295,5 @@ impl Display for SuperBlockInfo {
 		write_field!(f, self, prealloc_dir_blocks)?;
 
 		Ok(())
-	}
-}
-
-struct BitMap {
-	inner: Block<[usize]>,
-}
-
-impl BitMap {
-	pub fn new(block: Block) -> Self {
-		BitMap {
-			inner: block.into(),
-		}
-	}
-
-	pub fn find_free_space(&mut self) -> Option<usize> {
-		let bitmap = unsafe { self.inner.as_slice(self.inner.size() / size_of::<usize>()) };
-
-		for (i, x) in bitmap.iter().enumerate() {
-			let x = *x;
-			if x != usize::MAX {
-				return Some(i * 32 + x.trailing_ones() as usize);
-			}
-		}
-
-		None
-	}
-
-	fn toggle_bitmap(&mut self, idx: usize) {
-		let bitmap = unsafe { self.inner.as_slice(self.inner.size() / size_of::<usize>()) };
-
-		let idx_h = idx / usize::BITS as usize;
-		let idx_l = idx % usize::BITS as usize;
-
-		bitmap[idx_h] ^= 1 << idx_l;
-	}
-
-	fn into_block(self) -> Block {
-		let Self { inner } = self;
-		inner.into()
 	}
 }
