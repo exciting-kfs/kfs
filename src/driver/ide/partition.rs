@@ -44,7 +44,7 @@ impl PartitionTable {
 }
 
 impl Deref for PartitionTable {
-	type Target = [LockRW<MaybeEntry>; 4];
+	type Target = [LockRW<MaybeEntry>; NR_PRIMARY];
 	fn deref(&self) -> &Self::Target {
 		&self.0
 	}
@@ -67,7 +67,7 @@ const BOOT_SECTOR_MAGIC: u16 = 0xaa55;
 const BOOT_SECTOR_OFFSET: usize = 0x1fe / 2;
 const PART_TABLE_OFFSET: usize = 0x1be / 2;
 
-fn read_partition_table(dev: IdeId) -> Option<[MaybeEntry; 4]> {
+fn read_partition_table(dev: IdeId) -> Option<[MaybeEntry; NR_PRIMARY]> {
 	let ide = get_ide_controller(dev);
 
 	let mut sector = Box::new_uninit_slice(1);
@@ -80,7 +80,7 @@ fn read_partition_table(dev: IdeId) -> Option<[MaybeEntry; 4]> {
 		return None;
 	}
 
-	let mut part_table: MaybeUninit<[MaybeEntry; 4]> = MaybeUninit::uninit();
+	let mut part_table: MaybeUninit<[MaybeEntry; NR_PRIMARY]> = MaybeUninit::uninit();
 	unsafe {
 		part_table
 			.as_mut_ptr()
