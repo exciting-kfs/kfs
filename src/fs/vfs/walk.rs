@@ -90,9 +90,9 @@ pub fn lookup_entry_at_follow(
 pub fn lookup_entry_follow(path: &Path, task: &Arc<Task>) -> Result<VfsRealEntry, Errno> {
 	let cwd = task
 		.get_user_ext()
-		.expect("must be user process")
-		.lock_cwd()
-		.clone();
+		.ok_or(Errno::ENOENT)
+		.map(|ext| ext.lock_cwd().clone())
+		.unwrap_or_else(|_| ROOT_DIR_ENTRY.lock().clone().unwrap());
 
 	lookup_entry_at_follow(cwd, path, task)
 }
@@ -108,9 +108,9 @@ pub fn lookup_entry_at_nofollow(
 pub fn lookup_entry_nofollow(path: &Path, task: &Arc<Task>) -> Result<VfsEntry, Errno> {
 	let cwd = task
 		.get_user_ext()
-		.expect("must be user process")
-		.lock_cwd()
-		.clone();
+		.ok_or(Errno::ENOENT)
+		.map(|ext| ext.lock_cwd().clone())
+		.unwrap_or_else(|_| ROOT_DIR_ENTRY.lock().clone().unwrap());
 
 	lookup_entry_at_nofollow(cwd, path, task)
 }
@@ -126,9 +126,9 @@ pub fn lookup_entry_at_follow_except_last(
 pub fn lookup_entry_follow_except_last(path: &Path, task: &Arc<Task>) -> Result<VfsEntry, Errno> {
 	let cwd = task
 		.get_user_ext()
-		.expect("must be user process")
-		.lock_cwd()
-		.clone();
+		.ok_or(Errno::ENOENT)
+		.map(|ext| ext.lock_cwd().clone())
+		.unwrap_or_else(|_| ROOT_DIR_ENTRY.lock().clone().unwrap());
 
 	lookup_entry_at_follow_except_last(cwd, path, task)
 }

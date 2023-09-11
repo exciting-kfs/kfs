@@ -5,6 +5,7 @@ use alloc::sync::Arc;
 
 use crate::config::{USER_CODE_BASE, USTACK_BASE, USTACK_PAGES};
 use crate::fs::vfs::{VfsDirEntry, ROOT_DIR_ENTRY};
+use crate::fs::{create_task_node, delete_task_node};
 use crate::interrupt::InterruptFrame;
 use crate::mm::user::memory::Memory;
 use crate::process::relation::family::zombie::Zombie;
@@ -123,7 +124,11 @@ impl Task {
 		let pid = Pid::allocate();
 		let kstack = Stack::new_kernel(routine, arg)?;
 
-		Ok(Self::new_kernel_from_raw(pid, kstack))
+		let task = Self::new_kernel_from_raw(pid, kstack);
+
+		let _ = create_task_node(&task);
+
+		Ok(task)
 	}
 
 	pub(super) fn new_kernel_from_raw(pid: Pid, kstack: Stack) -> Arc<Self> {
@@ -193,6 +198,8 @@ impl Task {
 		let mut ptree = PROCESS_TREE.lock();
 		ptree.insert(new_task.clone());
 
+		let _ = create_task_node(&new_task);
+
 		Ok(new_task)
 	}
 
@@ -257,8 +264,9 @@ impl Task {
 	}
 
 	pub fn exit(&self, status: ExitStatus) {
-		let mut state = self.lock_state();
+		let _ = delete_task_node(self.get_pid());
 
+		let mut state = self.lock_state();
 		PROCESS_TREE.lock().remove(&self.pid);
 
 		if let Some(ref ext) = self.user_ext {

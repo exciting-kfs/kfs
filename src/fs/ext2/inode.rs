@@ -85,7 +85,7 @@ impl vfs::DirInode for DirInode {
 		todo!()
 	}
 
-	fn lookup(&self, name: &[u8]) -> Result<(vfs::CachePolicy, vfs::VfsInode), Errno> {
+	fn lookup(&self, name: &[u8]) -> Result<vfs::VfsInode, Errno> {
 		todo!()
 	}
 

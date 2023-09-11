@@ -1,8 +1,8 @@
 use alloc::{boxed::Box, sync::Arc};
 
-use crate::syscall::errno::Errno;
+use crate::{fs::path::Path, syscall::errno::Errno};
 
-use super::{AccessFlag, IOFlag, VfsDirEntry, VfsFileEntry};
+use super::{AccessFlag, IOFlag, VfsDirEntry, VfsEntry, VfsFileEntry};
 
 #[derive(Clone)]
 pub enum VfsHandle {
@@ -41,6 +41,20 @@ impl VfsHandle {
 			File(f) => f.lseek(offset, whence),
 			Dir(_) => Err(Errno::EISDIR),
 		}
+	}
+
+	fn as_entry(&self) -> Option<VfsEntry> {
+		use VfsHandle::*;
+		match self {
+			File(f) => f.entry.clone().map(|ent| VfsEntry::new_file(ent)),
+			Dir(d) => d.entry.clone().map(|ent| VfsEntry::new_dir(ent)),
+		}
+	}
+
+	pub fn get_abs_path(&self) -> Result<Path, Errno> {
+		let ent = self.as_entry().ok_or(Errno::EPIPE)?;
+
+		ent.get_abs_path()
 	}
 }
 

@@ -7,11 +7,16 @@ use alloc::{
 	vec::Vec,
 };
 
-use crate::{fs::path::Path, process::task::Task, sync::locked::Locked, syscall::errno::Errno};
+use crate::{
+	fs::path::Path,
+	process::{get_idle_task, task::Task},
+	sync::locked::Locked,
+	syscall::errno::Errno,
+};
 
 use super::{
-	AccessFlag, CachePolicy, DirInode, FileInode, IOFlag, Permission, RawStat, SuperBlock,
-	SymLinkInode, VfsDirHandle, VfsFileHandle, VfsHandle, VfsInode, ROOT_DIR_ENTRY,
+	AccessFlag, DirInode, FileInode, IOFlag, Permission, RawStat, SuperBlock, SymLinkInode,
+	VfsDirHandle, VfsFileHandle, VfsHandle, VfsInode, ROOT_DIR_ENTRY,
 };
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -20,6 +25,10 @@ pub struct Ident(pub Rc<Vec<u8>>);
 impl Ident {
 	pub fn new(name: &[u8]) -> Self {
 		Ident(Rc::new(name.to_vec()))
+	}
+
+	pub fn to_vec(&self) -> Vec<u8> {
+		self.0.to_vec()
 	}
 }
 
@@ -71,6 +80,14 @@ impl VfsEntry {
 		match self {
 			Real(r) => r.parent_dir(task),
 			SymLink(s) => s.parent_dir(task),
+		}
+	}
+
+	pub fn get_abs_path(&self) -> Result<Path, Errno> {
+		use VfsEntry::*;
+		match self {
+			Real(r) => r.get_abs_path(),
+			SymLink(s) => s.get_abs_path(),
 		}
 	}
 
@@ -168,6 +185,14 @@ impl VfsRealEntry {
 		}
 	}
 
+	pub fn get_abs_path(&self) -> Result<Path, Errno> {
+		use VfsRealEntry::*;
+		match self {
+			File(f) => f.get_abs_path(),
+			Dir(d) => d.get_abs_path(),
+		}
+	}
+
 	pub fn downcast_dir(self) -> Result<Arc<VfsDirEntry>, Errno> {
 		use VfsRealEntry::*;
 		match self {
@@ -223,6 +248,25 @@ impl VfsSymLinkEntry {
 
 	pub fn get_name(&self) -> Ident {
 		Ident(self.name.clone())
+	}
+
+	pub fn get_abs_path(&self) -> Result<Path, Errno> {
+		let task = &get_idle_task();
+
+		let mut path = Path::new_root();
+
+		let name = self.get_name();
+		path.push_component_front(name.to_vec());
+
+		let mut curr = self.parent_dir(task)?;
+		let mut next = curr.parent_dir(task)?;
+		while !Arc::ptr_eq(&curr, &next) {
+			path.push_component_front(curr.get_name().to_vec());
+			curr = next;
+			next = curr.parent_dir(task)?;
+		}
+
+		Ok(path)
 	}
 }
 
@@ -304,6 +348,23 @@ impl VfsFileEntry {
 		))
 	}
 
+	pub fn get_abs_path(&self) -> Result<Path, Errno> {
+		let task = &get_idle_task();
+
+		let mut path = Path::new_root();
+		path.push_component_front(self.get_name().to_vec());
+
+		let mut curr = self.parent_dir(task)?;
+		let mut next = curr.parent_dir(task)?;
+		while !Arc::ptr_eq(&curr, &next) {
+			path.push_component_front(curr.get_name().to_vec());
+			curr = next;
+			next = curr.parent_dir(task)?;
+		}
+
+		Ok(path)
+	}
+
 	pub fn truncate(&self, len: isize, task: &Arc<Task>) -> Result<(), Errno> {
 		self.access(Permission::ANY_WRITE, task)?;
 
@@ -316,6 +377,7 @@ pub struct VfsDirEntry {
 	inode: Arc<dyn DirInode>,
 	parent: Weak<VfsDirEntry>,
 	sub_tree: Locked<BTreeMap<Ident, VfsEntry>>,
+	sub_mount: Locked<BTreeMap<Ident, VfsEntry>>,
 	next_mount: Option<Arc<VfsDirEntry>>,
 	super_block: Arc<dyn SuperBlock>,
 	is_mount_point: bool,
@@ -334,6 +396,7 @@ impl VfsDirEntry {
 			inode,
 			parent,
 			sub_tree: Locked::default(),
+			sub_mount: Locked::default(),
 			super_block,
 			next_mount: None,
 			is_mount_point,
@@ -392,6 +455,23 @@ impl VfsDirEntry {
 		))
 	}
 
+	pub fn get_abs_path(&self) -> Result<Path, Errno> {
+		let task = &get_idle_task();
+
+		let mut path = Path::new_root();
+		path.push_component_front(self.get_name().to_vec());
+
+		let mut curr = self.parent_dir(task)?;
+		let mut next = curr.parent_dir(task)?;
+		while !Arc::ptr_eq(&curr, &next) {
+			path.push_component_front(curr.get_name().to_vec());
+			curr = next;
+			next = curr.parent_dir(task)?;
+		}
+
+		Ok(path)
+	}
+
 	pub fn create(
 		self: &Arc<Self>,
 		name: &[u8],
@@ -402,16 +482,9 @@ impl VfsDirEntry {
 
 		let file_inode = self.inode.create(name, perm)?;
 
-		let file_entry = Arc::new(VfsFileEntry::new(
-			Rc::new(name.to_vec()),
-			file_inode,
-			Arc::downgrade(self),
-			Arc::clone(&self.super_block),
-		));
+		let file_entry = self.insert_child_force(name, VfsInode::File(file_inode));
 
-		// let _ = self.insert_child(VfsEntry::new_file(file_entry.clone()));
-
-		Ok(file_entry)
+		Ok(file_entry.downcast_file().unwrap())
 	}
 
 	pub fn mkdir(
@@ -424,17 +497,9 @@ impl VfsDirEntry {
 
 		let dir_inode = self.inode.mkdir(&name, perm)?;
 
-		let dir_entry = Arc::new(VfsDirEntry::new(
-			Rc::new(name.to_vec()),
-			dir_inode,
-			Arc::downgrade(self),
-			Arc::clone(&self.super_block),
-			false,
-		));
+		let dir_entry = self.insert_child_force(name, VfsInode::Dir(dir_inode));
 
-		// let _ = self.insert_child(VfsEntry::new_dir(dir_entry.clone()));
-
-		Ok(dir_entry)
+		Ok(dir_entry.downcast_dir().unwrap())
 	}
 
 	pub fn unlink(&self, name: &[u8], task: &Arc<Task>) -> Result<(), Errno> {
@@ -442,7 +507,7 @@ impl VfsDirEntry {
 
 		self.inode.unlink(name)?;
 
-		let _ = self.remove_child(name);
+		self.remove_child_force(name);
 
 		Ok(())
 	}
@@ -452,7 +517,7 @@ impl VfsDirEntry {
 
 		self.inode.rmdir(name)?;
 
-		let _ = self.remove_child(name);
+		self.remove_child_force(name);
 
 		Ok(())
 	}
@@ -479,39 +544,16 @@ impl VfsDirEntry {
 		self.inode
 			.access(task.get_uid(), task.get_gid(), Permission::ANY_EXECUTE)?;
 
-		// lookup cached entry
+		if let Some(x) = self.sub_mount.lock().get(name) {
+			return Ok(x.clone());
+		}
+
 		if let Some(x) = self.sub_tree.lock().get(name) {
 			return Ok(x.clone());
 		}
 
-		// slow path. lookup directally
-		let (cache_policy, inode) = self.inode.lookup(name)?;
-
-		let entry = match inode {
-			VfsInode::Dir(inode) => VfsEntry::new_dir(Arc::new(VfsDirEntry::new(
-				Rc::new(name.to_vec()),
-				inode,
-				Arc::downgrade(self),
-				Arc::clone(&self.super_block),
-				false,
-			))),
-			VfsInode::File(inode) => VfsEntry::new_file(Arc::new(VfsFileEntry::new(
-				Rc::new(name.to_vec()),
-				inode,
-				Arc::downgrade(self),
-				Arc::clone(&self.super_block),
-			))),
-			VfsInode::SymLink(inode) => VfsEntry::SymLink(Arc::new(VfsSymLinkEntry::new(
-				Rc::new(name.to_vec()),
-				inode,
-				Arc::downgrade(self),
-				Arc::clone(&self.super_block),
-			))),
-		};
-
-		if let CachePolicy::Always = cache_policy {
-			self.sub_tree.lock().insert(entry.get_name(), entry.clone());
-		}
+		let inode = self.inode.lookup(name)?;
+		let entry = self.insert_child_force(name, inode);
 
 		Ok(entry)
 	}
@@ -537,9 +579,9 @@ impl VfsDirEntry {
 			self
 		});
 
-		let mut sub_tree = parent.sub_tree.lock();
-		sub_tree.remove::<[u8]>(new_dentry.get_name().borrow());
-		sub_tree.insert(new_dentry.get_name(), VfsEntry::new_dir(new_dentry.clone()));
+		let mut sub_mount = parent.sub_mount.lock();
+		sub_mount.remove::<[u8]>(new_dentry.get_name().borrow());
+		sub_mount.insert(new_dentry.get_name(), VfsEntry::new_dir(new_dentry.clone()));
 	}
 
 	pub fn mount(
@@ -558,6 +600,7 @@ impl VfsDirEntry {
 			inode,
 			parent: Weak::default(),
 			sub_tree: Locked::default(),
+			sub_mount: Locked::default(),
 			next_mount: Some(self.clone()),
 			super_block,
 			is_mount_point: true,
@@ -576,9 +619,9 @@ impl VfsDirEntry {
 	}
 
 	fn do_sub_unmount(successor: Arc<Self>, parent: Arc<Self>) {
-		let mut sub_tree = parent.sub_tree.lock();
-		sub_tree.remove::<[u8]>(successor.get_name().borrow());
-		sub_tree.insert(successor.get_name(), VfsEntry::new_dir(successor.clone()));
+		let mut sub_mount = parent.sub_mount.lock();
+		sub_mount.remove::<[u8]>(successor.get_name().borrow());
+		sub_mount.insert(successor.get_name(), VfsEntry::new_dir(successor.clone()));
 	}
 
 	pub fn unmount(self: Arc<Self>, task: &Arc<Task>) -> Result<(), Errno> {
@@ -601,19 +644,37 @@ impl VfsDirEntry {
 		Ok(())
 	}
 
-	fn remove_child(&self, name: &[u8]) -> Result<(), Errno> {
+	pub fn remove_child_force(&self, name: &[u8]) {
 		let mut sub_tree = self.sub_tree.lock();
 
 		sub_tree.remove(name);
-
-		Ok(())
 	}
 
-	fn insert_child(&self, entry: VfsEntry) -> Result<(), Errno> {
-		let mut sub_tree = self.sub_tree.lock();
+	pub fn insert_child_force(self: &Arc<Self>, name: &[u8], inode: VfsInode) -> VfsEntry {
+		let entry = match inode {
+			VfsInode::Dir(inode) => VfsEntry::new_dir(Arc::new(VfsDirEntry::new(
+				Rc::new(name.to_vec()),
+				inode,
+				Arc::downgrade(self),
+				Arc::clone(&self.super_block),
+				false,
+			))),
+			VfsInode::File(inode) => VfsEntry::new_file(Arc::new(VfsFileEntry::new(
+				Rc::new(name.to_vec()),
+				inode,
+				Arc::downgrade(self),
+				Arc::clone(&self.super_block),
+			))),
+			VfsInode::SymLink(inode) => VfsEntry::SymLink(Arc::new(VfsSymLinkEntry::new(
+				Rc::new(name.to_vec()),
+				inode,
+				Arc::downgrade(self),
+				Arc::clone(&self.super_block),
+			))),
+		};
 
-		sub_tree.insert(entry.get_name(), entry);
+		self.sub_tree.lock().insert(entry.get_name(), entry.clone());
 
-		Ok(())
+		entry
 	}
 }

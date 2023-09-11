@@ -3,21 +3,28 @@ pub mod path;
 pub mod syscall;
 pub mod vfs;
 
-pub mod devfs;
+mod devfs;
+mod procfs;
 mod tmpfs;
+
+use alloc::{rc::Rc, sync::Arc, vec::Vec};
 
 use crate::driver::dev_num::DevNum;
 use crate::driver::ide::device_number;
 use crate::driver::ide::ide_id::{IdeId, NR_IDE_DEV};
 use crate::driver::ide::partition::entry::{EntryIndex, PartitionEntry};
 use crate::driver::ide::partition::{get_partition_entry, PartitionType, NR_PRIMARY};
+
 use crate::fs::vfs::FileSystem;
 use crate::syscall::errno::Errno;
-use alloc::{rc::Rc, sync::Arc, vec::Vec};
-use tmpfs::TmpFs;
 
-use self::ext2::Ext2;
-use self::vfs::{DirInode, PhysicalFileSystem, SuperBlock, VfsDirEntry, ROOT_DIR_ENTRY};
+use ext2::Ext2;
+use tmpfs::TmpFs;
+use vfs::{DirInode, PhysicalFileSystem, SuperBlock, VfsDirEntry, ROOT_DIR_ENTRY};
+
+pub use devfs::init as init_devfs;
+pub use procfs::init as init_procfs;
+pub use procfs::{change_cwd, create_fd_node, create_task_node, delete_fd_node, delete_task_node};
 
 pub fn init() -> Result<(), Errno> {
 	read_ide_dev();

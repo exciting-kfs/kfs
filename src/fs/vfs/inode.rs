@@ -161,7 +161,7 @@ pub trait DirInode {
 
 		Ok(())
 	}
-	fn lookup(&self, name: &[u8]) -> Result<(CachePolicy, VfsInode), Errno>;
+	fn lookup(&self, name: &[u8]) -> Result<VfsInode, Errno>;
 	fn mkdir(&self, name: &[u8], perm: Permission) -> Result<Arc<dyn DirInode>, Errno>;
 	fn rmdir(&self, name: &[u8]) -> Result<(), Errno>;
 	fn create(&self, name: &[u8], perm: Permission) -> Result<Arc<dyn FileInode>, Errno>;
