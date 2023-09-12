@@ -1,18 +1,32 @@
+use crate::driver::dev_num::DevNum;
+
+pub const IDE_MAJOR: usize = 3;
+pub const IDE_MINOR_END: usize = 64;
+pub const NR_IDE_DEV: usize = 4;
+
 #[derive(Clone, Copy, Debug)]
 #[repr(transparent)]
-pub struct DevNum(usize);
+pub struct IdeId(usize);
 
-impl DevNum {
+impl IdeId {
 	pub const fn new(num: usize) -> Option<Self> {
 		if num < 4 {
-			Some(DevNum(num))
+			Some(IdeId(num))
 		} else {
 			None
 		}
 	}
 
 	pub const unsafe fn new_unchecked(num: usize) -> Self {
-		DevNum(num)
+		IdeId(num)
+	}
+
+	pub fn from_devnum(dev: &DevNum) -> Option<Self> {
+		if dev.major == IDE_MAJOR && dev.minor % IDE_MINOR_END != 0 {
+			Self::new(dev.minor / IDE_MINOR_END)
+		} else {
+			None
+		}
 	}
 
 	#[inline]
@@ -40,7 +54,7 @@ impl DevNum {
 		self.0 % 2 == 1
 	}
 
-	pub fn pair(&self) -> DevNum {
-		DevNum(self.0 ^ 0x01)
+	pub fn pair(&self) -> IdeId {
+		IdeId(self.0 ^ 0x01)
 	}
 }

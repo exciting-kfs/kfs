@@ -7,9 +7,9 @@ mod bmide;
 mod prd;
 
 pub mod block;
-pub mod dev_num;
 pub mod dma;
 pub mod handler;
+pub mod ide_id;
 pub mod lba;
 pub mod partition;
 
@@ -30,7 +30,11 @@ use crate::{
 	},
 };
 
-use self::{dev_num::DevNum, prd::PRD};
+use self::{
+	ide_id::{IdeId, IDE_MAJOR, IDE_MINOR_END},
+	partition::entry::EntryIndex,
+	prd::PRD,
+};
 
 use super::{
 	apic::io::{set_irq_mask, IDE_PRIMARY_IRQ, IDE_SECONDARY_IRQ},
@@ -38,6 +42,7 @@ use super::{
 		ata::AtaController,
 		pci::{self, ClassCode},
 	},
+	dev_num::DevNum,
 };
 
 const IDE_CLASS_CODE: ClassCode = ClassCode {
@@ -75,7 +80,7 @@ pub fn init() -> Result<(), pci::Error> {
 
 	// PART TABLE
 	let existed = array::from_fn(|i| {
-		let dev = unsafe { DevNum::new_unchecked(i) };
+		let dev = unsafe { IdeId::new_unchecked(i) };
 		let ide = get_ide_controller(dev);
 		let output = ide.ata.self_diagnosis();
 
@@ -92,7 +97,7 @@ pub fn init() -> Result<(), pci::Error> {
 
 pub fn enable_interrupt() {
 	for i in 0..4 {
-		let ide = get_ide_controller(unsafe { DevNum::new_unchecked(i) });
+		let ide = get_ide_controller(unsafe { IdeId::new_unchecked(i) });
 		ide.ata.set_interrupt(true);
 	}
 
@@ -100,8 +105,8 @@ pub fn enable_interrupt() {
 	set_irq_mask(IDE_SECONDARY_IRQ, false).expect("ide irq");
 }
 
-pub fn get_ide_controller(dev_num: DevNum) -> LockedGuard<'static, IdeController> {
-	let channel = dev_num.channel();
+pub fn get_ide_controller(id: IdeId) -> LockedGuard<'static, IdeController> {
+	let channel = id.channel();
 
 	let mut ide = IDE[channel].lock();
 
@@ -111,23 +116,23 @@ pub fn get_ide_controller(dev_num: DevNum) -> LockedGuard<'static, IdeController
 		ide = IDE[channel].lock();
 	}
 
-	ide.ata.set_device(dev_num);
+	ide.ata.set_device(id);
 
 	ide
 }
 
 pub fn try_get_ide_controller(
-	dev_num: DevNum,
+	id: IdeId,
 	try_count: usize,
 ) -> Result<LockedGuard<'static, IdeController>, TryLockFail> {
-	let channel = dev_num.channel();
+	let channel = id.channel();
 
 	let mut ide = IDE[channel].lock();
 	let mut count = 0;
 
 	while count < try_count {
 		if ide.ata.is_idle() {
-			ide.ata.set_device(dev_num);
+			ide.ata.set_device(id);
 			return Ok(ide);
 		}
 		drop(ide);
@@ -139,11 +144,21 @@ pub fn try_get_ide_controller(
 	Err(TryLockFail)
 }
 
+pub fn device_number(id: IdeId, ei: Option<EntryIndex>) -> DevNum {
+	let minor = id.index() * IDE_MINOR_END
+		+ match ei {
+			None => 0,
+			Some(ei) => ei.index() + 1,
+		};
+
+	DevNum::new(IDE_MAJOR, minor)
+}
+
 pub mod test {
 
 	use crate::driver::ide::{dma::DmaOps, lba::LBA28};
 
-	const DEV_NUM: usize = 1;
+	const IDE_ID: usize = 1;
 
 	use super::*;
 
@@ -179,7 +194,7 @@ pub mod test {
 
 	pub fn test_write_dma() {
 		let page = alloc_pages(0, Zone::High).expect("OOM");
-		let mut ide = get_ide_controller(unsafe { DevNum::new_unchecked(1) });
+		let mut ide = get_ide_controller(unsafe { IdeId::new_unchecked(1) });
 		let bmi = unsafe { ide.bmi.assume_init_mut() };
 		set_prd_table(bmi, page);
 		bmi.set_dma(DmaOps::Write);
@@ -208,7 +223,7 @@ pub mod test {
 
 	pub fn test_read_dma() {
 		let page = alloc_pages(0, Zone::High).expect("OOM");
-		let mut ide = get_ide_controller(unsafe { DevNum::new_unchecked(1) });
+		let mut ide = get_ide_controller(unsafe { IdeId::new_unchecked(1) });
 		let bmi = unsafe { ide.bmi.assume_init_mut() };
 
 		set_prd_table(bmi, page);

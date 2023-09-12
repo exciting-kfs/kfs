@@ -8,7 +8,7 @@ use core::{
 use alloc::{string::String, vec::Vec};
 
 use crate::{
-	driver::ide::{dev_num::DevNum, dma::DmaOps, lba::LBA28},
+	driver::ide::{dma::DmaOps, ide_id::IdeId, lba::LBA28},
 	io::pmio::Port,
 	util::bitrange::{BitData, BitRange},
 };
@@ -71,8 +71,8 @@ impl AtaController {
 		self.control.write_byte((!on as u8) << Self::N_IEN);
 	}
 
-	pub fn set_device(&mut self, dev_num: DevNum) {
-		self.is_2nd_dev = dev_num.index_in_channel() == 1;
+	pub fn set_device(&mut self, id: IdeId) {
+		self.is_2nd_dev = id.index_in_channel() == 1;
 	}
 
 	pub fn interrupt_resolve(&mut self) {

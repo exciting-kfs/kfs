@@ -3,7 +3,7 @@
 set -e
 
 HDD=$1
-HDD_SIZE_MB=64
+HDD_SIZE_MB=512
 
 SECTOR_SIZE=512
 SECTOR_END=$(( $HDD_SIZE_MB * 1024 * 1024 / $SECTOR_SIZE ))
@@ -27,6 +27,6 @@ run
 part-init /dev/sda mbr
 part-add /dev/sda p $PART1_START $PART1_END
 part-add /dev/sda p $PART2_START $PART2_END
-mkfs ext2 /dev/sda1
+mkfs ext2 /dev/sda1 blocksize:1024
 mkfs ext2 /dev/sda2
 EOF

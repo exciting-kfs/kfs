@@ -2,11 +2,13 @@ use alloc::sync::{Arc, Weak};
 
 use crate::{
 	process::{
-		relation::session::Session,
+		process_tree::PROCESS_TREE,
+		relation::{session::Session, Pid},
 		task::{State, Task, CURRENT},
 	},
 	scheduler::{context::yield_now, schedule_last},
 	sync::locked::Locked,
+	syscall::errno::Errno,
 };
 
 pub fn sleep_and_yield(state: State) {
@@ -30,6 +32,13 @@ pub fn wake_up(task: &Arc<Task>, state: State) {
 		drop(state_lock);
 		schedule_last(task.clone());
 	}
+}
+
+pub fn wake_up_pid(pid: Pid, state: State) -> Result<(), Errno> {
+	let tree = PROCESS_TREE.lock();
+	let task = tree.get(&pid).ok_or(Errno::ESRCH)?;
+	wake_up(task, state);
+	Ok(())
 }
 
 pub fn wake_up_foreground(sess: &Weak<Locked<Session>>, state: State) -> Option<()> {
