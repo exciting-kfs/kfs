@@ -26,8 +26,6 @@ qemu-system-i386                                                \
     -device ide-hd,drive=rescue,bus=ide.1,unit=0,bootindex=1    \
     -drive file=$HDD,if=none,format=qcow2,id=hdd                \
     -device ide-hd,drive=hdd,bus=ide.0,unit=0                   \
-    -drive file=hello.txt,if=none,format=raw,id=hello           \
-    -device ide-hd,drive=hello,bus=ide.0,unit=1                 \
     -device isa-debug-exit                                      \
     -action reboot=shutdown                                     \
     -serial $COM1                                               \
