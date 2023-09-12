@@ -2,7 +2,7 @@ use crate::{
 	fs::{
 		path::Path,
 		tmpfs::TmpFs,
-		vfs::{lookup_entry_nofollow, PseudoFileSystem},
+		vfs::{lookup_entry_nofollow, FileSystem},
 	},
 	process::task::CURRENT,
 	syscall::errno::Errno,

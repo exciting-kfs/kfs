@@ -7,8 +7,8 @@ use alloc::{boxed::Box, collections::BTreeMap};
 
 use super::path::Path;
 use super::vfs::{
-	CachePolicy, DirHandle, DirInode, FileHandle, FileInode, IOFlag, Ident, PseudoFileSystem,
-	RawStat, SuperBlock, SymLinkInode, VfsInode, Whence,
+	CachePolicy, DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident, RawStat,
+	SuperBlock, SymLinkInode, VfsInode, Whence,
 };
 use crate::fs::vfs::{KfsDirent, Permission};
 use crate::mm::util::next_align;
@@ -18,7 +18,7 @@ use crate::syscall::errno::Errno;
 
 pub struct TmpFs;
 
-impl PseudoFileSystem<TmpSb, Locked<TmpDirInode>> for TmpFs {
+impl FileSystem<TmpSb, Locked<TmpDirInode>> for TmpFs {
 	fn mount() -> Result<(Arc<TmpSb>, Arc<Locked<TmpDirInode>>), Errno> {
 		Ok((
 			Arc::new(TmpSb),

@@ -95,7 +95,7 @@ impl Ext2 {
 	}
 }
 
-impl vfs::FileSystem<SuperBlock, DirInode> for Ext2 {
+impl vfs::PhysicalFileSystem<SuperBlock, DirInode> for Ext2 {
 	fn mount(info: DevNum) -> Result<(Arc<SuperBlock>, Arc<DirInode>), Errno> {
 		let id = IdeId::from_devnum(&info).ok_or(Errno::EINVAL)?;
 		let ei = EntryIndex::from_devnum(&info).ok_or(Errno::EINVAL)?;

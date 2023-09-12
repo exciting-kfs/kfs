@@ -13,11 +13,11 @@ use crate::driver::dev_num::DevNum;
 use crate::sync::locked::Locked;
 use crate::syscall::errno::Errno;
 
-pub trait PseudoFileSystem<S: SuperBlock, D: DirInode> {
+pub trait FileSystem<S: SuperBlock, D: DirInode> {
 	fn mount() -> Result<(Arc<S>, Arc<D>), Errno>;
 }
 
-pub trait FileSystem<S: SuperBlock, D: DirInode> {
+pub trait PhysicalFileSystem<S: SuperBlock, D: DirInode> {
 	fn mount(info: DevNum) -> Result<(Arc<S>, Arc<D>), Errno>;
 }
 
