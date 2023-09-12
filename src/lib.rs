@@ -45,6 +45,7 @@ use scheduler::schedule_last;
 use scheduler::work::slow_worker;
 use test::{exit_qemu_with, TEST_ARRAY};
 
+use crate::driver::apic::apic_timer::jiffies;
 use crate::driver::ide::dma::test::TEST_SECTOR_COUNT;
 use crate::driver::ide::get_ide_controller;
 use crate::driver::ide::ide_id::IdeId;
@@ -100,13 +101,11 @@ fn run_process() -> ! {
 	idle();
 }
 
-fn show_page_stat() {
-	let pages = get_available_pages();
-	printk!(
-		"\rAVAILABLE PAGES: {} ({} MB)",
-		pages,
-		pages * PAGE_SIZE / MB
-	);
+extern "C" fn show_jiffies(_: usize) {
+	loop {
+		printk!("\rjiffies: {}", jiffies());
+		yield_now();
+	}
 }
 
 fn idle() -> ! {
@@ -152,6 +151,8 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 
 	acpi::init();
 
+	driver::hpet::init().expect("failed to init HPET");
+	driver::apic::local::init_timer();
 	driver::apic::io::init().expect("IO APIC init.");
 	driver::ps2::init().expect("PS/2 controller init.");
 	driver::ide::init().expect("IDE controller init.");

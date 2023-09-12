@@ -1,6 +1,7 @@
 pub mod apic;
 pub mod bus;
 pub mod dev_num;
+pub mod hpet;
 pub mod ide;
 pub mod pipe;
 pub mod ps2;
