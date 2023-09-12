@@ -13,6 +13,7 @@
 #![feature(unboxed_closures)]
 
 extern crate alloc;
+extern crate time;
 
 mod acpi;
 mod boot;
