@@ -110,12 +110,31 @@ pub enum VfsInode {
 	SymLink(Arc<dyn SymLinkInode>),
 }
 
+#[derive(Default)]
+pub struct TimeSpec {
+	seconds: isize,
+	nanoseconds: isize,
+}
+
+impl From<u64> for TimeSpec {
+	fn from(value: u64) -> Self {
+		Self {
+			seconds: (value / 1_000_000_000) as isize,
+			nanoseconds: (value % 1_000_000_000) as isize,
+		}
+	}
+}
+
 #[repr(C)]
 pub struct RawStat {
 	pub perm: u32,
 	pub uid: usize,
 	pub gid: usize,
 	pub size: isize,
+	pub file_type: usize,
+	pub access_time: TimeSpec,
+	pub modify_fime: TimeSpec,
+	pub change_time: TimeSpec,
 }
 
 fn default_access(

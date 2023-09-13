@@ -16,7 +16,7 @@ use crate::{
 
 use super::path::{format_path, Path};
 use super::tmpfs::TmpSb;
-use super::vfs::{lookup_entry_follow, VfsHandle, ROOT_DIR_ENTRY};
+use super::vfs::{lookup_entry_follow, TimeSpec, VfsHandle, ROOT_DIR_ENTRY};
 use super::{
 	tmpfs::{TmpDir, TmpSymLink},
 	vfs::{
@@ -189,6 +189,10 @@ impl DirInode for Locked<ProcFdDirInode> {
 			uid: this.task.get_uid(),
 			gid: this.task.get_gid(),
 			size: 0,
+			file_type: 2,
+			access_time: TimeSpec::default(),
+			modify_fime: TimeSpec::default(),
+			change_time: TimeSpec::default(),
 		})
 	}
 
@@ -275,6 +279,10 @@ impl DirInode for Locked<ProcDirInode> {
 			uid: this.task.get_uid(),
 			gid: this.task.get_gid(),
 			size: 0,
+			file_type: 2,
+			access_time: TimeSpec::default(),
+			modify_fime: TimeSpec::default(),
+			change_time: TimeSpec::default(),
 		})
 	}
 
@@ -368,6 +376,10 @@ impl DirInode for Locked<ProcRootDirInode> {
 			uid: 0,
 			gid: 0,
 			size: 0,
+			file_type: 2,
+			access_time: TimeSpec::default(),
+			modify_fime: TimeSpec::default(),
+			change_time: TimeSpec::default(),
 		})
 	}
 
