@@ -3,16 +3,16 @@ use core::{
 	ptr::{addr_of_mut, NonNull},
 };
 
-use crate::mm::{
-	alloc::virt::AddressSpace,
-	constant::{MB, PAGE_MASK},
-};
 use crate::pr_info;
 use crate::util::{
 	arch::cpuid::CPUID,
 	bitrange::{BitData, BitRange},
 };
 use crate::{config::TIMER_FREQUENCY_HZ, util::arch::msr::Msr};
+use crate::{
+	driver::hpet::HPET,
+	mm::{alloc::virt::AddressSpace, constant::PAGE_MASK},
+};
 
 use macros::lapic_register;
 
@@ -282,20 +282,42 @@ pub fn init() -> Result<(), LocalAPICError> {
 
 	unsafe { LOCAL_APIC.init(NonNull::new_unchecked(base as *mut Register)) };
 
-	init_timer();
-
 	Ok(())
 }
 
 /// configure and start timer interrupt
-/// TODO: acpi timer celibration or TSC deadline mode?
-fn init_timer() {
-	let cpuid = CPUID::run(0x16, 0);
-	let bus_freq = cpuid.ecx * MB;
-	let count = bus_freq / TIMER_FREQUENCY_HZ;
+pub fn init_timer() {
+	const CALIBRATION_ITERATION: usize = 100;
 
-	pr_info!("local APIC: bus freqeuncy(MHz): {:?}", cpuid.ecx);
-	pr_info!("local APIC: timer freqeuncy(Hz): {:?}", TIMER_FREQUENCY_HZ);
+	let mut timer = LOCAL_APIC.read_timer();
+
+	timer
+		.set_mask(true)
+		.set_timer_mode(TimerMode::OneShot)
+		.set_vector(0x22);
+
+	LOCAL_APIC.write_timer(timer);
+	LOCAL_APIC.set_timer_divider(TimerDivider::By1);
+
+	pr_info!("LOCAL APIC: start calibration");
+	let mut lapic_total_ticks = 0;
+	for _ in 0..CALIBRATION_ITERATION {
+		let hpet_clock_speed = HPET.clock_speed() as u64;
+		let hpet_tick_per_ms = 1_000_000_000_000 / hpet_clock_speed;
+		let next_ms = HPET.get_counter() + hpet_tick_per_ms;
+
+		LOCAL_APIC.write_timer_initial_count(!0);
+		while HPET.get_counter() < next_ms {}
+		let lapic_elapsed_ticks = !0 - LOCAL_APIC.read_timer_current_count();
+
+		lapic_total_ticks += lapic_elapsed_ticks;
+	}
+
+	// stop apic timer
+	LOCAL_APIC.write_timer_initial_count(0);
+
+	let lapic_clock_per_ms = lapic_total_ticks / CALIBRATION_ITERATION;
+	pr_info!("LOCAL APIC: mesured clock per ms: {}", lapic_clock_per_ms);
 
 	let mut timer = LOCAL_APIC.read_timer();
 
@@ -305,6 +327,7 @@ fn init_timer() {
 		.set_vector(0x22);
 
 	LOCAL_APIC.write_timer(timer);
-	LOCAL_APIC.set_timer_divider(TimerDivider::By1);
-	LOCAL_APIC.write_timer_initial_count(count);
+
+	let initial_tick = lapic_clock_per_ms * 1000 / TIMER_FREQUENCY_HZ;
+	LOCAL_APIC.write_timer_initial_count(initial_tick);
 }

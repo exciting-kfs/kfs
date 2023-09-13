@@ -10,7 +10,6 @@ use crate::sync::cpu_local::CpuLocal;
 pub unsafe extern "C" fn handle_timer_impl(frame: InterruptFrame) {
 	*JIFFIES.get_mut() += 1;
 	LOCAL_APIC.end_of_interrupt();
-
 	yield_now();
 
 	if frame.is_user() {
