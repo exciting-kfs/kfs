@@ -230,12 +230,38 @@ void builtin_stat(int idx) {
 	ft_putnbr(st.gid);
 	ft_putstr("\n");
 
-	ft_putstr(" size: ");
+	ft_putstr("  size: ");
 	ft_putnbr(st.size);
 	ft_putstr("\n");
 
-	ft_putstr(" mode: 0o");
+	ft_putstr("  mode: 0o");
 	ft_putnbr_o(st.perm);
+	ft_putstr("\n");
+
+	ft_putstr("  type: ");
+	switch (st.file_type) {
+		case 1: 
+			ft_putstr("REGULAR FILE");
+			break;
+		case 2:
+			ft_putstr("DIRECTORY");
+			break;
+		default:
+			ft_putstr("UNKNOWN");
+			break;
+	}
+	ft_putstr("\n");
+
+	ft_putstr("  atime: ");
+	ft_putnbr(st.access_time.tv_sec);
+	ft_putstr("\n");
+
+	ft_putstr("  mtime: ");
+	ft_putnbr(st.modify_time.tv_sec);
+	ft_putstr("\n");
+
+	ft_putstr("  ctime: ");
+	ft_putnbr(st.change_time.tv_sec);
 	ft_putstr("\n");
 }
 

@@ -3,13 +3,19 @@
 
 #include "kfs/internal/prelude.h"
 
+#include <time.h>
+
 int mkdir(const char *path, mode_t mode);
 
 struct stat {
-	unsigned int perm;
+	mode_t perm;
 	uid_t uid;
 	gid_t gid;
 	off_t size;
+	unsigned int file_type;
+	struct timespec access_time;
+	struct timespec modify_time;
+	struct timespec change_time;
 };
 
 int stat(const char *path, struct stat *statbuf);

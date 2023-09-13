@@ -13,7 +13,7 @@ use super::{
 	tmpfs::{TmpDir, TmpSb},
 	vfs::{
 		DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident, Permission, RawStat,
-		SymLinkInode, VfsInode, Whence, ROOT_DIR_ENTRY,
+		SymLinkInode, TimeSpec, VfsInode, Whence, ROOT_DIR_ENTRY,
 	},
 };
 
@@ -92,6 +92,10 @@ impl DirInode for DevDirInode {
 			uid: 0,
 			gid: 0,
 			size: 0,
+			file_type: 2,
+			access_time: TimeSpec::default(),
+			modify_fime: TimeSpec::default(),
+			change_time: TimeSpec::default(),
 		})
 	}
 
@@ -162,6 +166,10 @@ impl FileInode for DevTTYFile {
 			uid: 0,
 			gid: 0,
 			size: 0,
+			file_type: 1,
+			access_time: TimeSpec::default(),
+			modify_fime: TimeSpec::default(),
+			change_time: TimeSpec::default(),
 		})
 	}
 
@@ -191,6 +199,10 @@ impl FileInode for DevNull {
 			uid: 0,
 			gid: 0,
 			size: 0,
+			file_type: 1,
+			access_time: TimeSpec::default(),
+			modify_fime: TimeSpec::default(),
+			change_time: TimeSpec::default(),
 		})
 	}
 
@@ -234,6 +246,10 @@ impl FileInode for DevZero {
 			uid: 0,
 			gid: 0,
 			size: 0,
+			file_type: 1,
+			access_time: TimeSpec::default(),
+			modify_fime: TimeSpec::default(),
+			change_time: TimeSpec::default(),
 		})
 	}
 

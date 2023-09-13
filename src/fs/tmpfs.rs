@@ -8,7 +8,7 @@ use alloc::{boxed::Box, collections::BTreeMap};
 use super::path::Path;
 use super::vfs::{
 	DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident, RawStat, SuperBlock,
-	SymLinkInode, VfsInode, Whence,
+	SymLinkInode, TimeSpec, VfsInode, Whence,
 };
 use crate::fs::vfs::{KfsDirent, Permission};
 use crate::mm::util::next_align;
@@ -90,6 +90,10 @@ impl FileInode for TmpFileInode {
 			uid: *self.owner.lock(),
 			gid: *self.group.lock(),
 			size: self.data.lock().len() as isize,
+			file_type: 1,
+			access_time: TimeSpec::default(),
+			modify_fime: TimeSpec::default(),
+			change_time: TimeSpec::default(),
 		})
 	}
 
@@ -245,6 +249,10 @@ impl DirInode for Locked<TmpDirInode> {
 			uid: this.owner,
 			gid: this.group,
 			size: this.sub_files.len() as isize,
+			file_type: 2,
+			access_time: TimeSpec::default(),
+			modify_fime: TimeSpec::default(),
+			change_time: TimeSpec::default(),
 		})
 	}
 

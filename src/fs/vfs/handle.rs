@@ -95,7 +95,6 @@ impl VfsFileHandle {
 		if self.io_flags.contains(IOFlag::O_APPEND) {
 			self.inner.lseek(0, Whence::End)?;
 		}
-
 		self.inner.write(buf, self.io_flags)
 	}
 

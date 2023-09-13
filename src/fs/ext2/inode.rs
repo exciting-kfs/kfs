@@ -1,6 +1,10 @@
 use alloc::{boxed::Box, sync::Arc};
 
-use crate::{fs::vfs, sync::lock_rw::LockRW, syscall::errno::Errno};
+use crate::{
+	fs::vfs::{self, TimeSpec},
+	sync::lock_rw::LockRW,
+	syscall::errno::Errno,
+};
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 pub struct Inum(usize);
@@ -132,6 +136,10 @@ impl vfs::FileInode for FileInode {
 			uid,
 			gid,
 			size,
+			file_type: 1,
+			access_time: TimeSpec::default(),
+			modify_fime: TimeSpec::default(),
+			change_time: TimeSpec::default(),
 		})
 	}
 
