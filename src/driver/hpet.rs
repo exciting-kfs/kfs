@@ -3,7 +3,9 @@ use core::{
 	ptr::{addr_of_mut, NonNull},
 };
 
-use crate::{acpi::HPET_BASE, mm::constant::HIGH_IO_OFFSET, pr_info};
+use crate::{
+	acpi::HPET_BASE, driver::rtc::get_timestamp_utc, mm::constant::HIGH_IO_OFFSET, pr_info,
+};
 
 #[repr(packed)]
 struct HpetRegisters {
@@ -13,7 +15,8 @@ struct HpetRegisters {
 	_rsvd2: u64,
 	interrupt_status: u64,
 	_rsvd3: [u64; 25],
-	counter: u64,
+	counter_l: u32,
+	counter_h: u32,
 	timers: [HpetTimerRegister; 0],
 }
 
@@ -85,7 +88,14 @@ impl Hpet {
 	}
 
 	pub fn get_counter(&self) -> u64 {
-		read_reg!(counter)
+		loop {
+			let high1 = read_reg!(counter_h);
+			let low = read_reg!(counter_l);
+			let high2 = read_reg!(counter_h);
+			if high1 == high2 {
+				return (high1 as u64) << 32 | low as u64;
+			}
+		}
 	}
 }
 
@@ -94,6 +104,8 @@ pub enum HpetInitError {
 	InvalidCounterSize,
 	InvalidBase,
 }
+
+static mut BOOT_TIMESTAMP: u64 = 0;
 
 pub fn init() -> Result<(), HpetInitError> {
 	let hpet_base = unsafe { HPET_BASE };
@@ -118,7 +130,14 @@ pub fn init() -> Result<(), HpetInitError> {
 		return Err(HpetInitError::InvalidCounterSize);
 	}
 
+	unsafe { BOOT_TIMESTAMP = get_timestamp_utc() * 1_000_000_000 };
 	HPET.enable_counter();
 
 	Ok(())
+}
+
+pub fn get_timestamp_nano() -> u64 {
+	let elapsed = HPET.get_counter() * (HPET.clock_speed() as u64 / 1_000_000);
+
+	unsafe { BOOT_TIMESTAMP + elapsed }
 }
