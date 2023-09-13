@@ -1,5 +1,6 @@
 use alloc::sync::Arc;
 
+use crate::fs::create_fd_node;
 use crate::fs::path::Path;
 use crate::fs::vfs::{
 	lookup_entry_at_follow, lookup_entry_follow, AccessFlag, CreationFlag, IOFlag, Permission,
@@ -80,8 +81,10 @@ pub fn sys_open(path: usize, flags: i32, perm: u32) -> Result<usize, Errno> {
 		.get_user_ext()
 		.expect("must be user process")
 		.lock_fd_table()
-		.alloc_fd(file)
+		.alloc_fd(file.clone())
 		.ok_or(Errno::EMFILE)?;
+
+	let _ = create_fd_node(current.get_pid(), fd.clone(), file);
 
 	Ok(fd.index())
 }

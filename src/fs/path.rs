@@ -1,11 +1,20 @@
-use core::slice;
+use alloc::{
+	collections::{vec_deque, VecDeque},
+	vec::Vec,
+};
 
-use alloc::vec::Vec;
+macro_rules! format_path {
+	($($arg:tt)*) => {
+		Path::new(format!($($arg)*).as_bytes())
+	};
+}
+
+pub(crate) use format_path;
 
 #[derive(Debug)]
 pub struct Path {
 	base: Base,
-	comps: Vec<Vec<u8>>,
+	comps: VecDeque<Vec<u8>>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -94,6 +103,13 @@ impl<'a> Iterator for ComponentIter<'a> {
 }
 
 impl Path {
+	pub fn new_root() -> Self {
+		Self {
+			base: Base::RootDir,
+			comps: VecDeque::new(),
+		}
+	}
+
 	pub fn new(path: &[u8]) -> Self {
 		let mut base = if path.len() != 0 && path[0] == b'/' {
 			Base::RootDir
@@ -102,16 +118,16 @@ impl Path {
 		};
 
 		let raw_comps = ComponentIter::new(path);
-		let mut comps = Vec::new();
+		let mut comps = VecDeque::new();
 
 		for comp in raw_comps {
 			use Component::*;
 			match comp {
 				ParentDir => match comps.is_empty() {
 					true => base.move_to_parent_dir(),
-					false => _ = comps.pop(),
+					false => _ = comps.pop_back(),
 				},
-				Part(p) => comps.push(p.to_vec()),
+				Part(p) => comps.push_back(p.to_vec()),
 				CurDir => (),
 			}
 		}
@@ -124,10 +140,16 @@ impl Path {
 	}
 
 	pub fn pop_component(&mut self) -> Option<Vec<u8>> {
-		self.comps.pop()
+		self.comps.pop_back()
 	}
 
-	pub fn components(&self) -> slice::Iter<'_, Vec<u8>> {
+	pub fn push_component_front(&mut self, comp: Vec<u8>) {
+		if !comp.is_empty() {
+			self.comps.push_front(comp);
+		}
+	}
+
+	pub fn components(&self) -> vec_deque::Iter<'_, Vec<u8>> {
 		self.comps.iter()
 	}
 }

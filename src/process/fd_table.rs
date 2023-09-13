@@ -5,7 +5,7 @@ use crate::syscall::errno::Errno;
 
 const FDTABLE_SIZE: usize = 256;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Fd(usize);
 
 impl Fd {
@@ -59,5 +59,12 @@ impl FdTable {
 
 	pub fn clear(&mut self) {
 		self.0.iter_mut().for_each(|e| *e = None);
+	}
+
+	pub fn iter_opened(&self) -> impl '_ + Iterator<Item = (usize, VfsHandle)> {
+		self.0
+			.iter()
+			.enumerate()
+			.filter_map(|(i, x)| x.clone().map(|x| (i, x)))
 	}
 }

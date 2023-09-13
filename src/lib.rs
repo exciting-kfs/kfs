@@ -38,7 +38,6 @@ mod x86;
 
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::{arch::asm, panic::PanicInfo};
-use fs::devfs;
 use interrupt::kthread_init;
 use process::task::Task;
 use scheduler::context::yield_now;
@@ -158,10 +157,12 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	driver::ide::init().expect("IDE controller init.");
 
 	unsafe { x86::init() };
-	fs::init().expect("failed to mount /");
 
+	fs::init().expect("failed to mount /");
 	process::init();
-	devfs::init().expect("failed to mount /dev");
+
+	fs::init_devfs().expect("failed to mount /dev");
+	fs::init_procfs().expect("failed to mount /proc");
 
 	scheduler::work::init().expect("worker thread init");
 

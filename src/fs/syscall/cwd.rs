@@ -1,5 +1,6 @@
 use crate::{
 	fs::{
+		change_cwd,
 		path::Path,
 		vfs::{lookup_entry_follow, Permission},
 	},
@@ -19,12 +20,12 @@ pub fn sys_chdir(path: usize) -> Result<usize, Errno> {
 
 	dir.access(Permission::ANY_EXECUTE, current)?;
 
-	let mut cwd = current
+	*current
 		.get_user_ext()
 		.expect("must be user process")
-		.lock_cwd();
+		.lock_cwd() = dir;
 
-	*cwd = dir;
+	change_cwd(current)?;
 
 	Ok(0)
 }
