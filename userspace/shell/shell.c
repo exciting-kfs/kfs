@@ -5,16 +5,13 @@
 #include "kfs/ft.h"
 #include "kfs/internal/prelude.h"
 #include "kfs/kernel.h"
+#include "kfs/libft.h"
 #include "sys/mount.h"
 
 char line_buf[8192] = {42};
 
 void show_error(const char *where, int err) {
-	ft_putstr("shell: ");
-	ft_putstr(where);
-	ft_putstr(": ");
-	ft_putnbr(err);
-	ft_putstr("\n");
+	ft_printf("shell: %s: %d\n", where, err);
 }
 
 void panic(const char *where, int err) {
@@ -186,6 +183,37 @@ void builtin_write(int idx) {
 	close(fd);
 }
 
+void builtin_wf(int idx) {
+	char buf[4096];
+
+	idx = extract(idx, buf);
+	int fd = open(buf, O_WRONLY);
+	if (fd < 0) {
+		show_error("wf: open", fd);
+		return;
+	}
+
+	idx = ignore_ws(idx);
+	idx = extract(idx, buf);
+
+	int size = ft_atoi(buf);
+
+	int len = 10;
+	char *b = "0123456789";
+
+	while (size > 0) {
+		int l = size < len ? size : len;
+		int ret = write(fd, b, l);
+		if (ret < 0) {
+			show_error("wf: write", ret);
+			break;
+		}
+		size -= len;
+	}
+
+	close(fd);
+}
+
 void builtin_rmdir(int idx) {
 	char buf[4096];
 
@@ -222,47 +250,8 @@ void builtin_stat(int idx) {
 		return;
 	}
 
-	ft_putstr("  uid: ");
-	ft_putnbr(st.uid);
-	ft_putstr("\n");
-
-	ft_putstr("  gid: ");
-	ft_putnbr(st.gid);
-	ft_putstr("\n");
-
-	ft_putstr("  size: ");
-	ft_putnbr(st.size);
-	ft_putstr("\n");
-
-	ft_putstr("  mode: 0o");
-	ft_putnbr_o(st.perm);
-	ft_putstr("\n");
-
-	ft_putstr("  type: ");
-	switch (st.file_type) {
-		case 1: 
-			ft_putstr("REGULAR FILE");
-			break;
-		case 2:
-			ft_putstr("DIRECTORY");
-			break;
-		default:
-			ft_putstr("UNKNOWN");
-			break;
-	}
-	ft_putstr("\n");
-
-	ft_putstr("  atime: ");
-	ft_putnbr(st.access_time.tv_sec);
-	ft_putstr("\n");
-
-	ft_putstr("  mtime: ");
-	ft_putnbr(st.modify_time.tv_sec);
-	ft_putstr("\n");
-
-	ft_putstr("  ctime: ");
-	ft_putnbr(st.change_time.tv_sec);
-	ft_putstr("\n");
+	ft_printf("\tuid: %d\n\tgid: %d\n\tsize: %d\n\tmode: 0x%x\n", st.uid, st.gid, st.size,
+		  st.perm);
 }
 
 void builtin_chmod(int idx) {
@@ -370,6 +359,8 @@ int main(void) {
 			builtin_mkdir(ignore_ws(5));
 		} else if (STREQ("write", line_buf, line_len)) {
 			builtin_write(ignore_ws(5));
+		} else if (STREQ("wf", line_buf, line_len)) {
+			builtin_wf(ignore_ws(2));
 		} else if (STREQ("rmdir", line_buf, line_len)) {
 			builtin_rmdir(ignore_ws(5));
 		} else if (STREQ("rm", line_buf, line_len)) {
