@@ -3,7 +3,7 @@ pub mod header;
 
 use alloc::collections::BTreeMap;
 
-use crate::{driver::bus::pci::header::HeaderCommon, pr_info, sync::locked::Locked};
+use crate::{driver::bus::pci::header::HeaderCommon, pr_info, sync::Locked};
 
 use self::bdf::BDF;
 

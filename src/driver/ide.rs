@@ -24,10 +24,7 @@ use crate::{
 	},
 	pr_debug,
 	scheduler::context::yield_now,
-	sync::{
-		locked::{Locked, LockedGuard},
-		TryLockFail,
-	},
+	sync::{Locked, LockedGuard, TryLockFail},
 };
 
 use self::{

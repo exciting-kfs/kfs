@@ -7,7 +7,7 @@ use crate::{
 		task::{State, Task, CURRENT},
 	},
 	scheduler::{context::yield_now, schedule_last},
-	sync::locked::Locked,
+	sync::Locked,
 	syscall::errno::Errno,
 };
 

@@ -6,7 +6,7 @@ use crate::boot::MEM_INFO;
 use crate::mm::alloc::Zone;
 use crate::mm::page::index_to_meta;
 use crate::mm::{constant::*, util::*};
-use crate::sync::locked::Locked;
+use crate::sync::Locked;
 
 use core::alloc::AllocError;
 use core::mem::MaybeUninit;

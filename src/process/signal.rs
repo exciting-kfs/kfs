@@ -28,7 +28,7 @@ use crate::{
 		task::{State, Task, CURRENT},
 	},
 	scheduler::sleep::{sleep_and_yield, wake_up},
-	sync::locked::Locked,
+	sync::Locked,
 	syscall::{errno::Errno, signal::is_syscall_restart},
 };
 

@@ -4,7 +4,7 @@ use core::ptr::{addr_of_mut, NonNull};
 use crate::acpi::IOAPIC_INFO;
 use crate::io::pmio::Port;
 use crate::mm::constant::HIGH_IO_OFFSET;
-use crate::sync::locked::Locked;
+use crate::sync::Locked;
 use crate::util::bitrange::{BitData, BitRange};
 
 pub const KEYBOARD_IRQ: usize = 1;

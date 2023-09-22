@@ -11,7 +11,7 @@ use alloc::boxed::Box;
 
 use crate::{
 	mm::{constant::SECTOR_SIZE, util::next_align},
-	sync::lock_rw::{LockRW, ReadLockGuard},
+	sync::{LockRW, ReadLockGuard},
 };
 
 use self::entry::{EntryIndex, MaybeEntry};

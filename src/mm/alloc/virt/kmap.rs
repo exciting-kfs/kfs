@@ -2,7 +2,7 @@ use core::{alloc::AllocError, ptr::NonNull};
 
 use crate::mm::page::{PageFlag, KERNEL_PD};
 use crate::mm::{constant::*, util::*};
-use crate::sync::locked::Locked;
+use crate::sync::Locked;
 
 use super::AddressSpace;
 

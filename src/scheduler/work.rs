@@ -5,7 +5,7 @@ use alloc::sync::Arc;
 use alloc::{boxed::Box, collections::LinkedList};
 
 use crate::process::task::{State, Task};
-use crate::sync::locked::Locked;
+use crate::sync::Locked;
 
 use super::context::yield_now;
 use super::schedule_first;

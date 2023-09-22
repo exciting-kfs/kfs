@@ -8,7 +8,7 @@ use alloc::{format, vec};
 use crate::process::fd_table::Fd;
 use crate::process::relation::Pid;
 use crate::process::{get_idle_task, get_init_task};
-use crate::sync::locked::Locked;
+use crate::sync::Locked;
 use crate::{
 	process::{process_tree::PROCESS_TREE, task::Task},
 	syscall::errno::Errno,

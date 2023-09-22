@@ -1,6 +1,6 @@
 use alloc::{collections::BTreeMap, sync::Arc};
 
-use crate::sync::locked::Locked;
+use crate::sync::Locked;
 
 use super::{relation::Pid, task::Task};
 

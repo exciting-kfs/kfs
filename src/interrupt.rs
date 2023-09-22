@@ -7,14 +7,14 @@ use core::arch::asm;
 
 pub use interrupt_frame::InterruptFrame;
 
-use crate::sync::{cpu_local::CpuLocal, spinlock::get_lock_depth};
+use crate::sync::{get_lock_depth, CpuLocal};
 
-#[inline(always)]
+#[inline]
 pub fn irq_enable() {
 	unsafe { asm!("sti") };
 }
 
-#[inline(always)]
+#[inline]
 pub fn irq_disable() {
 	unsafe { asm!("cli") };
 }
