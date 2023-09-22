@@ -1,9 +1,6 @@
 use crate::interrupt::in_interrupt_context;
-use crate::interrupt::irq_disable;
-use crate::interrupt::irq_enable;
 use crate::process::signal::poll_signal_queue;
 use crate::scheduler::context::yield_now;
-use crate::sync::raw_lock::spinlock::get_lock_depth;
 use crate::syscall::errno::Errno;
 
 use super::RawSpinLock;
@@ -54,12 +51,5 @@ impl LocalSpinLock {
 }
 
 fn check_precondition() {
-	if cfg!(dbg) {
-		irq_disable();
-		assert!(
-			!in_interrupt_context() && get_lock_depth() == 0,
-			"Cannot use LocalSpinLock when `yield_now` is impossible or in interrupt context."
-		);
-		irq_enable();
-	}
+	debug_assert!(!in_interrupt_context(), "msg")
 }
