@@ -27,10 +27,7 @@ use crate::{
 		inode::Inum,
 		sb::{SuperBlock, SuperBlockInfo},
 	},
-	sync::{
-		lock_rw::LockRW,
-		locked::{Locked, LockedGuard},
-	},
+	sync::{LockRW, Locked, LockedGuard},
 	syscall::errno::Errno,
 	RUN_TIME,
 };

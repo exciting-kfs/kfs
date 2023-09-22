@@ -1,6 +1,6 @@
 use core::alloc::AllocError;
 
-use crate::{driver::ide::IdeController, pr_debug, sync::locked::LockedGuard};
+use crate::{driver::ide::IdeController, pr_debug, sync::LockedGuard};
 
 use super::{
 	dma_req::{ReqInit, ReqReady},

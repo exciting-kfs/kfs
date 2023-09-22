@@ -13,8 +13,8 @@ use crate::process::signal::sig_info::SigInfo;
 use crate::process::signal::sig_num::SigNum;
 use crate::process::signal::Signal;
 use crate::scheduler::sleep::wake_up;
-use crate::sync::cpu_local::CpuLocal;
-use crate::sync::locked::{Locked, LockedGuard};
+use crate::sync::CpuLocal;
+use crate::sync::{Locked, LockedGuard};
 use crate::syscall::errno::Errno;
 use crate::syscall::wait::Who;
 

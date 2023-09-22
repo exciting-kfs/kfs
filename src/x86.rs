@@ -5,7 +5,7 @@ use core::{
 };
 
 use crate::{
-	sync::cpu_local::CpuLocal,
+	sync::CpuLocal,
 	util::bitrange::{BitData, BitRange},
 };
 

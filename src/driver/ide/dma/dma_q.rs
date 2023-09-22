@@ -8,7 +8,7 @@ use alloc::collections::LinkedList;
 use crate::{
 	driver::ide::{ide_id::IdeId, IdeController},
 	scheduler::work::schedule_slow_work,
-	sync::locked::{Locked, LockedGuard},
+	sync::{Locked, LockedGuard},
 };
 
 use super::{dma_req::ReqInit, event::DmaRun, DmaInit};

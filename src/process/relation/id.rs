@@ -2,7 +2,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 use alloc::collections::{BTreeMap, BTreeSet};
 
-use crate::{pr_debug, sync::locked::Locked};
+use crate::{pr_debug, sync::Locked};
 
 static PID_ALLOC: Locked<PidAlloc> = Locked::new(PidAlloc::new());
 

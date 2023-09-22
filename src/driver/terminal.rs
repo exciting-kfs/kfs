@@ -9,7 +9,7 @@ pub use tty::TTYFile;
 use alloc::sync::Arc;
 use core::mem::MaybeUninit;
 
-use crate::{config::NR_CONSOLES, scheduler::work, sync::locked::Locked};
+use crate::{config::NR_CONSOLES, scheduler::work, sync::Locked};
 
 use tty::{TTYFlag, TTY};
 

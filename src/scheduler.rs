@@ -4,7 +4,7 @@ pub mod work;
 
 use alloc::{collections::LinkedList, sync::Arc};
 
-use crate::{process::task::Task, sync::locked::Locked, syscall::errno::Errno};
+use crate::{process::task::Task, sync::Locked, syscall::errno::Errno};
 
 use self::context::yield_now;
 

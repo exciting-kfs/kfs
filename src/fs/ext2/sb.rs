@@ -18,10 +18,7 @@ use crate::{
 	},
 	fs::vfs,
 	process::task::CURRENT,
-	sync::{
-		lock_rw::{LockRW, ReadLockGuard},
-		locked::Locked,
-	},
+	sync::{LockRW, Locked, ReadLockGuard},
 	write_field,
 };
 

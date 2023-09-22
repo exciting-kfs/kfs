@@ -10,7 +10,7 @@ use crate::process::signal::sig_info::SigInfo;
 use crate::process::signal::sig_num::SigNum;
 use crate::process::task::CURRENT;
 use crate::scheduler::context::yield_now;
-use crate::sync::locked::{Locked, LockedGuard};
+use crate::sync::{Locked, LockedGuard};
 use crate::syscall::errno::Errno;
 
 use alloc::boxed::Box;
