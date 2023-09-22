@@ -1,7 +1,10 @@
+use core::sync::atomic::Ordering;
+
 use crate::interrupt::in_interrupt_context;
 use crate::process::signal::poll_signal_queue;
 use crate::scheduler::context::yield_now;
 use crate::syscall::errno::Errno;
+use crate::RUN_TIME;
 
 use super::RawSpinLock;
 use super::TryLockFail;
@@ -51,5 +54,10 @@ impl LocalSpinLock {
 }
 
 fn check_precondition() {
-	debug_assert!(!in_interrupt_context(), "msg")
+	if RUN_TIME.load(Ordering::Relaxed) {
+		debug_assert!(
+			!in_interrupt_context(),
+			"Cannot use LocalSpinLock when `yield_now` is impossible or in interrupt context."
+		);
+	}
 }
