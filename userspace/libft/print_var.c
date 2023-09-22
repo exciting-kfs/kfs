@@ -12,12 +12,11 @@
 
 #include "kfs/libft.h"
 
-static int	my_putchar(const t_optable *otb, va_list ap)
-{
-	char	c;
-	int		len;
+static int my_putchar(const t_optable *otb, va_list *ap) {
+	char c;
+	int len;
 
-	c = va_arg(ap, int);
+	c = va_arg(*ap, int);
 	len = otb->width - 1;
 	if (otb->align == right)
 		len = print_ws(len, ' ');
@@ -27,19 +26,17 @@ static int	my_putchar(const t_optable *otb, va_list ap)
 	return (len + 1);
 }
 
-static int	my_putstr(const t_optable *otb, va_list ap)
-{
-	int		len_tot;
-	int		len_s;
-	size_t	n;
-	char	*s;
+static int my_putstr(const t_optable *otb, va_list *ap) {
+	int len_tot;
+	int len_s;
+	size_t n;
+	char *s;
 
 	len_tot = 0;
-	s = va_arg(ap, char *);
+	s = va_arg(*ap, char *);
 	if (s != NULL)
 		len_s = ft_strlen(s);
-	else
-	{
+	else {
 		s = "(null)";
 		len_s = 6;
 	}
@@ -54,10 +51,9 @@ static int	my_putstr(const t_optable *otb, va_list ap)
 	return (len_tot);
 }
 
-static int	my_putelse(const t_optable *otb, char type)
-{
-	int		len;
-	char	w;
+static int my_putelse(const t_optable *otb, char type) {
+	int len;
+	char w;
 
 	w = ' ';
 	if (otb->zero)
@@ -71,9 +67,8 @@ static int	my_putelse(const t_optable *otb, char type)
 	return (len + 1);
 }
 
-int	print_var(char type, const t_optable *otb, va_list ap)
-{
-	int	len;
+int print_var(char type, const t_optable *otb, va_list *ap) {
+	int len;
 
 	len = 0;
 	if (type == 'c')

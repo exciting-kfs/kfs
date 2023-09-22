@@ -12,9 +12,8 @@
 
 #include "kfs/libft.h"
 
-t_state	param_printer(int *sum, char type, t_optable *otb, va_list ap)
-{
-	int	len;
+t_state param_printer(int *sum, char type, t_optable *otb, va_list *ap) {
+	int len;
 
 	opts_correction(type, otb);
 	len = print_var(type, otb, ap);

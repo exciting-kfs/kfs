@@ -77,13 +77,13 @@ typedef struct s_optable {
 
 int ft_printf(const char *fmt, ...);
 int is_in(char c, char *s);
-int my_putnbr(char type, const t_optable *otb, va_list ap);
+int my_putnbr(char type, const t_optable *otb, va_list *ap);
 int print_ws(int len, char w);
-int print_var(char type, const t_optable *otb, va_list ap);
+int print_var(char type, const t_optable *otb, va_list *ap);
 int print_stack(t_stack *nbrst, const t_optable *otb);
-t_state param_printer(int *sum, char type, t_optable *otb, va_list ap);
+t_state param_printer(int *sum, char type, t_optable *otb, va_list *ap);
 t_state opts_parser(char c, t_optable *otb);
-t_state opts_reader(int *sum, char c, t_optable *otb, va_list ap);
+t_state opts_reader(int *sum, char c, t_optable *otb, va_list *ap);
 t_state char_writer(int *sum, const char c);
 void opts_correction(int type, t_optable *otb);
 void opts_initialization(t_optable *otb);

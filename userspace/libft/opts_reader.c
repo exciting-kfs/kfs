@@ -12,9 +12,8 @@
 
 #include "kfs/libft.h"
 
-t_state	opts_reader(int *sum, char c, t_optable *otb, va_list ap)
-{
-	t_state	s;
+t_state opts_reader(int *sum, char c, t_optable *otb, va_list *ap) {
+	t_state s;
 
 	if (is_in(c, "0123456789#-. +"))
 		s = opts_parser(c, otb);

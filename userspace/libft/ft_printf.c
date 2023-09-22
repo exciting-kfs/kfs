@@ -12,9 +12,8 @@
 
 #include "kfs/libft.h"
 
-t_state	*printer(int *sum, const char c, t_optable *otb, va_list ap)
-{
-	static t_state	s = c_write;
+t_state *printer(int *sum, const char c, t_optable *otb, va_list *ap) {
+	static t_state s = c_write;
 
 	if (s == c_write)
 		s = char_writer(sum, c);
@@ -23,20 +22,19 @@ t_state	*printer(int *sum, const char c, t_optable *otb, va_list ap)
 	return (&s);
 }
 
-int	ft_printf(const char *fmt, ...)
-{
-	t_state		*s;
-	t_optable	otb;
-	va_list		ap;
-	int			sum;
+int ft_printf(const char *fmt, ...) {
+	va_list ap;
+	t_state *s;
+	t_optable otb;
+	int sum;
 
 	sum = 0;
 	opts_initialization(&otb);
 	fill_action(&otb);
+
 	va_start(ap, fmt);
-	while (*fmt)
-	{
-		s = printer(&sum, *fmt, &otb, ap);
+	while (*fmt) {
+		s = printer(&sum, *fmt, &otb, &ap);
 		fmt++;
 	}
 	*s = c_write;

@@ -343,6 +343,8 @@ void builtin_symlink(int idx) {
 }
 
 int main(void) {
+	ft_printf("%c,%c,%c, hello!\n", 'a', 'b', 'c');
+
 	for (;;) {
 		ft_putstr("sh==> ");
 		unsigned int line_len = getline();
