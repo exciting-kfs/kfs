@@ -12,7 +12,7 @@ use crate::{
 	interrupt::InterruptFrame,
 	io::pmio::Port,
 	process::task::{State, Task, CURRENT},
-	scheduler::sleep::{sleep_and_yield, wake_up},
+	scheduler::sleep::{sleep_and_yield, wake_up, Sleep},
 };
 
 #[derive(Debug)]
@@ -199,7 +199,7 @@ impl core::fmt::Write for SerialExt {
 			} else {
 				set_irq_mask(self.irq_num, false).expect("setting mask of IRQ");
 				self.waiting_task = Some(unsafe { CURRENT.get_mut() }.clone());
-				sleep_and_yield(State::Sleeping);
+				sleep_and_yield(Sleep::Light);
 			}
 		}
 		Ok(())

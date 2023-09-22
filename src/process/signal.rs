@@ -27,7 +27,7 @@ use crate::{
 		signal::{sig_flag::SigFlag, sig_handler::SigHandler, sig_num::SigNum},
 		task::{State, Task, CURRENT},
 	},
-	scheduler::sleep::{sleep_and_yield, wake_up},
+	scheduler::sleep::{sleep_and_yield, wake_up, Sleep},
 	sync::Locked,
 	syscall::{errno::Errno, signal::is_syscall_restart},
 };
@@ -134,7 +134,7 @@ impl Signal {
 			Terminate | Core => exit_with_signal(num),
 			Ignore | Continue => Option::Some(()),
 			Stop => {
-				sleep_and_yield(State::DeepSleep);
+				sleep_and_yield(Sleep::Deep);
 				Option::Some(())
 			}
 			_ => unreachable!(),

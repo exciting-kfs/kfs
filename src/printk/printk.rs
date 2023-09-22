@@ -111,7 +111,7 @@ macro_rules! fmt_with {
 use crate::{
 	driver::serial,
 	interrupt::{in_interrupt_context, is_sti},
-	scheduler::context::yield_now,
+	scheduler::{context::yield_now, preempt::preemptable},
 };
 use core::{
 	fmt::{Arguments, Result, Write},
@@ -122,7 +122,7 @@ static PRINTK_LOCK: PrintkLock = PrintkLock::new();
 
 pub fn __printk(arg: Arguments) -> Result {
 	let result;
-	if is_sti() && !in_interrupt_context() {
+	if is_sti() && !in_interrupt_context() && preemptable() {
 		PRINTK_LOCK.lock();
 
 		result = unsafe { serial::SERIAL_EXT_COM1.write_fmt(arg) };

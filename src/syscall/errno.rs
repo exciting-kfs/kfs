@@ -1,3 +1,5 @@
+use core::alloc::AllocError;
+
 #[repr(isize)]
 #[derive(Clone, Copy, Debug)]
 #[non_exhaustive]
@@ -48,6 +50,12 @@ impl Errno {
 	}
 }
 
+impl From<AllocError> for Errno {
+	fn from(_: AllocError) -> Self {
+		Errno::ENOMEM
+	}
+}
+
 fn desc(errno: Errno) -> &'static str {
 	use self::Errno::*;
 	match errno {
@@ -86,7 +94,7 @@ fn desc(errno: Errno) -> &'static str {
 		EPIPE => "Broken pipe",
 		EDOM => "Math argument out of domain of func",
 		ERANGE => "Math result not representable",
-		ENAMETOOLONG => "Path name too long",
+		ENAMETOOLONG => "File name too long",
 		ENOTEMPTY => "Directory is not empty",
 		ELOOP => "too many levels of symbolic links",
 	}

@@ -8,7 +8,7 @@ use crate::{
 		relation::Pid,
 		task::{State, Task, CURRENT},
 	},
-	scheduler::sleep::{sleep_and_yield, wake_up},
+	scheduler::sleep::{sleep_and_yield, wake_up, Sleep},
 	sync::Locked,
 };
 
@@ -31,7 +31,7 @@ impl WaitIO {
 	pub fn wait(&self) -> Result<Block, AllocError> {
 		let current = unsafe { CURRENT.get_mut() }.clone();
 
-		sleep_and_yield(State::DeepSleep);
+		sleep_and_yield(Sleep::Deep);
 
 		let pid = current.get_pid();
 		self.io_result

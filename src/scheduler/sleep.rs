@@ -11,26 +11,66 @@ use crate::{
 	syscall::errno::Errno,
 };
 
-pub fn sleep_and_yield(state: State) {
-	debug_assert!(state == State::Sleeping || state == State::DeepSleep);
+use super::preempt::AtomicOps;
 
+pub enum Sleep {
+	Light,
+	Deep,
+}
+
+pub fn sleep_and_yield(sleep: Sleep) {
 	let current = unsafe { CURRENT.get_mut() };
-	*current.lock_state() = state;
+	*current.lock_state() = match sleep {
+		Sleep::Deep => State::DeepSleep,
+		Sleep::Light => State::Sleeping,
+	};
 
 	// pr_debug!("pid[{}] sleep!", current.get_pid().as_raw());
 
 	yield_now();
 }
 
-pub fn wake_up(task: &Arc<Task>, state: State) {
-	debug_assert!(state == State::Sleeping || state == State::DeepSleep);
+pub fn sleep_and_yield_atomic(sleep: Sleep, atomic: AtomicOps) {
+	let current = unsafe { CURRENT.get_mut() };
+	*current.lock_state() = match sleep {
+		Sleep::Deep => State::DeepSleep,
+		Sleep::Light => State::Sleeping,
+	};
 
+	drop(atomic);
+	yield_now();
+}
+
+pub fn sleep_and_yield_atomic_optional(sleep: Sleep, atomic: Option<AtomicOps>) {
+	match atomic {
+		Some(a) => sleep_and_yield_atomic(sleep, a),
+		None => sleep_and_yield(sleep),
+	}
+}
+
+pub fn wake_up_deep_sleep(task: &Arc<Task>) {
 	let mut state_lock = task.lock_state();
-	if *state_lock == state || *state_lock == State::Sleeping {
-		// pr_debug!("{:?} wake up!", task.get_pid());
+	if *state_lock == State::DeepSleep || *state_lock == State::Sleeping {
 		*state_lock = State::Running;
 		drop(state_lock);
 		schedule_last(task.clone());
+	}
+}
+
+pub fn wake_up_sleep(task: &Arc<Task>) {
+	let mut state_lock = task.lock_state();
+	if *state_lock == State::Sleeping {
+		*state_lock = State::Running;
+		drop(state_lock);
+		schedule_last(task.clone());
+	}
+}
+
+pub fn wake_up(task: &Arc<Task>, state: State) {
+	match state {
+		State::DeepSleep => wake_up_deep_sleep(task),
+		State::Sleeping => wake_up_sleep(task),
+		_ => {}
 	}
 }
 

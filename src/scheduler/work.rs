@@ -8,7 +8,7 @@ use crate::process::task::{State, Task};
 use crate::sync::Locked;
 
 use super::context::yield_now;
-use super::schedule_first;
+use super::{schedule_first, schedule_last};
 
 pub struct Work<ArgType> {
 	func: fn(&mut ArgType) -> Result<(), Error>,
@@ -39,6 +39,18 @@ pub enum Error {
 
 static FAST_WORK_POOL: Locked<LinkedList<Box<dyn Workable>>> = Locked::new(LinkedList::new());
 static SLOW_WORK_POOL: Locked<LinkedList<Box<dyn Workable>>> = Locked::new(LinkedList::new());
+
+pub fn schedule_worker<ArgType: 'static>(
+	func: fn(usize) -> (),
+	arg: Box<ArgType>,
+) -> Result<(), AllocError> {
+	let arg = Box::into_raw(arg) as usize;
+
+	let task = Task::new_kernel(func as usize, arg)?;
+	schedule_last(task);
+
+	Ok(())
+}
 
 pub fn schedule_slow_work<ArgType: 'static>(
 	func: fn(&mut ArgType) -> Result<(), Error>,
@@ -86,7 +98,7 @@ pub fn slow_worker(_: usize) {
 		for mut w in works {
 			if let Err(e) = w.work() {
 				match e {
-					Error::AllocError => panic!("OOM"),
+					Error::AllocError => panic!("OOM Handling please"),
 					Error::Yield => SLOW_WORK_POOL.lock().push_back(w),
 				}
 			}

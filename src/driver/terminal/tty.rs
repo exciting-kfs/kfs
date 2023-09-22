@@ -18,7 +18,7 @@ use crate::io::{BlkRead, BlkWrite, ChRead, ChWrite, NoSpace};
 use crate::process::relation::session::Session;
 use crate::process::signal::{poll_signal_queue, send_signal_to_foreground};
 use crate::process::task::State;
-use crate::scheduler::sleep::{sleep_and_yield, wake_up_foreground};
+use crate::scheduler::sleep::{sleep_and_yield, wake_up_foreground, Sleep};
 use crate::scheduler::work::schedule_fast_work;
 use crate::sync::{Locked, LockedGuard};
 use crate::syscall::errno::Errno;
@@ -485,7 +485,7 @@ impl FileHandle for TTYFile {
 		let mut count = self.lock_tty().read(buf);
 		while block && count == 0 {
 			unsafe { poll_signal_queue()? };
-			sleep_and_yield(State::Sleeping);
+			sleep_and_yield(Sleep::Light);
 			count += self.lock_tty().read(buf);
 		}
 		Ok(count)
@@ -496,7 +496,7 @@ impl FileHandle for TTYFile {
 		let mut count = self.lock_tty().write(buf);
 		while block && count == 0 {
 			unsafe { poll_signal_queue()? };
-			sleep_and_yield(State::Sleeping);
+			sleep_and_yield(Sleep::Light);
 			count += self.lock_tty().write(buf);
 		}
 		Ok(count)

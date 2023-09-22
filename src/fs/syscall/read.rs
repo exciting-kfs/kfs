@@ -15,6 +15,10 @@ pub(super) fn get_file(fd: isize) -> Result<VfsHandle, Errno> {
 }
 
 pub fn sys_read(fd: isize, buf: usize, len: usize) -> Result<usize, Errno> {
+	if len == 0 {
+		return Ok(0);
+	}
+
 	let current = unsafe { CURRENT.get_ref() };
 
 	let buf = verify_buffer_mut(buf, len, current)?;
