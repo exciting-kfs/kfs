@@ -1,12 +1,5 @@
+#include "kfs/libft.h"
 #include <unistd.h>
-
-size_t ft_strlen(const char *s) {
-	size_t i = 0;
-	while (s[i]) {
-		i++;
-	}
-	return i;
-}
 
 void ft_putstr(const char *s) {
 	size_t n = ft_strlen(s);
