@@ -12,7 +12,7 @@ use crate::process::relation::family::zombie::Zombie;
 use crate::process::signal::sig_info::SigInfo;
 use crate::process::signal::sig_num::SigNum;
 use crate::process::signal::Signal;
-use crate::scheduler::sleep::wake_up;
+use crate::scheduler::sleep::{wake_up, Sleep};
 use crate::sync::CpuLocal;
 use crate::sync::{Locked, LockedGuard};
 use crate::syscall::errno::Errno;
@@ -302,7 +302,7 @@ impl Task {
 		let cont = info.num == SigNum::CONT && signal.is_default(&SigNum::CONT);
 
 		if kill || cont {
-			wake_up(self, State::DeepSleep);
+			wake_up(self, Sleep::Deep);
 		}
 
 		signal.recv_signal(info);

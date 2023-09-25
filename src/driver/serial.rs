@@ -11,8 +11,8 @@ use crate::{
 	},
 	interrupt::InterruptFrame,
 	io::pmio::Port,
-	process::task::{State, Task, CURRENT},
-	scheduler::sleep::{sleep_and_yield, wake_up},
+	process::task::{Task, CURRENT},
+	scheduler::sleep::{sleep_and_yield, wake_up, Sleep},
 };
 
 #[derive(Debug)]
@@ -199,7 +199,7 @@ impl core::fmt::Write for SerialExt {
 			} else {
 				set_irq_mask(self.irq_num, false).expect("setting mask of IRQ");
 				self.waiting_task = Some(unsafe { CURRENT.get_mut() }.clone());
-				sleep_and_yield(State::Sleeping);
+				sleep_and_yield(Sleep::Light);
 			}
 		}
 		Ok(())
@@ -217,7 +217,7 @@ pub fn ext_init() -> Result {
 #[interrupt_handler]
 pub extern "C" fn handle_serial_impl(_frame: InterruptFrame) {
 	if let Some(task) = unsafe { SERIAL_EXT_COM1.waiting_task() } {
-		wake_up(&task, State::Sleeping);
+		wake_up(&task, Sleep::Light);
 	}
 
 	set_irq_mask(SERIAL_COM1_IRQ, true).expect("setting mask of IRQ"); // irq num?

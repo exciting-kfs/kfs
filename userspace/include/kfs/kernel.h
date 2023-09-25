@@ -6,10 +6,11 @@
 int sched_yield(void);
 
 struct kfs_dirent {
-    unsigned int ino;
-    unsigned int private;
-    unsigned short size;
-    char name[0];
+	unsigned int ino;
+	unsigned int private;
+	unsigned short size;
+	unsigned char file_type;
+	char name[0];
 };
 
 ssize_t getdents(int fd, void *dirp, size_t len);

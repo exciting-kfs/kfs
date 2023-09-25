@@ -25,9 +25,9 @@ use crate::{
 		exit::exit_with_signal,
 		relation::session::Session,
 		signal::{sig_flag::SigFlag, sig_handler::SigHandler, sig_num::SigNum},
-		task::{State, Task, CURRENT},
+		task::{Task, CURRENT},
 	},
-	scheduler::sleep::{sleep_and_yield, wake_up},
+	scheduler::sleep::{sleep_and_yield, wake_up, Sleep},
 	sync::Locked,
 	syscall::{errno::Errno, signal::is_syscall_restart},
 };
@@ -134,7 +134,7 @@ impl Signal {
 			Terminate | Core => exit_with_signal(num),
 			Ignore | Continue => Option::Some(()),
 			Stop => {
-				sleep_and_yield(State::DeepSleep);
+				sleep_and_yield(Sleep::Deep);
 				Option::Some(())
 			}
 			_ => unreachable!(),
@@ -291,7 +291,7 @@ pub fn send_signal_to(task: &Arc<Task>, sig_info: &SigInfo) -> Result<(), Errno>
 	);
 
 	task.recv_signal(sig_info.clone())?;
-	wake_up(task, State::Sleeping);
+	wake_up(task, Sleep::Light);
 	Ok(())
 }
 

@@ -4,11 +4,11 @@ use core::{
 	sync::atomic::{AtomicUsize, Ordering},
 };
 
-use super::raw_lock::GlobalSpinLock;
+use super::raw_lock::LocalSpinLock;
 
 #[derive(Debug)]
 pub struct LockRW<T> {
-	write_lock: GlobalSpinLock,
+	write_lock: LocalSpinLock,
 	read_count: AtomicUsize,
 	value: UnsafeCell<T>,
 }
@@ -19,7 +19,7 @@ unsafe impl<T> Sync for LockRW<T> {}
 impl<T> LockRW<T> {
 	pub const fn new(value: T) -> Self {
 		Self {
-			write_lock: GlobalSpinLock::new(),
+			write_lock: LocalSpinLock::new(),
 			read_count: AtomicUsize::new(0),
 			value: UnsafeCell::new(value),
 		}
@@ -49,7 +49,7 @@ impl<T> LockRW<T> {
 	pub fn write_lock(&self) -> WriteLockGuard<'_, T> {
 		self.write_lock.lock();
 
-		while self.read_count.load(Ordering::Relaxed) == 0 {}
+		while self.read_count.load(Ordering::Relaxed) != 0 {}
 
 		unsafe { WriteLockGuard::new(self) }
 	}
@@ -61,6 +61,12 @@ pub struct ReadLockGuard<'lock, T> {
 
 impl<'lock, T> ReadLockGuard<'lock, T> {
 	pub unsafe fn new(lock: &'lock LockRW<T>) -> Self {
+		Self { lock }
+	}
+
+	pub fn from_write_lock(w_lock: WriteLockGuard<'lock, T>) -> Self {
+		w_lock.lock.read_count.fetch_add(1, Ordering::Relaxed);
+		let WriteLockGuard { lock } = w_lock;
 		Self { lock }
 	}
 }
