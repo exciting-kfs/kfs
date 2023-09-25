@@ -27,6 +27,14 @@ impl VfsHandle {
 		}
 	}
 
+	pub fn close(&self) -> Result<(), Errno> {
+		use VfsHandle::*;
+		match self {
+			File(f) => f.close(),
+			Dir(d) => d.close(),
+		}
+	}
+
 	pub fn getdents(&self, buf: &mut [u8]) -> Result<usize, Errno> {
 		use VfsHandle::*;
 		match self {
@@ -101,6 +109,10 @@ impl VfsFileHandle {
 	pub fn lseek(&self, offset: isize, whence: Whence) -> Result<usize, Errno> {
 		self.inner.lseek(offset, whence)
 	}
+
+	pub fn close(&self) -> Result<(), Errno> {
+		self.inner.close()
+	}
 }
 
 pub struct VfsDirHandle {
@@ -131,6 +143,10 @@ impl VfsDirHandle {
 			false => Err(Errno::EBADF),
 		}
 	}
+
+	pub fn close(&self) -> Result<(), Errno> {
+		self.inner.close()
+	}
 }
 
 #[derive(Clone, Copy)]
@@ -144,6 +160,9 @@ pub trait FileHandle {
 	fn read(&self, buf: &mut [u8], flags: IOFlag) -> Result<usize, Errno>;
 	fn write(&self, buf: &[u8], flags: IOFlag) -> Result<usize, Errno>;
 	fn lseek(&self, offset: isize, whence: Whence) -> Result<usize, Errno>;
+	fn close(&self) -> Result<(), Errno> {
+		Ok(())
+	}
 }
 
 #[repr(C)]
@@ -156,4 +175,7 @@ pub struct KfsDirent {
 
 pub trait DirHandle {
 	fn getdents(&self, buf: &mut [u8], flags: IOFlag) -> Result<usize, Errno>;
+	fn close(&self) -> Result<(), Errno> {
+		Ok(())
+	}
 }

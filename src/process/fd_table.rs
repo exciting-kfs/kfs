@@ -1,3 +1,4 @@
+use core::mem::take;
 use core::{array, ops::IndexMut};
 
 use crate::fs::vfs::VfsHandle;
@@ -46,15 +47,10 @@ impl FdTable {
 		Some(Fd(fd))
 	}
 
-	pub fn close(&mut self, fd: Fd) -> Result<usize, Errno> {
+	pub fn close(&mut self, fd: Fd) -> Result<VfsHandle, Errno> {
 		let entry = self.0.index_mut(fd.index());
-
-		if entry.is_none() {
-			Err(Errno::EBADF)
-		} else {
-			*entry = None;
-			Ok(0)
-		}
+		let entry = take(entry);
+		entry.ok_or(Errno::EBADF)
 	}
 
 	pub fn clear(&mut self) {
