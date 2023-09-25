@@ -13,6 +13,7 @@ use crate::{
 
 use super::preempt::AtomicOps;
 
+#[derive(Copy, Clone)]
 pub enum Sleep {
 	Light,
 	Deep,
@@ -66,29 +67,28 @@ pub fn wake_up_sleep(task: &Arc<Task>) {
 	}
 }
 
-pub fn wake_up(task: &Arc<Task>, state: State) {
-	match state {
-		State::DeepSleep => wake_up_deep_sleep(task),
-		State::Sleeping => wake_up_sleep(task),
-		_ => {}
+pub fn wake_up(task: &Arc<Task>, sleep: Sleep) {
+	match sleep {
+		Sleep::Deep => wake_up_deep_sleep(task),
+		Sleep::Light => wake_up_sleep(task),
 	}
 }
 
-pub fn wake_up_pid(pid: Pid, state: State) -> Result<(), Errno> {
+pub fn wake_up_pid(pid: Pid, sleep: Sleep) -> Result<(), Errno> {
 	let tree = PROCESS_TREE.lock();
 	let task = tree.get(&pid).ok_or(Errno::ESRCH)?;
-	wake_up(task, state);
+	wake_up(task, sleep);
 	Ok(())
 }
 
-pub fn wake_up_foreground(sess: &Weak<Locked<Session>>, state: State) -> Option<()> {
+pub fn wake_up_foreground(sess: &Weak<Locked<Session>>, sleep: Sleep) -> Option<()> {
 	let sess = sess.upgrade()?;
 	let sess_lock = sess.lock();
 	let fg = sess_lock.foreground()?.upgrade()?;
 
 	for (_, weak) in fg.lock_members().iter() {
 		if let Some(task) = weak.upgrade() {
-			wake_up(&task, state);
+			wake_up(&task, sleep);
 		}
 	}
 	None

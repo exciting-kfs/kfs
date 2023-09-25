@@ -25,7 +25,7 @@ use crate::{
 		exit::exit_with_signal,
 		relation::session::Session,
 		signal::{sig_flag::SigFlag, sig_handler::SigHandler, sig_num::SigNum},
-		task::{State, Task, CURRENT},
+		task::{Task, CURRENT},
 	},
 	scheduler::sleep::{sleep_and_yield, wake_up, Sleep},
 	sync::Locked,
@@ -291,7 +291,7 @@ pub fn send_signal_to(task: &Arc<Task>, sig_info: &SigInfo) -> Result<(), Errno>
 	);
 
 	task.recv_signal(sig_info.clone())?;
-	wake_up(task, State::Sleeping);
+	wake_up(task, Sleep::Light);
 	Ok(())
 }
 

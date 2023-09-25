@@ -6,7 +6,7 @@ use crate::{
 	driver::ide::block::Block,
 	process::{
 		relation::Pid,
-		task::{State, Task, CURRENT},
+		task::{Task, CURRENT},
 	},
 	scheduler::sleep::{sleep_and_yield, wake_up, Sleep},
 	sync::Locked,
@@ -25,7 +25,7 @@ impl WaitIO {
 
 	pub fn submit(&self, target: &Arc<Task>, io_result: Result<Block, AllocError>) {
 		self.io_result.lock().insert(target.get_pid(), io_result);
-		wake_up(target, State::DeepSleep);
+		wake_up(target, Sleep::Deep);
 	}
 
 	pub fn wait(&self) -> Result<Block, AllocError> {

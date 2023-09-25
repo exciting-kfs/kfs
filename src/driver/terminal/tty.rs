@@ -17,7 +17,6 @@ use crate::input::keyboard::KEYBOARD;
 use crate::io::{BlkRead, BlkWrite, ChRead, ChWrite, NoSpace};
 use crate::process::relation::session::Session;
 use crate::process::signal::{poll_signal_queue, send_signal_to_foreground};
-use crate::process::task::State;
 use crate::scheduler::sleep::{sleep_and_yield, wake_up_foreground, Sleep};
 use crate::scheduler::work::schedule_fast_work;
 use crate::sync::{Locked, LockedGuard};
@@ -431,7 +430,7 @@ impl ChWrite<Code> for TTY {
 		}
 
 		// wake_up on event
-		wake_up_foreground(&self.session, State::Sleeping);
+		wake_up_foreground(&self.session, Sleep::Light);
 
 		Ok(())
 	}
