@@ -4,11 +4,11 @@ use core::{
 	ops::{Deref, DerefMut},
 };
 
-use super::lock::{spinlock::SpinLock, TryLockFail};
+use super::raw_lock::{GlobalSpinLock, TryLockFail};
 
 #[derive(Debug)]
 pub struct Locked<T: ?Sized> {
-	inner: SpinLock,
+	inner: GlobalSpinLock,
 	value: UnsafeCell<T>,
 }
 
@@ -21,7 +21,7 @@ impl<T: Clone> Clone for Locked<T> {
 		let value = UnsafeCell::new(unsafe { (*self.value.get()).clone() });
 		self.inner.unlock();
 		Self {
-			inner: self.inner.clone(),
+			inner: GlobalSpinLock::new(),
 			value,
 		}
 	}
@@ -30,7 +30,7 @@ impl<T: Clone> Clone for Locked<T> {
 impl<T: Default> Default for Locked<T> {
 	fn default() -> Self {
 		Self {
-			inner: SpinLock::new(),
+			inner: GlobalSpinLock::new(),
 			value: UnsafeCell::new(T::default()),
 		}
 	}
@@ -39,7 +39,7 @@ impl<T: Default> Default for Locked<T> {
 impl<T> Locked<MaybeUninit<T>> {
 	pub const fn uninit() -> Self {
 		Self {
-			inner: SpinLock::new(),
+			inner: GlobalSpinLock::new(),
 			value: UnsafeCell::new(MaybeUninit::uninit()),
 		}
 	}
@@ -48,7 +48,7 @@ impl<T> Locked<MaybeUninit<T>> {
 impl<T, const N: usize> Locked<[MaybeUninit<T>; N]> {
 	pub const fn uninit_array() -> Self {
 		Self {
-			inner: SpinLock::new(),
+			inner: GlobalSpinLock::new(),
 			value: UnsafeCell::new(MaybeUninit::uninit_array()),
 		}
 	}
@@ -57,7 +57,7 @@ impl<T, const N: usize> Locked<[MaybeUninit<T>; N]> {
 impl<T> Locked<T> {
 	pub const fn new(value: T) -> Self {
 		Self {
-			inner: SpinLock::new(),
+			inner: GlobalSpinLock::new(),
 			value: UnsafeCell::new(value),
 		}
 	}

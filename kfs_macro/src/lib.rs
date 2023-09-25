@@ -56,7 +56,7 @@ pub fn interrupt_handler(_attr: TokenStream, input: TokenStream) -> TokenStream 
 	quote! {
 		#[no_mangle]
 		#vis #sig {
-			assert_eq!(crate::sync::spinlock::get_lock_depth(), 0);
+			assert_eq!(crate::sync::get_lock_depth(), 0);
 			let __interrupt_guard = crate::interrupt::enter_interrupt_context();
 			#block;
 		}

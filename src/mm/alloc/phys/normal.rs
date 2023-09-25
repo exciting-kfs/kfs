@@ -1,7 +1,7 @@
 use core::alloc::{AllocError, Allocator, Layout};
 use core::ptr::NonNull;
 
-use crate::sync::locked::Locked;
+use crate::sync::Locked;
 
 use super::PMemAlloc;
 

@@ -10,7 +10,7 @@ pub use inode::*;
 pub use walk::*;
 
 use crate::driver::dev_num::DevNum;
-use crate::sync::locked::Locked;
+use crate::sync::Locked;
 use crate::syscall::errno::Errno;
 
 pub trait FileSystem<S: SuperBlock, D: DirInode> {

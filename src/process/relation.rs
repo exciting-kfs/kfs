@@ -10,7 +10,7 @@ pub use id::*;
 use alloc::sync::{Arc, Weak};
 
 use crate::pr_debug;
-use crate::sync::locked::Locked;
+use crate::sync::Locked;
 use crate::syscall::errno::Errno;
 use crate::syscall::wait::Who;
 

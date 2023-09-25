@@ -20,7 +20,7 @@ use crate::process::signal::{poll_signal_queue, send_signal_to_foreground};
 use crate::process::task::State;
 use crate::scheduler::sleep::{sleep_and_yield, wake_up_foreground};
 use crate::scheduler::work::schedule_fast_work;
-use crate::sync::locked::{Locked, LockedGuard};
+use crate::sync::{Locked, LockedGuard};
 use crate::syscall::errno::Errno;
 
 #[rustfmt::skip]

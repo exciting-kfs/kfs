@@ -8,7 +8,7 @@ use crate::{
 		relation::{Pgid, Pid, Sid},
 		task::Task,
 	},
-	sync::locked::{Locked, LockedGuard},
+	sync::{Locked, LockedGuard},
 };
 
 use super::session::Session;

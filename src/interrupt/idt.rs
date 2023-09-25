@@ -1,7 +1,7 @@
 use core::{arch::asm, mem::size_of};
 
 use crate::interrupt::exception::CpuException;
-use crate::sync::locked::Locked;
+use crate::sync::Locked;
 use crate::x86::{SystemDesc, DPL_USER, GDT};
 
 const IDTE_COUNT: usize = 256;

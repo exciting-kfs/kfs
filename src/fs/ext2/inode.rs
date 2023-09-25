@@ -2,7 +2,7 @@ use alloc::{boxed::Box, sync::Arc};
 
 use crate::{
 	fs::vfs::{self, TimeSpec},
-	sync::lock_rw::LockRW,
+	sync::LockRW,
 	syscall::errno::Errno,
 };
 

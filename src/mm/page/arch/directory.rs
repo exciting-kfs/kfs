@@ -3,7 +3,7 @@ use crate::mm::alloc::page::{alloc_pages, free_pages};
 use crate::mm::alloc::virt::AddressSpace;
 use crate::mm::alloc::Zone;
 use crate::mm::{constant::*, util::*};
-use crate::sync::locked::Locked;
+use crate::sync::Locked;
 
 use core::alloc::AllocError;
 use core::arch::asm;

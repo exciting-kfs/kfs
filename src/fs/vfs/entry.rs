@@ -10,7 +10,7 @@ use alloc::{
 use crate::{
 	fs::path::Path,
 	process::{get_idle_task, task::Task},
-	sync::locked::Locked,
+	sync::Locked,
 	syscall::errno::Errno,
 };
 

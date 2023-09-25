@@ -5,7 +5,7 @@ use core::slice::from_raw_parts_mut;
 
 use crate::boot::{self, BootAlloc};
 use crate::mm::util::*;
-use crate::sync::locked::Locked;
+use crate::sync::Locked;
 
 use super::metapage::MetaPage;
 

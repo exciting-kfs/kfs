@@ -4,7 +4,7 @@ use crate::driver::apic::local::LOCAL_APIC;
 use crate::interrupt::InterruptFrame;
 use crate::process::task::CURRENT;
 use crate::scheduler::context::yield_now;
-use crate::sync::cpu_local::CpuLocal;
+use crate::sync::CpuLocal;
 
 #[interrupt_handler]
 pub unsafe extern "C" fn handle_timer_impl(frame: InterruptFrame) {

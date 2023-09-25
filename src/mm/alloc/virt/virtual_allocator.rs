@@ -10,7 +10,7 @@ use crate::mm::page::{index_to_meta, PageFlag, KERNEL_PD};
 use crate::mm::page::{meta_to_ptr, metapage_let, MetaPage};
 use crate::mm::util::virt_to_phys;
 use crate::mm::{constant::*, util::*};
-use crate::sync::locked::Locked;
+use crate::sync::Locked;
 use core::slice::from_raw_parts;
 
 use super::AddressTree;
