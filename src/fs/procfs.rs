@@ -170,14 +170,14 @@ impl DirInode for Locked<ProcFdDirInode> {
 	fn open(&self) -> Box<dyn DirHandle> {
 		let this = self.lock();
 
-		let mut v: Vec<Vec<u8>> = this
+		let mut v: Vec<(u8, Vec<u8>)> = this
 			.sub_files
 			.keys()
-			.map(|x| x.to_string().into())
+			.map(|x| (7, x.to_string().into()))
 			.collect();
 
-		v.push(b".".to_vec());
-		v.push(b"..".to_vec());
+		v.push((2, b".".to_vec()));
+		v.push((2, b"..".to_vec()));
 
 		Box::new(TmpDir::new(v))
 	}
@@ -262,10 +262,10 @@ impl ProcDirInode {
 impl DirInode for Locked<ProcDirInode> {
 	fn open(&self) -> Box<dyn DirHandle> {
 		let v = vec![
-			b"cwd".to_vec(),
-			b"fd".to_vec(),
-			b".".to_vec(),
-			b"..".to_vec(),
+			(7, b"cwd".to_vec()),
+			(2, b"fd".to_vec()),
+			(2, b".".to_vec()),
+			(2, b"..".to_vec()),
 		];
 
 		Box::new(TmpDir::new(v))
@@ -357,15 +357,15 @@ impl Locked<ProcRootDirInode> {
 
 impl DirInode for Locked<ProcRootDirInode> {
 	fn open(&self) -> Box<dyn DirHandle> {
-		let mut v: Vec<Vec<u8>> = PROCESS_TREE
+		let mut v: Vec<(u8, Vec<u8>)> = PROCESS_TREE
 			.lock()
 			.members()
 			.keys()
-			.map(|x| x.as_raw().to_string().into())
+			.map(|x| (2, x.as_raw().to_string().into()))
 			.collect();
 
-		v.push(b".".to_vec());
-		v.push(b"..".to_vec());
+		v.push((2, b".".to_vec()));
+		v.push((2, b"..".to_vec()));
 
 		Box::new(TmpDir::new(v))
 	}

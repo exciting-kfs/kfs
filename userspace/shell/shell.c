@@ -250,8 +250,34 @@ void builtin_stat(int idx) {
 		return;
 	}
 
-	ft_printf("\tuid: %d\n\tgid: %d\n\tsize: %d\n\tmode: 0x%x\n", st.uid, st.gid, st.size,
-		  st.perm);
+	ft_printf("\tuid: %d\n\tgid: %d\n\tsize: %d\n\tmode: 0x%x\n\ttype: ", st.uid, st.gid,
+		  st.size, st.perm);
+	switch (st.file_type) {
+	case 1:
+		ft_printf("regular file\n");
+		break;
+	case 2:
+		ft_printf("directory\n");
+		break;
+	case 3:
+		ft_printf("character special\n");
+		break;
+	case 4:
+		ft_printf("block special\n");
+		break;
+	case 5:
+		ft_printf("fifo\n");
+		break;
+	case 6:
+		ft_printf("socket\n");
+		break;
+	case 7:
+		ft_printf("symbolic link\n");
+		break;
+	default:
+		ft_printf("unknown\n");
+		break;
+	}
 }
 
 void builtin_chmod(int idx) {

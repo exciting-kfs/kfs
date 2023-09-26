@@ -234,9 +234,20 @@ impl DirInode for Locked<TmpDirInode> {
 	fn open(&self) -> Box<dyn DirHandle> {
 		let this = self.lock();
 
-		let mut v: Vec<Vec<u8>> = this.sub_files.keys().map(|x| (&*x.0).clone()).collect();
-		v.push(b".".to_vec());
-		v.push(b"..".to_vec());
+		let mut v: Vec<(u8, Vec<u8>)> = Vec::new();
+
+		for (name, inode) in this.sub_files.iter() {
+			let kind = match inode {
+				TmpInode::Dir(_) => 2,
+				TmpInode::File(_) => 1,
+				TmpInode::SymLink(_) => 7,
+			};
+
+			v.push((kind, name.to_vec()))
+		}
+
+		v.push((2, b".".to_vec()));
+		v.push((2, b"..".to_vec()));
 
 		Box::new(TmpDir::new(v))
 	}
@@ -401,14 +412,14 @@ impl SymLinkInode for TmpSymLink {
 }
 
 pub struct TmpDir {
-	idents: Vec<Vec<u8>>,
+	dirents: Vec<(u8, Vec<u8>)>,
 	last: Locked<usize>,
 }
 
 impl TmpDir {
-	pub fn new(idents: Vec<Vec<u8>>) -> Self {
+	pub fn new(dirents: Vec<(u8, Vec<u8>)>) -> Self {
 		Self {
-			idents,
+			dirents,
 			last: Locked::new(0),
 		}
 	}
@@ -418,14 +429,14 @@ impl DirHandle for TmpDir {
 	fn getdents(&self, buf: &mut [u8], _io_flags: IOFlag) -> Result<usize, Errno> {
 		let mut last = self.last.lock();
 
-		if *last == self.idents.len() {
+		if *last == self.dirents.len() {
 			return Ok(0);
 		}
 
 		let mut total_size = 0;
 		let mut curr_buf = buf;
-		for i in *last..self.idents.len() {
-			let name = &self.idents[i];
+		for i in *last..self.dirents.len() {
+			let (kind, name) = &self.dirents[i];
 
 			let curr_size = next_align(size_of::<KfsDirent>() + name.len() + 1 + 1, 4);
 
@@ -439,6 +450,7 @@ impl DirHandle for TmpDir {
 					ino: 0,
 					private: 0,
 					size: curr_size as u16,
+					file_type: *kind,
 					name: (),
 				});
 
