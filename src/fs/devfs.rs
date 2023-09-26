@@ -79,9 +79,10 @@ pub fn init() -> Result<(), Errno> {
 
 impl DirInode for DevDirInode {
 	fn open(&self) -> Box<dyn DirHandle> {
-		let mut v: Vec<Vec<u8>> = self.devices.keys().map(|x| (&*x.0).clone()).collect();
-		v.push(b".".to_vec());
-		v.push(b"..".to_vec());
+		let mut v: Vec<(u8, Vec<u8>)> = self.devices.keys().map(|x| (3, (&*x.0).clone())).collect();
+
+		v.push((2, b".".to_vec()));
+		v.push((2, b"..".to_vec()));
 
 		Box::new(TmpDir::new(v))
 	}

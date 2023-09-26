@@ -170,6 +170,7 @@ pub struct KfsDirent {
 	pub ino: u32,
 	pub private: u32,
 	pub size: u16,
+	pub file_type: u8,
 	pub name: (),
 }
 
