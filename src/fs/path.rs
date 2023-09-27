@@ -11,7 +11,7 @@ macro_rules! format_path {
 
 pub(crate) use format_path;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Path {
 	base: Base,
 	comps: VecDeque<Vec<u8>>,

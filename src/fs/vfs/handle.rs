@@ -2,7 +2,7 @@ use alloc::{boxed::Box, sync::Arc};
 
 use crate::fs::path::Path;
 use crate::net::address::{ReadOnly, UnknownSocketAddress, WriteOnly};
-use crate::net::socket::SocketHandle;
+use crate::net::socket::{Socket, SocketHandle};
 use crate::process::task::Task;
 use crate::syscall::errno::Errno;
 
@@ -168,7 +168,11 @@ pub struct VfsSocketHandle {
 
 macro_rules! socket_dispatch {
 	($inner:expr => $method:ident($($arg:expr),*)) => {{
-		todo!()
+		use SocketHandle::*;
+		match $inner {
+			LocalDgram(ref x) => x.$method($($arg),*),
+			LocalStream(ref x) => x.$method($($arg),*),
+		}
 	}};
 }
 
