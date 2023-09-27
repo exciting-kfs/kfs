@@ -1,10 +1,9 @@
 use crate::{
 	fs::{path::Path, vfs::lookup_entry_follow},
+	mm::user::verify::verify_path,
 	process::task::CURRENT,
 	syscall::errno::Errno,
 };
-
-use super::utils::verify_path;
 
 pub fn sys_symlink(target: usize, name: usize) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_ref() };

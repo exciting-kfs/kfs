@@ -1,8 +1,7 @@
-use crate::{process::task::CURRENT, syscall::errno::Errno};
+use crate::{mm::user::verify::verify_buffer, process::task::CURRENT, syscall::errno::Errno};
 
-use super::{read::get_file, utils::verify_buffer};
+use super::read::get_file;
 
-// TODO copy from user
 pub fn sys_write(fd: isize, buf: usize, len: usize) -> Result<usize, Errno> {
 	if len == 0 {
 		return Ok(0);

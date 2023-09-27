@@ -4,10 +4,9 @@ use alloc::sync::Arc;
 
 use crate::fs::path::Path;
 use crate::fs::vfs::{lookup_entry_follow, RawStat};
+use crate::mm::user::verify::{verify_buffer_mut, verify_path};
 use crate::process::task::{Task, CURRENT};
 use crate::syscall::errno::Errno;
-
-use super::utils::{verify_buffer_mut, verify_path};
 
 fn verify_stat_buf(stat_buf: usize, task: &Arc<Task>) -> Result<&'_ mut RawStat, Errno> {
 	if stat_buf % align_of::<RawStat>() != 0 {

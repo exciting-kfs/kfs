@@ -1,3 +1,4 @@
+use core::mem::size_of;
 use core::slice::{from_raw_parts, from_raw_parts_mut};
 
 use alloc::sync::Arc;
@@ -97,4 +98,18 @@ pub fn verify_buffer(buf_ptr: usize, len: usize, task: &Arc<Task>) -> Result<&'_
 	verify_region(buf_ptr, len, task, AreaFlag::Readable)?;
 
 	Ok(unsafe { from_raw_parts(buf_ptr as *const u8, len) })
+}
+
+/// T must be PDO type (usize, i32, u32 ... etc)
+pub fn verify_ptr<T>(ptr: usize, task: &Arc<Task>) -> Result<&'_ T, Errno> {
+	verify_region(ptr, size_of::<T>(), task, AreaFlag::Readable)?;
+
+	Ok(unsafe { &*(ptr as *const T) })
+}
+
+/// T must be PDO type (usize, i32, u32 ... etc)
+pub fn verify_ptr_mut<T>(ptr: usize, task: &Arc<Task>) -> Result<&'_ mut T, Errno> {
+	verify_region(ptr, size_of::<T>(), task, AreaFlag::Writable)?;
+
+	Ok(unsafe { &mut *(ptr as *mut T) })
 }

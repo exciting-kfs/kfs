@@ -1,7 +1,6 @@
 use crate::fs::{path::Path, vfs::lookup_entry_follow};
+use crate::mm::user::verify::verify_path;
 use crate::{process::task::CURRENT, syscall::errno::Errno};
-
-use super::utils::verify_path;
 
 pub fn sys_chown(path: usize, owner: usize, group: usize) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_ref() };

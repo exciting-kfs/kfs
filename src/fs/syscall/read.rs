@@ -1,8 +1,7 @@
 use crate::fs::vfs::VfsHandle;
+use crate::mm::user::verify::verify_buffer_mut;
 use crate::process::{fd_table::Fd, task::CURRENT};
 use crate::syscall::errno::Errno;
-
-use super::utils::verify_buffer_mut;
 
 pub(super) fn get_file(fd: isize) -> Result<VfsHandle, Errno> {
 	let fd = Fd::from(fd as usize).ok_or(Errno::EBADF)?;

@@ -1,14 +1,11 @@
-use crate::{
-	fs::{
-		path::Path,
-		tmpfs::TmpFs,
-		vfs::{lookup_entry_nofollow, FileSystem},
-	},
-	process::task::CURRENT,
-	syscall::errno::Errno,
+use crate::fs::{
+	path::Path,
+	tmpfs::TmpFs,
+	vfs::{lookup_entry_nofollow, FileSystem},
 };
-
-use super::utils::{verify_path, verify_string};
+use crate::mm::user::verify::{verify_path, verify_string};
+use crate::process::task::CURRENT;
+use crate::syscall::errno::Errno;
 
 pub fn sys_mount(path: usize, fs_name: usize) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };
