@@ -75,3 +75,5 @@ SYSCALL bind,           361,            3
 SYSCALL connect,        362,            3
 SYSCALL listen,         363,            2
 SYSCALL accept,         364,            3
+SYSCALL sendto,         369,            5
+SYSCALL recvfrom,       371,            5

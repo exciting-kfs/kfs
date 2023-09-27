@@ -1,6 +1,6 @@
 use crate::{mm::user::verify::verify_buffer, process::task::CURRENT, syscall::errno::Errno};
 
-use super::read::get_file;
+use super::get_file;
 
 pub fn sys_write(fd: isize, buf: usize, len: usize) -> Result<usize, Errno> {
 	if len == 0 {

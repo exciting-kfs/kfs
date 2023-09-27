@@ -1,17 +1,8 @@
-use crate::fs::vfs::VfsHandle;
 use crate::mm::user::verify::verify_buffer_mut;
-use crate::process::{fd_table::Fd, task::CURRENT};
+use crate::process::task::CURRENT;
 use crate::syscall::errno::Errno;
 
-pub(super) fn get_file(fd: isize) -> Result<VfsHandle, Errno> {
-	let fd = Fd::from(fd as usize).ok_or(Errno::EBADF)?;
-	let fd_table = unsafe { CURRENT.get_mut() }
-		.get_user_ext()
-		.expect("user task")
-		.lock_fd_table();
-
-	fd_table.get_file(fd).ok_or(Errno::EBADF)
-}
+use super::get_file;
 
 pub fn sys_read(fd: isize, buf: usize, len: usize) -> Result<usize, Errno> {
 	if len == 0 {

@@ -97,8 +97,7 @@ impl SocketAddress for LocalSocketAddress {
 
 		unknown.len = total_len;
 		unsafe {
-			unknown
-				.ptr
+			addr_of!((*unknown.ptr).data)
 				.cast::<u8>()
 				.cast_mut()
 				.copy_from_nonoverlapping(path_buf.as_ptr(), path_buf.len())
