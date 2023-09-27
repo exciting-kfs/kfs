@@ -1,12 +1,15 @@
 #include <fcntl.h>
-#include <sys/stat.h>
 #include <unistd.h>
+
+#include <sys/socket.h>
+#include <sys/stat.h>
 
 #include "kfs/ft.h"
 #include "kfs/internal/prelude.h"
 #include "kfs/kernel.h"
 #include "kfs/libft.h"
 #include "sys/mount.h"
+#include "sys/socket.h"
 
 char line_buf[8192] = {42};
 

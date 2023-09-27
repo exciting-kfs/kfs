@@ -5,7 +5,7 @@ macro_rules! include_user_bin {
 }
 
 macro_rules! define_user_bin {
-	[$(($varname:ident, $filename:literal)),*] => {
+	[$(($varname:ident, $filename:literal)),* $(,)?] => {
 		$(
 			pub static $varname: &'static [u8] = include_user_bin!($filename);
 		)*
@@ -26,5 +26,6 @@ define_user_bin![
 	(TEST_SIG, "test_sig.bin"),
 	(TEST_SETXID, "test_setXid.bin"),
 	(TEST_SIGSTOPCONT, "test_sig_stop_cont.bin"),
-	(TEST_FILE, "test_file.bin")
+	(TEST_FILE, "test_file.bin"),
+	(TEST_SOCKET, "test_socket.bin"),
 ];
