@@ -70,3 +70,8 @@ SYSCALL getgid,         200,            0
 SYSCALL chown,          212,            3
 SYSCALL setuid,         213,            1
 SYSCALL setgid,         214,            1
+SYSCALL socket,         359,            3
+SYSCALL bind,           361,            3
+SYSCALL connect,        362,            3
+SYSCALL listen,         363,            2
+SYSCALL accept,         364,            3
