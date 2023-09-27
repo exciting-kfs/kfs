@@ -11,6 +11,8 @@
 #![feature(maybe_uninit_as_bytes)]
 #![feature(slice_as_chunks)]
 #![feature(unboxed_closures)]
+#![feature(iter_intersperse)]
+#![feature(get_mut_unchecked)]
 
 extern crate alloc;
 extern crate time;
@@ -25,6 +27,7 @@ mod input;
 mod interrupt;
 mod io;
 mod mm;
+mod net;
 mod printk;
 mod process;
 mod ptr;

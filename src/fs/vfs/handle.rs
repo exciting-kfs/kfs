@@ -1,12 +1,17 @@
 use alloc::{boxed::Box, sync::Arc};
 
-use crate::{fs::path::Path, syscall::errno::Errno};
+use crate::fs::path::Path;
+use crate::net::address::{ReadOnly, UnknownSocketAddress, WriteOnly};
+use crate::net::socket::SocketHandle;
+use crate::process::task::Task;
+use crate::syscall::errno::Errno;
 
-use super::{AccessFlag, IOFlag, VfsDirEntry, VfsEntry, VfsFileEntry};
+use super::{AccessFlag, IOFlag, VfsDirEntry, VfsEntry, VfsFileEntry, VfsSocketEntry};
 
 #[derive(Clone)]
 pub enum VfsHandle {
 	File(Arc<VfsFileHandle>),
+	Socket(Arc<VfsSocketHandle>),
 	Dir(Arc<VfsDirHandle>),
 }
 
@@ -15,6 +20,7 @@ impl VfsHandle {
 		use VfsHandle::*;
 		match self {
 			File(f) => f.read(buf),
+			Socket(s) => s.recv_from(&mut None, buf),
 			Dir(_) => Err(Errno::EISDIR),
 		}
 	}
@@ -23,6 +29,7 @@ impl VfsHandle {
 		use VfsHandle::*;
 		match self {
 			File(f) => f.write(buf),
+			Socket(s) => s.send_to(&None, buf),
 			Dir(_) => Err(Errno::EISDIR),
 		}
 	}
@@ -32,13 +39,14 @@ impl VfsHandle {
 		match self {
 			File(f) => f.close(),
 			Dir(d) => d.close(),
+			Socket(_) => Ok(()),
 		}
 	}
 
 	pub fn getdents(&self, buf: &mut [u8]) -> Result<usize, Errno> {
 		use VfsHandle::*;
 		match self {
-			File(_) => Err(Errno::ENOTDIR),
+			File(_) | Socket(_) => Err(Errno::ENOTDIR),
 			Dir(d) => d.getdents(buf),
 		}
 	}
@@ -47,6 +55,7 @@ impl VfsHandle {
 		use VfsHandle::*;
 		match self {
 			File(f) => f.lseek(offset, whence),
+			Socket(_) => Err(Errno::ESPIPE),
 			Dir(_) => Err(Errno::EISDIR),
 		}
 	}
@@ -55,6 +64,7 @@ impl VfsHandle {
 		use VfsHandle::*;
 		match self {
 			File(f) => f.entry.clone().map(|ent| VfsEntry::new_file(ent)),
+			Socket(s) => s.entry.clone().map(|ent| VfsEntry::new_socket(ent)),
 			Dir(d) => d.entry.clone().map(|ent| VfsEntry::new_dir(ent)),
 		}
 	}
@@ -146,6 +156,90 @@ impl VfsDirHandle {
 
 	pub fn close(&self) -> Result<(), Errno> {
 		self.inner.close()
+	}
+}
+
+pub struct VfsSocketHandle {
+	entry: Option<Arc<VfsSocketEntry>>,
+	inner: SocketHandle,
+	io_flags: IOFlag,
+	access_flags: AccessFlag,
+}
+
+macro_rules! socket_dispatch {
+	($inner:expr => $method:ident($($arg:expr),*)) => {{
+		todo!()
+	}};
+}
+
+impl VfsSocketHandle {
+	pub fn new(
+		entry: Option<Arc<VfsSocketEntry>>,
+		inner: SocketHandle,
+		io_flags: IOFlag,
+		access_flags: AccessFlag,
+	) -> Self {
+		Self {
+			entry,
+			inner,
+			io_flags,
+			access_flags,
+		}
+	}
+
+	pub fn expose_socket(&self) -> SocketHandle {
+		self.inner.clone()
+	}
+
+	pub fn send_to(
+		&self,
+		addr: &Option<UnknownSocketAddress<ReadOnly>>,
+		buf: &[u8],
+	) -> Result<usize, Errno> {
+		if !self.access_flags.write_ok() {
+			return Err(Errno::EBADF);
+		}
+
+		socket_dispatch!(self.inner => send_to(addr, buf, self.io_flags))
+	}
+
+	pub fn recv_from(
+		&self,
+		addr: &mut Option<UnknownSocketAddress<WriteOnly>>,
+		buf: &mut [u8],
+	) -> Result<usize, Errno> {
+		if !self.access_flags.read_ok() {
+			return Err(Errno::EBADF);
+		}
+
+		socket_dispatch!(self.inner => recv_from(addr, buf, self.io_flags))
+	}
+
+	pub fn bind(
+		self: &Arc<Self>,
+		addr: &UnknownSocketAddress<ReadOnly>,
+		task: &Arc<Task>,
+	) -> Result<(), Errno> {
+		socket_dispatch!(self.inner => bind(addr, self, task))
+	}
+
+	pub fn listen(&self, backlog: usize) -> Result<(), Errno> {
+		socket_dispatch!(self.inner => listen(backlog))
+	}
+
+	pub fn accept(
+		&self,
+		addr: &mut Option<UnknownSocketAddress<WriteOnly>>,
+	) -> Result<VfsSocketHandle, Errno> {
+		socket_dispatch!(self.inner => accept(addr))
+	}
+
+	pub fn connect(
+		&self,
+		addr: &UnknownSocketAddress<ReadOnly>,
+		task: &Arc<Task>,
+	) -> Result<(), Errno> {
+		socket_dispatch!(self.inner => connect(addr, task))
 	}
 }
 

@@ -42,6 +42,11 @@ pub enum Errno {
 	ENAMETOOLONG,
 	ENOTEMPTY,
 	ELOOP,
+	ENOTCONN,
+	EISCONN,
+	ECONNREFUSED,
+	EPROTOTYPE,
+	EOPNOTSUPP,
 }
 
 impl Errno {
@@ -97,5 +102,10 @@ fn desc(errno: Errno) -> &'static str {
 		ENAMETOOLONG => "File name too long",
 		ENOTEMPTY => "Directory is not empty",
 		ELOOP => "too many levels of symbolic links",
+		ENOTCONN => "Not connected",
+		EISCONN => "Already connected",
+		ECONNREFUSED => "Connection refused",
+		EPROTOTYPE => "Protocol wrong type for socket",
+		EOPNOTSUPP => "Operation not supported",
 	}
 }

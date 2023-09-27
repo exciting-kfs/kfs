@@ -15,8 +15,9 @@ use crate::{
 };
 
 use super::{
-	AccessFlag, DirInode, FileInode, IOFlag, Permission, RawStat, SuperBlock, SymLinkInode,
-	VfsDirHandle, VfsFileHandle, VfsHandle, VfsInode, ROOT_DIR_ENTRY,
+	AccessFlag, DirInode, FileInode, IOFlag, Permission, RawStat, SocketInode, SuperBlock,
+	SymLinkInode, VfsDirHandle, VfsFileHandle, VfsHandle, VfsInode, VfsSocketHandle,
+	ROOT_DIR_ENTRY,
 };
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -42,6 +43,7 @@ impl Borrow<[u8]> for Ident {
 pub enum VfsRealEntry {
 	File(Arc<VfsFileEntry>),
 	Dir(Arc<VfsDirEntry>),
+	Socket(Arc<VfsSocketEntry>),
 }
 
 #[derive(Clone)]
@@ -65,6 +67,10 @@ impl VfsEntry {
 
 	pub fn new_file(file: Arc<VfsFileEntry>) -> Self {
 		VfsEntry::Real(VfsRealEntry::File(file))
+	}
+
+	pub fn new_socket(sock: Arc<VfsSocketEntry>) -> Self {
+		VfsEntry::Real(VfsRealEntry::Socket(sock))
 	}
 
 	pub fn get_name(&self) -> Ident {
@@ -114,6 +120,7 @@ impl VfsRealEntry {
 		match self {
 			File(f) => f.parent_dir(task),
 			Dir(d) => d.parent_dir(task),
+			Socket(s) => s.parent_dir(task),
 		}
 	}
 
@@ -137,12 +144,11 @@ impl VfsRealEntry {
 		self.access(perm, task)?;
 
 		use VfsRealEntry::*;
-		let handle = match self {
-			File(f) => VfsHandle::File(f.open(io_flags, access_flags)),
-			Dir(d) => VfsHandle::Dir(d.open(io_flags, access_flags)),
-		};
-
-		Ok(handle)
+		match self {
+			File(f) => Ok(VfsHandle::File(f.open(io_flags, access_flags))),
+			Dir(d) => Ok(VfsHandle::Dir(d.open(io_flags, access_flags))),
+			Socket(_) => Err(Errno::ENOENT),
+		}
 	}
 
 	pub fn get_name(&self) -> Ident {
@@ -150,6 +156,7 @@ impl VfsRealEntry {
 		match self {
 			File(f) => f.get_name(),
 			Dir(d) => d.get_name(),
+			Socket(s) => s.get_name(),
 		}
 	}
 
@@ -158,6 +165,7 @@ impl VfsRealEntry {
 		match self {
 			File(f) => f.stat(),
 			Dir(d) => d.stat(),
+			Socket(s) => s.stat(),
 		}
 	}
 
@@ -166,6 +174,7 @@ impl VfsRealEntry {
 		match self {
 			File(f) => f.access(perm, task),
 			Dir(d) => d.access(perm, task),
+			Socket(s) => s.access(perm, task),
 		}
 	}
 
@@ -174,6 +183,7 @@ impl VfsRealEntry {
 		match self {
 			File(f) => f.chmod(perm, task),
 			Dir(d) => d.chmod(perm, task),
+			Socket(s) => s.chmod(perm, task),
 		}
 	}
 
@@ -182,6 +192,7 @@ impl VfsRealEntry {
 		match self {
 			File(f) => f.chown(owner, group, task),
 			Dir(d) => d.chown(owner, group, task),
+			Socket(s) => s.chown(owner, group, task),
 		}
 	}
 
@@ -190,13 +201,14 @@ impl VfsRealEntry {
 		match self {
 			File(f) => f.get_abs_path(),
 			Dir(d) => d.get_abs_path(),
+			Socket(s) => s.get_abs_path(),
 		}
 	}
 
 	pub fn downcast_dir(self) -> Result<Arc<VfsDirEntry>, Errno> {
 		use VfsRealEntry::*;
 		match self {
-			File(_) => Err(Errno::ENOTDIR),
+			File(_) | Socket(_) => Err(Errno::ENOTDIR),
 			Dir(d) => Ok(d),
 		}
 	}
@@ -206,6 +218,16 @@ impl VfsRealEntry {
 		match self {
 			File(f) => Ok(f),
 			Dir(_) => Err(Errno::EISDIR),
+			Socket(_) => Err(Errno::ESPIPE),
+		}
+	}
+
+	pub fn downcast_socket(self) -> Result<Arc<VfsSocketEntry>, Errno> {
+		use VfsRealEntry::*;
+		match self {
+			File(_) => Err(Errno::ECONNREFUSED),
+			Dir(_) => Err(Errno::ECONNREFUSED),
+			Socket(s) => Ok(s),
 		}
 	}
 }
@@ -257,6 +279,92 @@ impl VfsSymLinkEntry {
 
 		let name = self.get_name();
 		path.push_component_front(name.to_vec());
+
+		let mut curr = self.parent_dir(task)?;
+		let mut next = curr.parent_dir(task)?;
+		while !Arc::ptr_eq(&curr, &next) {
+			path.push_component_front(curr.get_name().to_vec());
+			curr = next;
+			next = curr.parent_dir(task)?;
+		}
+
+		Ok(path)
+	}
+}
+
+pub struct VfsSocketEntry {
+	name: Rc<Vec<u8>>,
+	inode: Arc<SocketInode>,
+	handle: Weak<VfsSocketHandle>,
+	parent: Weak<VfsDirEntry>,
+}
+
+impl VfsSocketEntry {
+	pub fn new(
+		name: Rc<Vec<u8>>,
+		inode: Arc<SocketInode>,
+		handle: Weak<VfsSocketHandle>,
+		parent: Weak<VfsDirEntry>,
+	) -> Self {
+		Self {
+			name,
+			inode,
+			parent,
+			handle,
+		}
+	}
+
+	pub fn get_socket(&self) -> Result<Arc<VfsSocketHandle>, Errno> {
+		self.handle.upgrade().ok_or(Errno::ECONNREFUSED)
+	}
+
+	pub fn get_name(&self) -> Ident {
+		Ident(self.name.clone())
+	}
+
+	pub fn stat(&self) -> Result<RawStat, Errno> {
+		self.inode.stat()
+	}
+
+	pub fn access(&self, perm: Permission, task: &Arc<Task>) -> Result<(), Errno> {
+		self.inode.access(task.get_uid(), task.get_gid(), perm)
+	}
+
+	pub fn chmod(&self, perm: Permission, task: &Arc<Task>) -> Result<(), Errno> {
+		let owner = self.stat()?.uid;
+
+		let uid = task.get_uid();
+		if uid != 0 && uid != owner {
+			return Err(Errno::EPERM);
+		}
+
+		self.inode.chmod(perm)
+	}
+
+	pub fn chown(&self, owner: usize, group: usize, task: &Arc<Task>) -> Result<(), Errno> {
+		if task.get_uid() != 0 {
+			// TODO: group check
+			return Err(Errno::EPERM);
+		}
+
+		self.inode.chown(owner, group)
+	}
+
+	pub fn parent_dir(&self, task: &Arc<Task>) -> Result<Arc<VfsDirEntry>, Errno> {
+		let parent = self.parent.upgrade().ok_or(Errno::ENOENT)?;
+
+		parent
+			.inode
+			.access(task.get_uid(), task.get_gid(), Permission::ANY_EXECUTE)?;
+
+		Ok(parent)
+	}
+
+	pub fn get_abs_path(&self) -> Result<Path, Errno> {
+		let task = &get_idle_task();
+
+		let mut path = Path::new_root();
+		path.push_component_front(self.get_name().to_vec());
 
 		let mut curr = self.parent_dir(task)?;
 		let mut next = curr.parent_dir(task)?;
@@ -482,7 +590,8 @@ impl VfsDirEntry {
 
 		let file_inode = self.inode.create(name, perm)?;
 
-		let file_entry = self.insert_child_force(name, VfsInode::File(file_inode));
+		let file_entry = self.inode_to_entry(name, VfsInode::File(file_inode));
+		self.insert_child_force(file_entry.clone());
 
 		Ok(file_entry.downcast_file().unwrap())
 	}
@@ -497,7 +606,9 @@ impl VfsDirEntry {
 
 		let dir_inode = self.inode.mkdir(&name, perm)?;
 
-		let dir_entry = self.insert_child_force(name, VfsInode::Dir(dir_inode));
+		let dir_entry = self.inode_to_entry(name, VfsInode::Dir(dir_inode));
+
+		self.insert_child_force(dir_entry.clone());
 
 		Ok(dir_entry.downcast_dir().unwrap())
 	}
@@ -540,6 +651,36 @@ impl VfsDirEntry {
 		)))
 	}
 
+	pub fn inode_to_entry(self: &Arc<Self>, name: &[u8], inode: VfsInode) -> VfsEntry {
+		match inode {
+			VfsInode::Dir(inode) => VfsEntry::new_dir(Arc::new(VfsDirEntry::new(
+				Rc::new(name.to_vec()),
+				inode,
+				Arc::downgrade(self),
+				Arc::clone(&self.super_block),
+				false,
+			))),
+			VfsInode::File(inode) => VfsEntry::new_file(Arc::new(VfsFileEntry::new(
+				Rc::new(name.to_vec()),
+				inode,
+				Arc::downgrade(self),
+				Arc::clone(&self.super_block),
+			))),
+			VfsInode::Socket(inode) => VfsEntry::new_socket(Arc::new(VfsSocketEntry::new(
+				Rc::new(name.to_vec()),
+				inode,
+				Weak::default(),
+				Arc::downgrade(self),
+			))),
+			VfsInode::SymLink(inode) => VfsEntry::SymLink(Arc::new(VfsSymLinkEntry::new(
+				Rc::new(name.to_vec()),
+				inode,
+				Arc::downgrade(self),
+				Arc::clone(&self.super_block),
+			))),
+		}
+	}
+
 	pub fn lookup(self: &Arc<Self>, name: &[u8], task: &Arc<Task>) -> Result<VfsEntry, Errno> {
 		self.inode
 			.access(task.get_uid(), task.get_gid(), Permission::ANY_EXECUTE)?;
@@ -553,7 +694,10 @@ impl VfsDirEntry {
 		}
 
 		let inode = self.inode.lookup(name)?;
-		let entry = self.insert_child_force(name, inode);
+
+		let entry = self.inode_to_entry(name, inode);
+
+		self.insert_child_force(entry.clone());
 
 		Ok(entry)
 	}
@@ -650,31 +794,7 @@ impl VfsDirEntry {
 		sub_tree.remove(name);
 	}
 
-	pub fn insert_child_force(self: &Arc<Self>, name: &[u8], inode: VfsInode) -> VfsEntry {
-		let entry = match inode {
-			VfsInode::Dir(inode) => VfsEntry::new_dir(Arc::new(VfsDirEntry::new(
-				Rc::new(name.to_vec()),
-				inode,
-				Arc::downgrade(self),
-				Arc::clone(&self.super_block),
-				false,
-			))),
-			VfsInode::File(inode) => VfsEntry::new_file(Arc::new(VfsFileEntry::new(
-				Rc::new(name.to_vec()),
-				inode,
-				Arc::downgrade(self),
-				Arc::clone(&self.super_block),
-			))),
-			VfsInode::SymLink(inode) => VfsEntry::SymLink(Arc::new(VfsSymLinkEntry::new(
-				Rc::new(name.to_vec()),
-				inode,
-				Arc::downgrade(self),
-				Arc::clone(&self.super_block),
-			))),
-		};
-
+	pub fn insert_child_force(self: &Arc<Self>, entry: VfsEntry) {
 		self.sub_tree.lock().insert(entry.get_name(), entry.clone());
-
-		entry
 	}
 }
