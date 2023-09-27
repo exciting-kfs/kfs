@@ -28,6 +28,8 @@ uid_t getuid(void);
 int setuid(uid_t uid);
 
 int chdir(const char *path);
+char *getcwd(char *buf, size_t size);
+
 int rmdir(const char *path);
 int unlink(const char *path);
 int symlink(const char *target, const char *linkpath);

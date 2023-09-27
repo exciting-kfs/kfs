@@ -152,6 +152,37 @@ impl Path {
 	pub fn components(&self) -> vec_deque::Iter<'_, Vec<u8>> {
 		self.comps.iter()
 	}
+
+	pub fn to_buffer(&self) -> Vec<u8> {
+		let mut buf: Vec<u8> = Vec::new();
+
+		use Base::*;
+		if let WorkingDir { to_parent } = self.base() {
+			{
+				if to_parent == 0 {
+					buf.push(b'.');
+				} else {
+					for ch in core::iter::repeat(&b".."[..])
+						.take(to_parent)
+						.intersperse(&b"/"[..])
+						.flatten()
+					{
+						buf.push(*ch);
+					}
+				}
+			}
+		} else {
+			buf.push(b'/');
+		}
+
+		for comp in self.components().map(|x| &x[..]).intersperse(&b"/"[..]) {
+			for ch in comp {
+				buf.push(*ch);
+			}
+		}
+
+		buf
+	}
 }
 
 mod test {

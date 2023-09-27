@@ -371,6 +371,12 @@ void builtin_symlink(int idx) {
 	}
 }
 
+void builtin_pwd(void) {
+	char buf[4096];
+
+	ft_printf("%s\n", getcwd(buf, sizeof(buf)));
+}
+
 int main(void) {
 	ft_printf("%c,%c,%c, hello!\n", 'a', 'b', 'c');
 
@@ -408,6 +414,8 @@ int main(void) {
 			builtin_umount(ignore_ws(6));
 		} else if (STREQ("symlink", line_buf, line_len)) {
 			builtin_symlink(ignore_ws(7));
+		} else if (STREQ("pwd", line_buf, line_len)) {
+			builtin_pwd();
 		} else {
 			extract(0, line_buf);
 			ft_putstr("sh: ");
