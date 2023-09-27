@@ -29,3 +29,18 @@ pub use symlink::sys_symlink;
 pub use truncate::sys_truncate;
 pub use unlink::{sys_rmdir, sys_unlink};
 pub use write::sys_write;
+
+use crate::process::{fd_table::Fd, task::CURRENT};
+use crate::syscall::errno::Errno;
+
+use super::vfs::VfsHandle;
+
+pub fn get_file(fd: isize) -> Result<VfsHandle, Errno> {
+	let fd = Fd::from(fd as usize).ok_or(Errno::EBADF)?;
+	let fd_table = unsafe { CURRENT.get_mut() }
+		.get_user_ext()
+		.expect("user task")
+		.lock_fd_table();
+
+	fd_table.get_file(fd).ok_or(Errno::EBADF)
+}

@@ -146,6 +146,20 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 		362 => sys_connect(frame.ebx, frame.ecx, frame.edx),
 		363 => sys_listen(frame.ebx, frame.ecx),
 		364 => sys_accept(frame.ebx, frame.ecx, frame.edx),
+		369 => sys_sendto(
+			frame.ebx as isize,
+			frame.ecx,
+			frame.edx,
+			frame.esi,
+			frame.edi,
+		),
+		371 => sys_recvfrom(
+			frame.ebx as isize,
+			frame.ecx,
+			frame.edx,
+			frame.esi,
+			frame.edi,
+		),
 		_ => {
 			pr_info!("syscall: the syscall {} is unsupported.", frame.eax);
 			Ok(0)
@@ -167,29 +181,3 @@ pub fn restore_syscall_return(result: isize) -> Result<usize, Errno> {
 		Ok(result as usize)
 	}
 }
-
-// FIXME Rough implementation for test.
-// pub fn sys_open() -> Result<usize, Errno> {
-// 	let ext = unsafe { CURRENT.get_mut() }.user_ext_ok_or(Errno::EPERM)?;
-// 	let tty = tty::alloc().ok_or(Errno::UnknownErrno)?;
-// 	let sess = &ext.lock_relation().get_session();
-
-// 	// TODO Atomic
-// 	tty.lock_tty().connect(Arc::downgrade(sess));
-// 	sess.lock().set_ctty(tty.clone());
-
-// 	let mut fd_table = ext.lock_fd_table();
-
-// 	let handle = VfsHandle::File(Arc::new(VfsFileHandle::new(
-// 		None,
-// 		Box::new(tty),
-// 		IOFlag::empty(),
-// 		AccessFlag::O_RDWR,
-// 	)));
-
-// 	let _ = fd_table.alloc_fd(handle.clone()).ok_or(Errno::ENFILE)?;
-
-// 	let fd = fd_table.alloc_fd(handle.clone()).ok_or(Errno::ENFILE)?;
-
-// 	Ok(fd.index())
-// }

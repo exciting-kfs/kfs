@@ -47,7 +47,11 @@ impl Memory {
 	}
 
 	pub fn query_flags_range(&self, start: usize, bytes: usize, flags: AreaFlag) -> bool {
-		let end = start + bytes;
+		let end = match start.checked_add(bytes) {
+			Some(x) => x,
+			None => return false,
+		};
+
 		let mut curr = start;
 
 		while curr < end {

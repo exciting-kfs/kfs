@@ -1,6 +1,6 @@
 use crate::{fs::vfs::Whence, syscall::errno::Errno};
 
-use super::read::get_file;
+use super::get_file;
 
 const SEEK_SET: isize = 0;
 const SEEK_CUR: isize = 1;
