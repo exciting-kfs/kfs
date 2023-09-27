@@ -42,7 +42,7 @@ export LDFLAGS
 
 # targets
 
-MODULES := init shell test_pipe test_sig test_setXid test_sig_stop_cont test_file
+MODULES := init shell test_pipe test_sig test_setXid test_sig_stop_cont test_file test_socket
 
 LIBSYSTEM := $(BUILDDIR)/libsystem.a
 LIBFT := $(BUILDDIR)/libft.a

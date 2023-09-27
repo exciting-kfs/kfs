@@ -1,40 +1,78 @@
 #include <fcntl.h>
-#include <sys/stat.h>
 #include <unistd.h>
+
+#include <sys/socket.h>
+#include <sys/stat.h>
 
 #include "kfs/ft.h"
 #include "kfs/kernel.h"
 
+struct sockaddr_un {
+	unsigned short family;
+	char path[108];
+};
+
+int do_child(void) {
+	int sock = socket(PF_LOCAL, SOCK_DGRAM, 0);
+
+	struct sockaddr_un addr = {
+	    .family = PF_LOCAL,
+	    .path = "/test.sock",
+	};
+
+	int ret = connect(sock, (void *)&addr, sizeof(addr));
+
+	if (ret < 0) {
+		ft_putstr("bind: ");
+		ft_putnbr(ret);
+		_exit(1);
+	}
+
+	for (int i = 0; i < 10; i++) {
+		int ret = write(sock, "123456678\n", 10);
+
+		if (ret < 0) {
+			ft_putstr("child: wirte");
+			ft_putnbr(ret);
+			_exit(1);
+		}
+	}
+
+	return 0;
+}
+
 int main(void) {
 
-	// mkdir("/dir1", 0777);
-	// mkdir("/dir2", 0777);
-	int fd = open("/abc", O_CREAT | O_EXCL | O_RDWR, 0777);
-	const char buf[] = "0123456789";
-	write(fd, buf, 10);
-	close(fd);
-	truncate("/abc", 5);
-	fd = open("/abc", O_RDONLY);
+	int sock = socket(PF_LOCAL, SOCK_DGRAM, 0);
 
-	char ch;
-	int ret;
-	while ((ret = read(fd, &ch, 1)) > 0) {
-		write(1, &ch, 1);
+	struct sockaddr_un addr = {
+	    .family = PF_LOCAL,
+	    .path = "/test.sock",
+	};
+
+	int ret = bind(sock, (void *)&addr, sizeof(addr));
+
+	if (ret < 0) {
+		ft_putstr("bind: ");
+		ft_putnbr(ret);
+		_exit(1);
 	}
-	write(1, "\n", 1);
-	// chdir("/dir1");
-	// int root_fd = open2("..", O_RDWR | O_DIRECTORY | O_CLOEXEC, 0777);
 
-	// char buf[4096];
-	// int end = getdents(root_fd, buf, 4096);
-	// int curr = 0;
+	int pid = fork();
+	if (pid == 0) {
+		_exit(do_child());
+	}
 
-	// while (curr < end) {
-		// struct kfs_dirent *dir = (struct kfs_dirent *)&buf[curr];
-		// ft_putstr(dir->name);
-		// ft_putstr("\n");
-		// curr += dir->size;
-	// }
+	for (;;) {
+		char buf[128];
+		int ret = read(sock, buf, 128);
+		if (ret < 0) {
+			ft_putstr("main: read");
+			ft_putnbr(ret);
+			_exit(1);
+		}
+		write(1, buf, ret);
+	}
 
 	return 0;
 }
