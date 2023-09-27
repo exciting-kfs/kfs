@@ -1,6 +1,6 @@
-use crate::{process::task::CURRENT, syscall::errno::Errno};
+use crate::{mm::user::verify::verify_buffer_mut, process::task::CURRENT, syscall::errno::Errno};
 
-use super::{read::get_file, utils::verify_buffer_mut};
+use super::read::get_file;
 
 pub fn sys_getdents(fd: isize, buf: usize, len: usize) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_ref() };

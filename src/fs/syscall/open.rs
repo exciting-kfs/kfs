@@ -7,10 +7,9 @@ use crate::fs::vfs::{
 	VfsRealEntry,
 };
 
+use crate::mm::user::verify::verify_path;
 use crate::process::task::{Task, CURRENT};
 use crate::syscall::errno::Errno;
-
-use super::utils::verify_path;
 
 fn lookup_or_create(
 	mut path: Path,

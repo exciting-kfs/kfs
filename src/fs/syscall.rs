@@ -12,7 +12,6 @@ mod stat;
 mod symlink;
 mod truncate;
 mod unlink;
-mod utils;
 mod write;
 
 pub use chmod::sys_chmod;
