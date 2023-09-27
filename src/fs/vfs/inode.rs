@@ -1,7 +1,7 @@
 use alloc::{boxed::Box, sync::Arc};
 use bitflags::bitflags;
 
-use crate::{fs::path::Path, syscall::errno::Errno};
+use crate::{fs::path::Path, sync::Locked, syscall::errno::Errno};
 
 use super::{DirHandle, FileHandle};
 
@@ -108,9 +108,10 @@ pub enum VfsInode {
 	File(Arc<dyn FileInode>),
 	Dir(Arc<dyn DirInode>),
 	SymLink(Arc<dyn SymLinkInode>),
+	Socket(Arc<SocketInode>),
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct TimeSpec {
 	seconds: isize,
 	nanoseconds: isize,
@@ -208,4 +209,63 @@ pub trait FileInode {
 
 pub trait SymLinkInode {
 	fn target(&self) -> &Path;
+}
+
+pub struct SocketInode {
+	perm: Locked<Permission>,
+	owner: Locked<usize>,
+	group: Locked<usize>,
+	atime: Locked<TimeSpec>,
+	mtime: Locked<TimeSpec>,
+	ctime: Locked<TimeSpec>,
+}
+
+impl SocketInode {
+	pub fn new(perm: Permission, owner: usize, group: usize) -> Self {
+		Self {
+			perm: Locked::new(perm),
+			owner: Locked::new(owner),
+			group: Locked::new(group),
+			atime: Locked::default(),
+			mtime: Locked::default(),
+			ctime: Locked::default(),
+		}
+	}
+
+	pub fn stat(&self) -> Result<RawStat, Errno> {
+		Ok(RawStat {
+			perm: self.perm.lock().bits(),
+			uid: *self.owner.lock(),
+			gid: *self.group.lock(),
+			size: 0,
+			file_type: 6,
+			access_time: self.atime.lock().clone(),
+			modify_fime: self.mtime.lock().clone(),
+			change_time: self.ctime.lock().clone(),
+		})
+	}
+
+	pub fn chown(&self, owner: usize, group: usize) -> Result<(), Errno> {
+		*self.owner.lock() = owner;
+		*self.group.lock() = group;
+
+		Ok(())
+	}
+
+	pub fn chmod(&self, perm: Permission) -> Result<(), Errno> {
+		*self.perm.lock() = perm;
+
+		Ok(())
+	}
+
+	pub fn access(&self, uid: usize, gid: usize, perm: Permission) -> Result<(), Errno> {
+		let stat = self.stat()?;
+		let file_perm = Permission::from_bits_truncate(stat.perm);
+
+		if !default_access(stat.uid, stat.gid, file_perm, uid, gid, perm) {
+			return Err(Errno::EACCES);
+		}
+
+		Ok(())
+	}
 }
