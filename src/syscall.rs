@@ -11,8 +11,8 @@ use core::mem::transmute;
 use crate::driver::pipe::sys_pipe;
 use crate::fs::syscall::*;
 use crate::interrupt::InterruptFrame;
-
 use crate::mm::user::mmap::sys_mmap;
+use crate::net::syscall::*;
 use crate::pr_info;
 use crate::process::exit::sys_exit;
 use crate::process::gid::{sys_getgid, sys_setgid};
@@ -141,6 +141,11 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 		212 => sys_chown(frame.ebx, frame.ecx, frame.edx),
 		213 => sys_setuid(frame.ebx),
 		214 => sys_setgid(frame.ebx),
+		359 => sys_socket(frame.ebx as i32, frame.ecx as i32, frame.edx as i32),
+		361 => sys_bind(frame.ebx, frame.ecx, frame.edx),
+		362 => sys_connect(frame.ebx, frame.ecx, frame.edx),
+		363 => sys_listen(frame.ebx, frame.ecx),
+		364 => sys_accept(frame.ebx, frame.ecx, frame.edx),
 		_ => {
 			pr_info!("syscall: the syscall {} is unsupported.", frame.eax);
 			Ok(0)
