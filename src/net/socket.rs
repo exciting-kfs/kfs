@@ -4,10 +4,13 @@ use crate::fs::vfs::{IOFlag, VfsSocketHandle};
 use crate::{process::task::Task, syscall::errno::Errno};
 
 use super::address::{ReadOnly, UnknownSocketAddress, WriteOnly};
+use super::local::{dgram::LocalDgramSocket, stream::LocalStreamSocket};
 
 #[derive(Clone)]
-// TODO
-pub enum SocketHandle {}
+pub enum SocketHandle {
+	LocalDgram(Arc<LocalDgramSocket>),
+	LocalStream(Arc<LocalStreamSocket>),
+}
 
 #[derive(PartialEq, Eq)]
 pub enum SocketKind {
