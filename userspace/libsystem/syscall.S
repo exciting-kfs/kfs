@@ -64,6 +64,7 @@ SYSCALL getpgid,        132,            1
 SYSCALL getdents,       141,            3
 SYSCALL getsid,         147,            0
 SYSCALL sched_yield,    158,            0
+SYSCALL getcwd,         183,            2
 SYSCALL mmap,           192,            6
 SYSCALL getuid,         199,            0
 SYSCALL getgid,         200,            0

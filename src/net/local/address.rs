@@ -4,7 +4,7 @@ use alloc::rc::Rc;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-use crate::fs::path::{Base, Path};
+use crate::fs::path::Path;
 use crate::fs::vfs::{
 	lookup_entry_follow, Permission, SocketInode, VfsEntry, VfsSocketEntry, VfsSocketHandle,
 };
@@ -25,33 +25,7 @@ pub struct LocalSocketAddress {
 
 impl LocalSocketAddress {
 	pub fn to_buffer(&self) -> Vec<u8> {
-		let mut buf: Vec<u8> = Vec::new();
-
-		use Base::*;
-		if let WorkingDir { to_parent } = self.path.base() {
-			{
-				if to_parent == 0 {
-					buf.push(b'.');
-				} else {
-					for ch in core::iter::repeat(&b".."[..])
-						.take(to_parent)
-						.intersperse(&b"/"[..])
-						.flatten()
-					{
-						buf.push(*ch);
-					}
-				}
-			}
-		}
-
-		for comp in self.path.components() {
-			buf.push(b'/');
-			for ch in comp {
-				buf.push(*ch);
-			}
-		}
-
-		buf
+		self.path.to_buffer()
 	}
 
 	pub fn lookup_socket(&self) -> Result<SocketHandle, Errno> {

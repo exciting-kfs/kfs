@@ -127,6 +127,7 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 		141 => sys_getdents(frame.ebx as isize, frame.ecx, frame.edx),
 		147 => sys_getsid(),
 		158 => sys_sched_yield(),
+		183 => sys_getcwd(frame.ebx, frame.ecx),
 		192 => sys_mmap(
 			frame.ebx,
 			frame.ecx,
