@@ -42,3 +42,18 @@ pub fn sys_mmap(
 
 	user_ext.lock_memory().mmap_private(addr, pages, prot)
 }
+
+pub fn sys_munmap(addr: usize, len: usize) -> Result<usize, Errno> {
+	let current = unsafe { CURRENT.get_mut() };
+
+	if addr % PAGE_SIZE != 0 || len == 0 || len % PAGE_SIZE != 0 {
+		return Err(Errno::EINVAL);
+	}
+
+	let mut memory = current
+		.get_user_ext()
+		.expect("must be user process")
+		.lock_memory();
+
+	memory.munmap_private(addr, len / PAGE_SIZE).map(|_| 0)
+}

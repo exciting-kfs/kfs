@@ -11,7 +11,7 @@ use core::mem::transmute;
 use crate::driver::pipe::sys_pipe;
 use crate::fs::syscall::*;
 use crate::interrupt::InterruptFrame;
-use crate::mm::user::mmap::sys_mmap;
+use crate::mm::user::mmap::{sys_mmap, sys_munmap};
 use crate::net::syscall::*;
 use crate::pr_info;
 use crate::process::exit::sys_exit;
@@ -118,6 +118,16 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 			)
 		}
 		83 => sys_symlink(frame.ebx, frame.ecx),
+		90 => sys_mmap(
+			frame.ebx,
+			frame.ecx,
+			frame.edx as i32,
+			frame.esi as i32,
+			frame.edi as i32,
+			frame.ebp as isize,
+		)
+		.map_err(|_| Errno::UnknownErrno), // FIXME: proper return type
+		91 => sys_munmap(frame.ebx, frame.ecx),
 		92 => sys_truncate(frame.ebx, frame.ecx as isize),
 		119 => {
 			// pr_info!("syscall: sigreturn: {:p}", &frame);
@@ -128,15 +138,7 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 		147 => sys_getsid(),
 		158 => sys_sched_yield(),
 		183 => sys_getcwd(frame.ebx, frame.ecx),
-		192 => sys_mmap(
-			frame.ebx,
-			frame.ecx,
-			frame.edx as i32,
-			frame.esi as i32,
-			frame.edi as i32,
-			frame.ebp as isize,
-		)
-		.map_err(|_| Errno::UnknownErrno), // FIXME: proper return type
+
 		199 => sys_getuid(),
 		200 => sys_getgid(),
 		212 => sys_chown(frame.ebx, frame.ecx, frame.edx),
