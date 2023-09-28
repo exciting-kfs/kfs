@@ -59,13 +59,14 @@ SYSCALL getpgrp,        65,             0
 SYSCALL setsid,         66,             0
 SYSCALL sigaction,      67,             3
 SYSCALL symlink,        83,             2
+SYSCALL mmap,           90,             6
+SYSCALL munmap,         91,             2
 SYSCALL truncate,       92,             2
 SYSCALL getpgid,        132,            1
 SYSCALL getdents,       141,            3
 SYSCALL getsid,         147,            0
 SYSCALL sched_yield,    158,            0
 SYSCALL getcwd,         183,            2
-SYSCALL mmap,           192,            6
 SYSCALL getuid,         199,            0
 SYSCALL getgid,         200,            0
 SYSCALL chown,          212,            3

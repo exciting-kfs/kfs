@@ -108,6 +108,24 @@ impl Memory {
 		Ok(start)
 	}
 
+	pub fn munmap_private(&mut self, start: usize, pages: usize) -> Result<(), Errno> {
+		let end = start.checked_add(pages * PAGE_SIZE).ok_or(Errno::EINVAL)?;
+
+		let area = self.vma.find_area(start).ok_or(Errno::EINVAL)?;
+		if area.start != start || area.end != end {
+			return Err(Errno::EINVAL);
+		}
+
+		self.vma.deallocate_area(start).unwrap();
+
+		for vaddr in (0..pages).map(|x| start + x * PAGE_SIZE) {
+			Self::free_page_if_allocated(self.get_pd(), vaddr);
+			self.page_dir.unmap_user(vaddr);
+		}
+
+		Ok(())
+	}
+
 	pub fn clone(&self) -> Result<Self, AllocError> {
 		fn get_copied_page(src_paddr: usize) -> Result<usize, AllocError> {
 			let page = PageBox::new(Zone::High)?;
@@ -213,23 +231,23 @@ impl Memory {
 
 		Ok(())
 	}
+
+	fn free_page_if_allocated(pd: &PD, vaddr: usize) -> Option<()> {
+		let paddr = pd.lookup(vaddr)?;
+
+		if get_zero_page_phys() != paddr {
+			free_pages(unsafe { NonNull::new_unchecked(phys_to_virt(paddr) as *mut u8) })
+		}
+
+		Some(())
+	}
 }
 
 impl Drop for Memory {
 	fn drop(&mut self) {
-		fn free_page_if_allocated(pd: &PD, vaddr: usize) -> Option<()> {
-			let paddr = pd.lookup(vaddr)?;
-
-			if get_zero_page_phys() != paddr {
-				free_pages(unsafe { NonNull::new_unchecked(phys_to_virt(paddr) as *mut u8) })
-			}
-
-			Some(())
-		}
-
 		for area in self.vma.get_areas() {
 			for vaddr in area.iter_pages() {
-				free_page_if_allocated(&self.page_dir, vaddr);
+				Self::free_page_if_allocated(&self.page_dir, vaddr);
 			}
 		}
 	}
