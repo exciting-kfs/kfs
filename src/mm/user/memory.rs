@@ -43,6 +43,11 @@ impl Memory {
 		let trampoline = unsafe { from_raw_parts(__trampoline_start as *const u8, len) };
 		memory.copy_data_at(TRAMPOLINE_BASE, trampoline)?;
 
+		// FIXME: proper BSS handling
+		memory
+			.copy_data_at(next_align(code_base + code.len(), 4096), &[0; 4096])
+			.unwrap();
+
 		Ok(memory)
 	}
 

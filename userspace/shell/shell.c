@@ -1,8 +1,10 @@
 #include <fcntl.h>
+#include <signal.h>
 #include <unistd.h>
 
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 
 #include "kfs/ft.h"
 #include "kfs/internal/prelude.h"
@@ -39,19 +41,10 @@ int getline(void) {
 	return 0;
 }
 
-int streq(const char *a, const char *b, int len) {
-	for (int i = 0; i < len; i++) {
-		if (a[i] != b[i]) {
-			return 0;
-		}
-	}
-	return 1;
-}
-
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
 // x must be const char * literal!!
-#define STREQ(x, y, len) (streq((x), (y), MIN(sizeof(x) - 1, (len))))
+#define STREQ(x, y, len) (((len) >= sizeof(x) - 1) && (ft_strncmp((x), (y), sizeof(x) - 1) == 0))
 
 int check(char ch, const char *set) {
 	while (*set) {
@@ -253,8 +246,9 @@ void builtin_stat(int idx) {
 		return;
 	}
 
-	ft_printf("\tuid: %d\n\tgid: %d\n\tsize: %d\n\tmode: 0x%x\n\ttype: ", st.uid, st.gid,
-		  st.size, st.perm);
+	ft_printf("  uid: %d\n  gid: %d\n  size: %d\n  mode: ", st.uid, st.gid, st.size);
+	ft_putnbr_o(st.perm);
+	ft_putstr("\n  type: ");
 	switch (st.file_type) {
 	case 1:
 		ft_printf("regular file\n");
@@ -377,9 +371,11 @@ void builtin_pwd(void) {
 	ft_printf("%s\n", getcwd(buf, sizeof(buf)));
 }
 
-int main(void) {
-	ft_printf("%c,%c,%c, hello!\n", 'a', 'b', 'c');
+void builtin_test(void) {
+	exec("test.bin");
+}
 
+int main(void) {
 	for (;;) {
 		ft_putstr("sh==> ");
 		unsigned int line_len = getline();
@@ -416,6 +412,8 @@ int main(void) {
 			builtin_symlink(ignore_ws(7));
 		} else if (STREQ("pwd", line_buf, line_len)) {
 			builtin_pwd();
+		} else if (STREQ("test", line_buf, line_len)) {
+			builtin_test();
 		} else {
 			extract(0, line_buf);
 			ft_putstr("sh: ");
