@@ -27,6 +27,9 @@ int pipe(int pipe_pair[2]);
 uid_t getuid(void);
 int setuid(uid_t uid);
 
+uid_t getgid(void);
+int setgid(uid_t gid);
+
 int chdir(const char *path);
 char *getcwd(char *buf, size_t size);
 

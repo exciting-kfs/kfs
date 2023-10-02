@@ -29,4 +29,5 @@ define_user_bin![
 	(TEST_FILE, "test_file.bin"),
 	(TEST_SOCKET, "test_socket.bin"),
 	(GETTY, "getty.bin"),
+	(TEST, "test.bin"),
 ];

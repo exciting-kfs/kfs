@@ -22,7 +22,7 @@ impl FileSystem<TmpSb, Locked<TmpDirInode>> for TmpFs {
 	fn mount() -> Result<(Arc<TmpSb>, Arc<Locked<TmpDirInode>>), Errno> {
 		Ok((
 			Arc::new(TmpSb),
-			TmpDirInode::new_shared(Permission::from_bits_truncate(0o755), 0, 0),
+			TmpDirInode::new_shared(Permission::from_bits_truncate(0o777), 0, 0),
 		))
 	}
 }
