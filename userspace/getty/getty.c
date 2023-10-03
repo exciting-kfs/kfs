@@ -13,7 +13,7 @@
 // clang-format off
 const char passwd_file[] =
     "root::0:0::/root:shell.bin\n"
-    "cjeon:$6$xKfGiVIDU2eFHpz9$CIrn5g9ODPQM1VznJ941RjEeoPvaKNHak1o7rrUJR1jXg/kZL7bmQcv5xD3GFLCn39dhWRlsMmbNam59tDIgh0:1000:1000::/home/cjeon:shell.bin\n";
+    "cjeon:$6$xKfGiVIDU2eFHpz9$CIrn5g9ODPQM1VznJ941RjEeoPvaKNHak1o7rrUJR1jXg/kZL7bmQcv5xD3GFLCn39dhWRlsMmbNam59tDIgh0:1000:1000::/home/cjeon:test_file.bin\n";
 // clang-format on
 
 char *__crypt_sha512(const char *key, const char *setting, char *output);
@@ -364,7 +364,7 @@ void get_login_shell() {
 		signal(SIGQUIT, SIG_DFL);
 		setuid(ent->uid);
 		setgid(ent->gid);
-		exec(ent->shell);
+		execve(ent->shell, NULL, NULL);
 		_exit(128);
 	}
 
@@ -372,7 +372,7 @@ void get_login_shell() {
 	waitpid(pid, &status, 0);
 }
 
-int main(void) {
+int start(void) {
 	int passwd;
 
 	mkdir("/etc", 0755);

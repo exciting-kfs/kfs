@@ -22,7 +22,7 @@ use crate::process::uid::{sys_getuid, sys_setuid};
 use crate::scheduler::sys_sched_yield;
 
 use self::errno::Errno;
-use self::exec::sys_exec;
+use self::exec::*;
 use self::fork::sys_fork;
 use self::kill::sys_kill;
 use self::relation::{
@@ -84,7 +84,7 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 		7 => sys_waitpid(frame.ebx as isize, frame.ecx as *mut isize, frame.edx),
 		8 => sys_creat(frame.ebx, frame.ecx as u32),
 		10 => sys_unlink(frame.ebx),
-		11 => sys_exec(frame, frame.ebx),
+		11 => sys_execve(frame, frame.ebx, frame.ecx, frame.edx),
 		12 => sys_chdir(frame.ebx),
 		15 => sys_chmod(frame.ebx, frame.ecx as u32),
 		18 => sys_stat(frame.ebx, frame.ecx),

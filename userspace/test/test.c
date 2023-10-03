@@ -41,14 +41,14 @@ void waitpid_verbose(pid_t pid, const char *test_name) {
 	ft_putstr("\n\n");
 }
 
-int main(void) {
+int start(void) {
 	for (const char **p = tests; *p; p++) {
 		int pid = fork();
 		if (pid == 0) {
 			ft_putstr("\x1b[32mRUN: ");
 			ft_putstr(*p);
 			ft_putstr("\x1b[39m\n");
-			exec(*p);
+			execve(*p, NULL, NULL);
 			_exit(128);
 		}
 		waitpid_verbose(pid, *p);

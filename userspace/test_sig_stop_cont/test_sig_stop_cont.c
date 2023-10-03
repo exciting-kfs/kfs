@@ -44,7 +44,7 @@ void child() {
 	}
 }
 
-int main(void) {
+int start(void) {
 	pid_t pid = fork();
 
 	if (pid == 0) {

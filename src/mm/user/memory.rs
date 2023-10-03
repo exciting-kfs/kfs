@@ -1,6 +1,11 @@
 use core::alloc::AllocError;
+use core::mem::size_of;
 use core::ptr::NonNull;
 use core::slice::from_raw_parts;
+
+use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
 
 use crate::config::TRAMPOLINE_BASE;
 use crate::mm::alloc::page::free_pages;
@@ -8,13 +13,16 @@ use crate::mm::alloc::virt::{kmap, kunmap};
 use crate::mm::alloc::Zone;
 use crate::mm::page::{get_zero_page_phys, PageFlag, PD};
 use crate::mm::{constant::*, util::*};
+use crate::process::task::Task;
 use crate::ptr::PageBox;
 use crate::syscall::errno::Errno;
 
 use super::copy::{copy_user_to_user_page, memset_to_user_page};
+use super::verify::{verify_ptr, verify_string};
 use super::vma::{AreaFlag, UserAddressSpace};
 
 pub struct Memory {
+	code_end: usize,
 	vma: UserAddressSpace,
 	page_dir: PD,
 }
@@ -32,21 +40,20 @@ impl Memory {
 		code: &[u8],
 	) -> Result<Self, AllocError> {
 		let mut memory = Self {
+			code_end: code_base,
 			vma: UserAddressSpace::new(),
 			page_dir: PD::new()?,
 		};
 
 		memory.reserve_stack(stack_base, nr_stack_pages)?;
-		memory.copy_data_at(code_base, code)?;
+		memory.push_data(code)?;
 
 		let len = __trampoline_end as usize - __trampoline_start as usize;
 		let trampoline = unsafe { from_raw_parts(__trampoline_start as *const u8, len) };
 		memory.copy_data_at(TRAMPOLINE_BASE, trampoline)?;
 
 		// FIXME: proper BSS handling
-		memory
-			.copy_data_at(next_align(code_base + code.len(), 4096), &[0; 4096])
-			.unwrap();
+		memory.push_data(&[0; 4096 * 16])?;
 
 		Ok(memory)
 	}
@@ -161,7 +168,11 @@ impl Memory {
 			}
 		}
 
-		Ok(Self { vma, page_dir })
+		Ok(Self {
+			vma,
+			page_dir,
+			code_end: self.code_end,
+		})
 	}
 
 	pub fn pick_up(&self) {
@@ -176,7 +187,80 @@ impl Memory {
 		&self.vma
 	}
 
+	fn copy_c_argv(
+		argv_ptr: usize,
+		copy_base: usize,
+		task: &Arc<Task>,
+	) -> Result<(Vec<u8>, Vec<usize>), Errno> {
+		if argv_ptr == 0 {
+			return Ok((vec![], vec![0]));
+		}
+
+		let mut args: Vec<u8> = Vec::new();
+		let mut arg_ptrs: Vec<usize> = Vec::new();
+		let mut curr_copy_base = copy_base;
+
+		for i in (0..).step_by(size_of::<usize>()) {
+			let argp = verify_ptr::<usize>(argv_ptr + i, task)?;
+			if *argp == 0 {
+				break;
+			}
+
+			let arg = verify_string(*argp, task, PAGE_SIZE)?;
+			if arg.len() + args.len() > 32 * PAGE_SIZE {
+				return Err(Errno::E2BIG);
+			}
+			args.extend(arg);
+			args.push(b'\0');
+
+			arg_ptrs.push(curr_copy_base);
+
+			curr_copy_base += arg.len() + 1;
+		}
+
+		arg_ptrs.push(0);
+
+		Ok((args, arg_ptrs))
+	}
+
+	pub fn push_string_array(
+		&mut self,
+		argv_ptr: usize,
+		task: &Arc<Task>,
+	) -> Result<(usize, usize), Errno> {
+		let copy_base = next_align(self.code_end, PAGE_SIZE);
+
+		let (args, arg_ptrs) = Self::copy_c_argv(argv_ptr, copy_base, task)?;
+
+		self.push_data(&args).map_err(|_| Errno::ENOMEM)?;
+		let array_base = self
+			.push_data(unsafe {
+				from_raw_parts(
+					arg_ptrs.as_ptr().cast::<u8>(),
+					arg_ptrs.len() * size_of::<usize>(),
+				)
+			})
+			.map_err(|_| Errno::ENOMEM)?;
+		let array_size = arg_ptrs.len() - 1;
+
+		Ok((array_base, array_size))
+	}
+
+	fn push_data(&mut self, data: &[u8]) -> Result<usize, AllocError> {
+		let addr = next_align(self.code_end, PAGE_SIZE);
+
+		self.copy_data_at(addr, data)?;
+
+		self.code_end = addr + data.len();
+
+		Ok(addr)
+	}
+
 	fn copy_data_at(&mut self, addr: usize, data: &[u8]) -> Result<(), AllocError> {
+		if data.len() == 0 {
+			return Ok(());
+		}
+
 		self.vma.allocate_fixed_area(
 			addr,
 			(data.len() / PAGE_SIZE) + (data.len() % PAGE_SIZE != 0) as usize,

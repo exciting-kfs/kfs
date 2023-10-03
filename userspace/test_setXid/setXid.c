@@ -63,7 +63,7 @@ void child() {
 	}
 }
 
-int main(void) {
+int start(void) {
 	int ret;
 	pid_t pid;
 
