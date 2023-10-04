@@ -48,7 +48,7 @@ fn do_lookup_entry_at(
 				true => curr.parent_dir(task).and_then(|pdir| {
 					do_lookup_entry_at(
 						pdir,
-						s.target(),
+						&s.target()?,
 						task,
 						follow_mid_symlink,
 						follow_last_symlink,
@@ -67,7 +67,7 @@ fn do_lookup_entry_at(
 		if let SymLink(s) = curr {
 			curr = do_lookup_entry_at(
 				s.parent_dir(task)?,
-				s.target(),
+				&s.target()?,
 				task,
 				follow_mid_symlink,
 				follow_last_symlink,

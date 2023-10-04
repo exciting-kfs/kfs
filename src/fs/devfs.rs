@@ -78,13 +78,12 @@ pub fn init() -> Result<(), Errno> {
 }
 
 impl DirInode for DevDirInode {
-	fn open(&self) -> Box<dyn DirHandle> {
+	fn open(&self) -> Result<Box<dyn DirHandle>, Errno> {
 		let mut v: Vec<(u8, Vec<u8>)> = self.devices.keys().map(|x| (3, (&*x.0).clone())).collect();
-
 		v.push((2, b".".to_vec()));
 		v.push((2, b"..".to_vec()));
 
-		Box::new(TmpDir::new(v))
+		Ok(Box::new(TmpDir::new(v)))
 	}
 
 	fn stat(&self) -> Result<RawStat, Errno> {
@@ -148,7 +147,7 @@ impl DevTTYFile {
 }
 
 impl FileInode for DevTTYFile {
-	fn open(&self) -> Box<dyn FileHandle> {
+	fn open(&self) -> Result<Box<dyn FileHandle>, Errno> {
 		let current = unsafe { CURRENT.get_mut() };
 
 		if let Some(ref ext) = current.get_user_ext() {
@@ -158,7 +157,7 @@ impl FileInode for DevTTYFile {
 			}
 		}
 
-		Box::new(self.inner.clone())
+		Ok(Box::new(self.inner.clone()))
 	}
 
 	fn stat(&self) -> Result<RawStat, Errno> {
@@ -190,8 +189,8 @@ impl FileInode for DevTTYFile {
 struct DevNull;
 
 impl FileInode for DevNull {
-	fn open(&self) -> Box<dyn FileHandle> {
-		Box::new(DevNull)
+	fn open(&self) -> Result<Box<dyn FileHandle>, Errno> {
+		Ok(Box::new(DevNull))
 	}
 
 	fn stat(&self) -> Result<RawStat, Errno> {
@@ -237,8 +236,8 @@ impl FileHandle for DevNull {
 struct DevZero;
 
 impl FileInode for DevZero {
-	fn open(&self) -> Box<dyn FileHandle> {
-		Box::new(DevZero)
+	fn open(&self) -> Result<Box<dyn FileHandle>, Errno> {
+		Ok(Box::new(DevZero))
 	}
 
 	fn stat(&self) -> Result<RawStat, Errno> {

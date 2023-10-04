@@ -145,8 +145,8 @@ impl VfsRealEntry {
 
 		use VfsRealEntry::*;
 		match self {
-			File(f) => Ok(VfsHandle::File(f.open(io_flags, access_flags))),
-			Dir(d) => Ok(VfsHandle::Dir(d.open(io_flags, access_flags))),
+			File(f) => Ok(VfsHandle::File(f.open(io_flags, access_flags)?)),
+			Dir(d) => Ok(VfsHandle::Dir(d.open(io_flags, access_flags)?)),
 			Socket(_) => Err(Errno::ENOENT),
 		}
 	}
@@ -254,7 +254,7 @@ impl VfsSymLinkEntry {
 		}
 	}
 
-	pub fn target(&self) -> &Path {
+	pub fn target(&self) -> Result<Path, Errno> {
 		self.inode.target()
 	}
 
@@ -446,14 +446,14 @@ impl VfsFileEntry {
 		self: &Arc<Self>,
 		io_flags: IOFlag,
 		access_flags: AccessFlag,
-	) -> Arc<VfsFileHandle> {
-		let inner = self.inode.open();
-		Arc::new(VfsFileHandle::new(
+	) -> Result<Arc<VfsFileHandle>, Errno> {
+		let inner = self.inode.open()?;
+		Ok(Arc::new(VfsFileHandle::new(
 			Some(self.clone()),
 			inner,
 			io_flags,
 			access_flags,
-		))
+		)))
 	}
 
 	pub fn get_abs_path(&self) -> Result<Path, Errno> {
@@ -553,14 +553,18 @@ impl VfsDirEntry {
 		Ok(parent)
 	}
 
-	pub fn open(self: &Arc<Self>, io_flags: IOFlag, access_flags: AccessFlag) -> Arc<VfsDirHandle> {
-		let inner = self.inode.open();
-		Arc::new(VfsDirHandle::new(
+	pub fn open(
+		self: &Arc<Self>,
+		io_flags: IOFlag,
+		access_flags: AccessFlag,
+	) -> Result<Arc<VfsDirHandle>, Errno> {
+		let inner = self.inode.open()?;
+		Ok(Arc::new(VfsDirHandle::new(
 			Some(self.clone()),
 			inner,
 			io_flags,
 			access_flags,
-		))
+		)))
 	}
 
 	pub fn get_abs_path(&self) -> Result<Path, Errno> {
@@ -764,7 +768,8 @@ impl VfsDirEntry {
 
 	fn do_sub_unmount(successor: Arc<Self>, parent: Arc<Self>) {
 		let mut sub_mount = parent.sub_mount.lock();
-		sub_mount.remove::<[u8]>(successor.get_name().borrow());
+		// TODO unmount cleanup
+		let _ = sub_mount.remove::<[u8]>(successor.get_name().borrow());
 		sub_mount.insert(successor.get_name(), VfsEntry::new_dir(successor.clone()));
 	}
 

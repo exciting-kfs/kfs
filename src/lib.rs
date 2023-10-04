@@ -168,6 +168,7 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 
 	fs::init_devfs().expect("failed to mount /dev");
 	fs::init_procfs().expect("failed to mount /proc");
+	fs::ext2::init().expect("failed to mount /ext2");
 
 	scheduler::work::init().expect("worker thread init");
 
