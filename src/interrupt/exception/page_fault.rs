@@ -15,6 +15,7 @@ use crate::ptr::PageBox;
 use crate::{pr_err, pr_info, register};
 
 bitflags! {
+	#[derive(Clone, Copy)]
 	pub struct ErrorCode: u32 {
 		const Present = 1;
 		const Write = 2;
@@ -114,6 +115,10 @@ pub extern "C" fn handle_page_fault_impl(frame: InterruptFrame) {
 
 	if frame.is_user() {
 		if let Err(_) = handle_user_page_fault(addr, error_code) {
+			pr_err!("Exception(fault): PAGE FAULT");
+			pr_info!("{}", frame);
+			pr_info!("note: while accessing {:#0x}", addr);
+			pr_info!("[DETAILED ERROR CODE]\n{}", error_code);
 			exit_with_signal(SigNum::SEGV);
 		}
 		return;

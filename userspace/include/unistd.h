@@ -10,7 +10,7 @@ ssize_t read(int fildes, void *buf, size_t nbyte);
 ssize_t write(int fildes, const void *buf, size_t nbyte);
 int close(int fildes);
 
-int exec(const char *name);
+int execve(const char *name, char *const argv[], char *const envp[]);
 
 pid_t getpid(void);
 pid_t getppid(void);

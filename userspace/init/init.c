@@ -6,7 +6,7 @@
 
 #include "kfs/ft.h"
 
-int main(void) {
+int start(void) {
 	open("/dev/tty1", O_RDWR);
 	open("/dev/tty1", O_RDWR);
 	open("/dev/tty1", O_RDWR);
@@ -16,7 +16,7 @@ int main(void) {
 	if (pid == 0) {
 			signal(SIGINT, SIG_IGN);
 			signal(SIGQUIT, SIG_IGN);
-			exec("getty.bin");
+			execve("getty.bin", NULL, NULL);
 			_exit(128);
 	}
 

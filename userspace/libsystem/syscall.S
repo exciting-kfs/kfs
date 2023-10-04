@@ -40,7 +40,7 @@ SYSCALL close,          6,              1
 SYSCALL waitpid,        7,              3
 SYSCALL creat,          8,              2
 SYSCALL unlink,         10,             1
-SYSCALL exec,           11,             1
+SYSCALL execve,         11,             5
 SYSCALL chdir,          12,             1
 SYSCALL chmod,          15,             2
 SYSCALL stat,           18,             2

@@ -372,10 +372,10 @@ void builtin_pwd(void) {
 }
 
 void builtin_test(void) {
-	exec("test.bin");
+	execve("test.bin", NULL, NULL);
 }
 
-int main(void) {
+int start(void) {
 	for (;;) {
 		ft_putstr("sh==> ");
 		unsigned int line_len = getline();
