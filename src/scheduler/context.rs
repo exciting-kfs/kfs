@@ -5,14 +5,21 @@ use alloc::sync::Arc;
 use crate::{
 	interrupt::save_interrupt_context,
 	process::task::{State, Task, CURRENT},
-	scheduler::{preempt::preemptable, TASK_QUEUE},
+	scheduler::{
+		preempt::{get_preempt_count, preemptable},
+		TASK_QUEUE,
+	},
 	x86::CPU_TASK_STATE,
 };
 
 /// yield control from current task to next task
 ///  call flow: yield_now -> switch_stack -> switch_task_finish
 pub fn yield_now() {
-	debug_assert!(preemptable(), "please drop `AtomicOps` before this call");
+	debug_assert!(
+		preemptable(),
+		"please drop `AtomicOps` before this call {}",
+		get_preempt_count()
+	);
 	let _ctx = save_interrupt_context();
 
 	let next = {

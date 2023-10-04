@@ -55,18 +55,13 @@ impl<T> LockRW<T> {
 	}
 }
 
+#[derive(Debug)]
 pub struct ReadLockGuard<'lock, T> {
 	lock: &'lock LockRW<T>,
 }
 
 impl<'lock, T> ReadLockGuard<'lock, T> {
 	pub unsafe fn new(lock: &'lock LockRW<T>) -> Self {
-		Self { lock }
-	}
-
-	pub fn from_write_lock(w_lock: WriteLockGuard<'lock, T>) -> Self {
-		w_lock.lock.read_count.fetch_add(1, Ordering::Relaxed);
-		let WriteLockGuard { lock } = w_lock;
 		Self { lock }
 	}
 }

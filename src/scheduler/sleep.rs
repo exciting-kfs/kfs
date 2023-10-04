@@ -13,7 +13,7 @@ use crate::{
 
 use super::preempt::AtomicOps;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum Sleep {
 	Light,
 	Deep,
@@ -37,6 +37,8 @@ pub fn sleep_and_yield_atomic(sleep: Sleep, atomic: AtomicOps) {
 		Sleep::Deep => State::DeepSleep,
 		Sleep::Light => State::Sleeping,
 	};
+
+	// pr_debug!("{:?} Sleep::{:?}!", current.get_pid(), sleep);
 
 	drop(atomic);
 	yield_now();
