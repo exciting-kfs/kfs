@@ -68,8 +68,7 @@ impl PartitionEntry {
 	}
 
 	pub fn end(&self) -> LBA28 {
-		let (c, h, s) = (self.last_c, self.last_h, self.last_s);
-		LBA28::from_chs(c, h, s) + 1
+		self.begin() + self.sector_count as usize
 	}
 }
 
@@ -89,11 +88,7 @@ impl Display for PartitionEntry {
 			self.last_c, self.last_h, self.last_s
 		)?;
 		write!(f, "\tbegin LBA: {:x}\n", self.begin_lba)?;
-		write!(
-			f,
-			"\tlast  LBA: {:x}\n",
-			LBA28::from_chs(self.last_c, self.last_h, self.last_s)
-		)?;
+		write!(f, "\tlast  LBA: {:x}\n", self.end())?;
 		write!(f, "\tsector count: {:x}\n", self.sector_count)?;
 		Ok(())
 	}

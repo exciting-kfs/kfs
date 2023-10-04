@@ -1,10 +1,8 @@
-pub mod call_back;
 pub mod dma_q;
 pub mod dma_req;
 pub mod event;
+pub mod hook;
 pub mod wait_io;
-
-use crate::pr_debug;
 
 use self::{dma_q::get_dma_q, event::DmaInit};
 
@@ -23,7 +21,8 @@ pub fn dma_schedule(id: IdeId, event: DmaInit) {
 		dma_q.start_with(id, event);
 	} else {
 		dma_q.merge_insert(id, event);
-		pr_debug!("DMA_Q[{}].len: {:?}", id.channel(), dma_q.len());
+		// use crate::pr_debug;
+		// pr_debug!("DMA_Q[{}].len: {:?}", id.channel(), dma_q.len());
 	}
 }
 
@@ -42,7 +41,7 @@ pub mod test {
 		pr_debug, printk,
 	};
 
-	use super::{call_back::CallBack, dma_req::ReqInit};
+	use super::{dma_req::ReqInit, hook::OwnHook};
 
 	pub const TEST_SECTOR_COUNT: usize = 128;
 
@@ -55,13 +54,13 @@ pub mod test {
 			let size = block::BlockSize::from_sector_count(TEST_SECTOR_COUNT).unwrap();
 			Block::new(size).map(|block| unsafe {
 				let mut block: Block<[u8]> = block.into();
-				let arr = block.as_slice(block.size()).as_mut();
+				let arr = block.as_slice_mut(block.size()).as_mut();
 				arr.iter_mut().for_each(|e| *e = b'b' + i as u8);
 				block.into()
 			})
 		};
 
-		let cb = CallBack::new(
+		let cb = OwnHook::new(
 			begin,
 			Box::new(prepare),
 			Box::new(move |_| {
@@ -87,7 +86,7 @@ pub mod test {
 			pr_debug!("+++++ cleanup called +++++");
 
 			let mut block = block.expect("OOM").into::<[u8]>();
-			let slice = unsafe { block.as_slice(block.size()) };
+			let slice = unsafe { block.as_slice_mut(block.size()) };
 
 			for i in 0..10 {
 				printk!("{:x}", slice[i]);
@@ -95,7 +94,7 @@ pub mod test {
 			pr_debug!("");
 		};
 
-		let cb = CallBack::new(begin, Box::new(prepare), Box::new(cleanup));
+		let cb = OwnHook::new(begin, Box::new(prepare), Box::new(cleanup));
 		let dma = ReqInit::new(begin..end, cb);
 		dma_schedule(id, DmaInit::Read(dma));
 	}
