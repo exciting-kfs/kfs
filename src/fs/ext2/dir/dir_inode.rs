@@ -133,7 +133,9 @@ impl DirInode {
 		iter.rewind();
 		let space = self.alloc_space(&mut iter)?;
 
-		Ok((iter.next_mut_block().unwrap(), space))
+		iter.next_mut_block()
+			.map(|dirent| (dirent, space))
+			.map_err(|e| e.errno().unwrap())
 	}
 
 	fn point_space(&self, cursor: usize, record: &Record) -> inode::ChunkMut {

@@ -308,6 +308,22 @@ impl FileType {
 		}
 	}
 
+	pub fn from_mode(mode: u16) -> Self {
+		let m = mode >> 12 as u8;
+
+		use FileType::*;
+		match m {
+			0x08 => Regular,
+			0x04 => Directory,
+			0x02 => CharactorDevice,
+			0x06 => BlockDevice,
+			0x01 => Pipe,
+			0x0c => Socket,
+			0x0a => SymLink,
+			_ => Unknown,
+		}
+	}
+
 	pub fn mode(self) -> u16 {
 		use FileType::*;
 		match self {

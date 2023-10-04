@@ -129,7 +129,8 @@ impl InodeInfo {
 
 	pub fn stat(&self) -> vfs::RawStat {
 		let perm = (self.mode & 0x0fff) as u32;
-		let file_type = (self.mode & 0xf000) as usize >> 12;
+		let file_type = FileType::from_mode(self.mode);
+
 		let uid = self.uid as usize;
 		let gid = self.gid as usize;
 		let size = self.get_size() as isize;
@@ -139,7 +140,7 @@ impl InodeInfo {
 			uid,
 			gid,
 			size,
-			file_type,
+			file_type: file_type as usize,
 			access_time: TimeSpec::default(),
 			modify_fime: TimeSpec::default(),
 			change_time: TimeSpec::default(),
@@ -186,13 +187,18 @@ pub struct InodeInfoMut<'a> {
 
 impl<'a> InodeInfoMut<'a> {
 	pub fn new(inode: WriteLockGuard<'a, Inode>) -> Self {
-		inode.dirty();
 		Self { inode }
 	}
 
 	pub fn from_data(data: DataWrite<'a>) -> Self {
 		let inode = data.destruct();
 		Self { inode }
+	}
+}
+
+impl<'a> Drop for InodeInfoMut<'a> {
+	fn drop(&mut self) {
+		self.inode.dirty();
 	}
 }
 

@@ -43,7 +43,7 @@ pub struct SuperBlock {
 impl SuperBlock {
 	#[inline]
 	pub fn block_size(&self) -> usize {
-		self.block_pool.block_size().as_bytes()
+		self.block_pool.block_size()
 	}
 
 	pub fn read_inode_dma(self: &Arc<Self>, inum: Inum) -> Result<Arc<LockRW<Inode>>, Errno> {

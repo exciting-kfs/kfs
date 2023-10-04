@@ -102,8 +102,9 @@ impl BlockPool {
 		}
 	}
 
-	pub fn block_size(&self) -> BlockSize {
-		self.block_size
+	#[inline]
+	pub fn block_size(&self) -> usize {
+		self.block_size.as_bytes()
 	}
 
 	pub unsafe fn register(&self, bid: BlockId, block: Arc<LockRW<Block>>) {
@@ -141,7 +142,7 @@ impl BlockPool {
 		}
 	}
 
-	pub fn __sync(&self, bid: BlockId) -> Option<()> {
+	fn __sync(&self, bid: BlockId) -> Option<()> {
 		let chunk = self.get(bid)?;
 
 		// pr_debug!("sync: {:?}", bid);
@@ -288,9 +289,7 @@ impl BlockPool {
 		let ide = get_ide_controller(self.ide_id);
 		ide.ata.read_sectors(lba, raw_sector);
 
-		let block = self.insert_block(bid, block.into());
-
-		Ok(block)
+		Ok(self.insert_block(bid, block.into()))
 	}
 
 	fn ready_load(self: &Arc<Self>, bid: BlockId) -> DmaInit {
@@ -319,6 +318,8 @@ impl BlockPool {
 		let cleanup = move |result: Result<IdeBlock, AllocError>| {
 			if let Ok(block) = result {
 				this.insert_block(bid, block);
+			} else {
+				this.request_retry(bid);
 			}
 		};
 
@@ -339,11 +340,7 @@ impl BlockPool {
 		match pool.entry(bid) {
 			Entry::Occupied(mut o) => {
 				if let MaybeBlock::Wait(list) = o.get() {
-					list.into_iter().for_each(|t| {
-						if let Some(task) = t.upgrade() {
-							wake_up_deep_sleep(&task)
-						}
-					});
+					Self::wake_up_in_list(list);
 					self.lru.lock().push_back(block.read_lock().node());
 					*o.get_mut() = MaybeBlock::Block(block.clone());
 				}
@@ -351,6 +348,27 @@ impl BlockPool {
 			Entry::Vacant(_) => panic!("invalid insert block call"),
 		}
 		block
+	}
+
+	fn request_retry(&self, bid: BlockId) {
+		let mut pool = self.pool.lock();
+
+		match pool.entry(bid) {
+			Entry::Occupied(o) => {
+				if let MaybeBlock::Wait(list) = o.get() {
+					Self::wake_up_in_list(list);
+				}
+			}
+			Entry::Vacant(_) => panic!("invalid request retry call"),
+		}
+	}
+
+	fn wake_up_in_list(list: &Vec<Weak<Task>>) {
+		list.into_iter().for_each(|task| {
+			if let Some(task) = task.upgrade() {
+				wake_up_deep_sleep(&task)
+			}
+		});
 	}
 
 	fn bid_to_lba(&self, bid: BlockId) -> LBA28 {

@@ -6,7 +6,6 @@ use crate::{
 		path::Path,
 		vfs::{self, Permission},
 	},
-	pr_err,
 	sync::{LockRW, Locked},
 	syscall::errno::Errno,
 };
@@ -77,10 +76,7 @@ impl vfs::SymLinkInode for SymLinkInode {
 			Ok(path)
 		} else {
 			match chunk.unwrap_err() {
-				IterBlockError::End => {
-					pr_err!("iter block end");
-					Err(Errno::ENOENT)
-				}
+				IterBlockError::End => Err(Errno::ENOENT),
 				IterBlockError::Errno(e) => Err(e),
 			}
 		}

@@ -134,18 +134,18 @@ impl vfs::PhysicalFileSystem<SuperBlock, DirInode> for Ext2 {
 		// }
 
 		let inum = unsafe { Inum::new_unchecked(2) };
-		let root = match RUN_TIME.load(Ordering::Relaxed) {
+
+		match RUN_TIME.load(Ordering::Relaxed) {
 			true => sb.read_inode_dma(inum),
 			false => sb.read_inode_pio(inum).map_err(|_| Errno::ENOMEM),
 		}
 		.and_then(|inode| {
-			inode.load_bid().map_err(|_| Errno::ENOMEM)?;
+			inode.load_bid()?;
 			Ok(inode)
 		})?
 		.downcast_dir()
-		.unwrap();
-
-		Ok((sb, Arc::new(root)))
+		.map(|root| (sb, Arc::new(root)))
+		.map_err(|_| Errno::EINVAL)
 	}
 }
 

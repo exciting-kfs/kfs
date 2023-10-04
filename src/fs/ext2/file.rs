@@ -119,12 +119,12 @@ impl vfs::FileHandle for File {
 	}
 }
 
-fn write_to_user(buf: &mut [u8], read_buf: &[u8], read_sum: usize) -> usize {
-	let read_size = read_buf.len();
+fn write_to_user(u_buf: &mut [u8], k_buf: &[u8], read_sum: usize) -> usize {
+	let read_size = k_buf.len();
 	unsafe {
 		copy_nonoverlapping(
-			read_buf.as_ptr(),
-			buf.as_mut_ptr().offset(read_sum as isize),
+			k_buf.as_ptr(),
+			u_buf.as_mut_ptr().offset(read_sum as isize),
 			read_size,
 		);
 	}
@@ -132,12 +132,12 @@ fn write_to_user(buf: &mut [u8], read_buf: &[u8], read_sum: usize) -> usize {
 	read_size
 }
 
-fn write_to_file(buf: &[u8], write_buf: &mut [u8], write_sum: usize) -> usize {
-	let write_size = write_buf.len();
+fn write_to_file(u_buf: &[u8], k_buf: &mut [u8], write_sum: usize) -> usize {
+	let write_size = k_buf.len();
 	unsafe {
 		copy_nonoverlapping(
-			buf.as_ptr().offset(write_sum as isize),
-			write_buf.as_mut_ptr(),
+			u_buf.as_ptr().offset(write_sum as isize),
+			k_buf.as_mut_ptr(),
 			write_size,
 		);
 	}
@@ -182,10 +182,11 @@ impl FileInode {
 	}
 
 	fn shrink(&self, new_idx: usize) -> Result<(), Errno> {
-		let block_size = self.inner().read_lock().block_size();
+		let sb = self.inner().super_block();
+
+		let block_size = sb.block_size();
 		let new_len = next_align(new_idx, block_size) / block_size;
 
-		let sb = self.inner().super_block();
 		let mut data = self.inner().data_write();
 		let bids = data.block_id_mut();
 		let to_dealloc = &mut bids[new_len..];

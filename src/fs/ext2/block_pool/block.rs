@@ -70,7 +70,7 @@ impl Block {
 		}
 	}
 
-	pub fn node(&self) -> Arc<BidNode> {
+	pub(super) fn node(&self) -> Arc<BidNode> {
 		self.node.clone()
 	}
 
@@ -172,14 +172,14 @@ impl WriteBack for LockRW<Block> {
 }
 
 #[derive(Debug)]
-pub struct BidNode {
+pub(super) struct BidNode {
 	block_id: UnsafeCell<BlockId>,
 	prev: UnsafeCell<Weak<BidNode>>,
 	next: UnsafeCell<Weak<BidNode>>,
 }
 
 impl BidNode {
-	pub unsafe fn set_bid(&self, bid: BlockId) {
+	pub(super) unsafe fn set_bid(&self, bid: BlockId) {
 		*self.block_id.get() = bid;
 	}
 }
