@@ -1,32 +1,34 @@
-use alloc::{boxed::Box, sync::Arc};
+mod data;
+mod id_space;
+
+pub mod info;
+pub mod inum;
+pub mod iter;
+
+pub use iter::*;
+
+use alloc::{sync::Arc, vec::Vec};
 
 use crate::{
-	fs::vfs::{self, TimeSpec},
+	fs::vfs::{self, FileType, Permission},
 	sync::LockRW,
 	syscall::errno::Errno,
 };
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
-pub struct Inum(usize);
+use self::{
+	data::{DataRead, DataWrite},
+	id_space::{IdSapceWrite, IdSpaceAdjust, IdSpaceRead},
+	info::{InodeInfo, InodeInfoMut, InodeInfoRef},
+	inum::Inum,
+};
 
-impl Inum {
-	pub fn new(num: usize) -> Option<Inum> {
-		if num >= 1 {
-			Some(Inum(num))
-		} else {
-			None
-		}
-	}
-
-	pub unsafe fn new_unchecked(num: usize) -> Inum {
-		Inum(num)
-	}
-
-	#[inline(always)]
-	pub fn index(&self) -> usize {
-		self.0 - 1
-	}
-}
+use super::{
+	block_pool::{block::BlockId, BlockPool},
+	dir::dir_inode::DirInode,
+	file::FileInode,
+	sb::SuperBlock,
+	Block,
+};
 
 #[derive(Debug)]
 pub enum CastError {
@@ -36,22 +38,120 @@ pub enum CastError {
 
 pub struct Inode {
 	info: InodeInfo,
+	inum: Inum,
+	sb: Arc<SuperBlock>,
+	chunks: Vec<BlockId>,
+	synced_len: usize,
 }
 
 impl Inode {
-	pub fn new(info: InodeInfo) -> Self {
-		Self { info }
+	pub fn from_info(inum: Inum, info: InodeInfo, sb: Arc<SuperBlock>) -> Self {
+		Self {
+			info,
+			inum,
+			sb,
+			chunks: Vec::new(),
+			synced_len: 0,
+		}
+	}
+
+	pub fn new_file(inum: Inum, sb: Arc<SuperBlock>, perm: Permission) -> Self {
+		let info = InodeInfo::new(FileType::Regular, perm);
+
+		Self::from_info(inum, info, sb)
+	}
+
+	pub fn new_dir(inum: Inum, sb: Arc<SuperBlock>, perm: Permission, bid: BlockId) -> Self {
+		let info = InodeInfo::new(FileType::Directory, perm);
+
+		Self::with_block(inum, info, sb, bid)
+	}
+
+	pub fn new_symlink(inum: Inum, sb: Arc<SuperBlock>, perm: Permission, bid: BlockId) -> Self {
+		let info = InodeInfo::new(FileType::SymLink, perm);
+
+		Self::with_block(inum, info, sb, bid)
+	}
+
+	fn with_block(inum: Inum, info: InodeInfo, sb: Arc<SuperBlock>, bid: BlockId) -> Self {
+		let mut chunks = Vec::new();
+
+		chunks.push(bid);
+
+		Self {
+			info,
+			inum,
+			sb,
+			chunks,
+			synced_len: 0,
+		}
+	}
+
+	pub fn inum(&self) -> Inum {
+		self.inum
+	}
+
+	#[inline]
+	pub fn size(&self) -> usize {
+		self.info.get_size()
+	}
+
+	#[inline]
+	pub fn block_size(&self) -> usize {
+		self.sb.block_size()
+	}
+
+	#[inline]
+	pub fn super_block(&self) -> &Arc<SuperBlock> {
+		&self.sb
+	}
+
+	#[inline]
+	pub fn block_pool(&self) -> &Arc<BlockPool> {
+		&self.sb.block_pool
+	}
+
+	pub fn dirty(&self) {
+		let inum = self.inum;
+		self.sb.dirty_inode(inum);
 	}
 }
 
 impl LockRW<Inode> {
+	pub fn data_read(&self) -> DataRead<'_> {
+		DataRead::new(self.read_lock())
+	}
+
+	pub fn data_write(&self) -> DataWrite<'_> {
+		DataWrite::new(self.write_lock())
+	}
+
+	pub fn info(&self) -> InodeInfoRef<'_> {
+		InodeInfoRef::new(self.read_lock())
+	}
+
+	pub fn info_mut(&self) -> InodeInfoMut<'_> {
+		InodeInfoMut::new(self.write_lock())
+	}
+
+	fn id_space_read(&self) -> IdSpaceRead<'_> {
+		IdSpaceRead::new(self.read_lock())
+	}
+
+	fn id_space_adjust(&self) -> IdSpaceAdjust<'_> {
+		IdSpaceAdjust::new(self.write_lock())
+	}
+
+	pub fn super_block(&self) -> Arc<SuperBlock> {
+		self.read_lock().super_block().clone()
+	}
+
 	pub fn downcast_dir(self: Arc<Self>) -> Result<DirInode, CastError> {
-		// TODO mode enum?
 		let inode = self.read_lock();
 		match inode.info.mode & 0xf000 {
 			0x4000 => {
 				drop(inode);
-				Ok(DirInode(self))
+				Ok(DirInode::from_inode(self))
 			}
 			_ => Err(CastError::NotDir),
 		}
@@ -59,134 +159,45 @@ impl LockRW<Inode> {
 
 	pub fn downcast_file(self: Arc<Self>) -> Result<FileInode, CastError> {
 		let inode = self.read_lock();
-
 		match inode.info.mode & 0xf000 {
 			0x4000 => Err(CastError::NotDir),
 			_ => {
 				drop(inode);
-				Ok(FileInode(self))
+				Ok(FileInode::from_inode(self))
 			}
 		}
 	}
-}
 
-pub struct DirInode(Arc<LockRW<Inode>>);
+	pub fn load_bid(self: &Arc<Self>) -> Result<(), Errno> {
+		if !self.data_read().common().is_empty() {
+			return Ok(());
+		}
+		// pr_debug!("load_bid {:?}", self.read_lock().info);
 
-#[allow(unused)]
-impl vfs::DirInode for DirInode {
-	fn open(&self) -> Box<dyn vfs::DirHandle> {
-		todo!()
-	}
-	fn stat(&self) -> Result<vfs::RawStat, Errno> {
-		todo!()
-	}
+		let v = self.id_space_read().read_bid()?;
 
-	fn chmod(&self, perm: vfs::Permission) -> Result<(), Errno> {
-		todo!()
-	}
-
-	fn chown(&self, owner: usize, group: usize) -> Result<(), Errno> {
-		todo!()
-	}
-
-	fn lookup(&self, name: &[u8]) -> Result<vfs::VfsInode, Errno> {
-		todo!()
-	}
-
-	fn symlink(&self, target: &[u8], name: &[u8]) -> Result<Arc<dyn vfs::SymLinkInode>, Errno> {
-		todo!()
-	}
-
-	fn mkdir(&self, name: &[u8], perm: vfs::Permission) -> Result<Arc<dyn vfs::DirInode>, Errno> {
-		todo!()
-	}
-
-	fn rmdir(&self, name: &[u8]) -> Result<(), Errno> {
-		todo!()
-	}
-
-	fn create(&self, name: &[u8], perm: vfs::Permission) -> Result<Arc<dyn vfs::FileInode>, Errno> {
-		todo!()
-	}
-
-	fn unlink(&self, name: &[u8]) -> Result<(), Errno> {
-		todo!()
-	}
-}
-
-pub struct FileInode(Arc<LockRW<Inode>>);
-
-#[allow(unused)]
-impl vfs::FileInode for FileInode {
-	fn open(&self) -> Box<dyn vfs::FileHandle> {
-		todo!()
-	}
-
-	fn stat(&self) -> Result<vfs::RawStat, Errno> {
-		let inode = self.0.read_lock();
-
-		let perm = (inode.info.mode & 0x0fff) as u32;
-		let uid = inode.info.uid as usize;
-		let gid = inode.info.gid as usize;
-		// let size: u64 = (inode.info.dir_acl as u64) << 32 | inode.info.size as u64;
-		let size = inode.info.size as isize;
-
-		Ok(vfs::RawStat {
-			perm,
-			uid,
-			gid,
-			size,
-			file_type: 1,
-			access_time: TimeSpec::default(),
-			modify_fime: TimeSpec::default(),
-			change_time: TimeSpec::default(),
-		})
-	}
-
-	fn chmod(&self, perm: vfs::Permission) -> Result<(), Errno> {
-		let mut inode = self.0.write_lock();
-
-		let mode = inode.info.mode & 0xf000;
-		let perm = perm.bits() as u16;
-
-		inode.info.mode = mode | perm;
+		let mut w_inode = self.write_lock();
+		w_inode.synced_len = v.len();
+		w_inode.chunks = v;
 
 		Ok(())
 	}
 
-	fn chown(&self, owner: usize, group: usize) -> Result<(), Errno> {
-		let mut inode = self.0.write_lock();
-
-		inode.info.uid = owner as u16;
-		inode.info.gid = group as u16;
+	pub fn sync(self: &Arc<Self>) -> Result<(), Errno> {
+		vfs::SuperBlock::sync(self.super_block().as_ref());
 
 		Ok(())
 	}
 
-	fn truncate(&self, length: isize) -> Result<(), Errno> {
-		todo!()
-	}
-}
+	pub fn sync_bid(self: &Arc<Self>) -> Result<(), Errno> {
+		{
+			let mut id_space = self.id_space_adjust();
+			id_space.adjust()?;
 
-#[derive(Clone, Debug)]
-#[repr(C)]
-pub struct InodeInfo {
-	pub mode: u16,
-	pub uid: u16,
-	pub size: u32,
-	pub atime: u32,
-	pub ctime: u32,
-	pub mtime: u32,
-	pub dtime: u32,
-	pub gid: u16,
-	pub links_count: u16,
-	pub blocks: u32,
-	pub flags: u32,
-	pub osd1: u32,
-	pub block: [u32; 15],
-	pub generation: u32,
-	pub file_acl: u32,
-	pub dir_acl: u32,
-	pub faddr: u32,
-	pub osd2: [u32; 3],
+			let mut id_space = IdSapceWrite::from_adjust(id_space);
+			id_space.sync_with_data()?;
+		}
+
+		Ok(())
+	}
 }
