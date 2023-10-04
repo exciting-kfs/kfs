@@ -375,7 +375,7 @@ void builtin_test(void) {
 	execve("test.bin", NULL, NULL);
 }
 
-int start(void) {
+int main(void) {
 	for (;;) {
 		ft_putstr("sh==> ");
 		unsigned int line_len = getline();

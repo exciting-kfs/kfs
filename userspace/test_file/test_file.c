@@ -1,7 +1,7 @@
 #include "kfs/libft.h"
 #include <unistd.h>
 
-int start(void) {	
+int main(void) {	
 	char *argv[] = {
 		"v1",
 		"v2",

@@ -2,8 +2,9 @@
 #define _SYS_WAIT_H
 
 #include "kfs/internal/prelude.h"
+#include "kfs/syscall.h"
 
-pid_t waitpid(pid_t pid, int *stat_loc, int options);
+DEFINE_SYSCALL(waitpid, 7, pid_t, pid_t, pid, int *, stat_loc, int, options);
 
 #define _W_FLAG_MASK 0xff000000
 #define _W_STATUS_MASK 0x000000ff

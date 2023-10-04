@@ -6,7 +6,7 @@
 
 #include "kfs/ft.h"
 
-int start(void) {
+int main(void) {
 	open("/dev/tty1", O_RDWR);
 	open("/dev/tty1", O_RDWR);
 	open("/dev/tty1", O_RDWR);

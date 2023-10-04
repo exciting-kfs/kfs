@@ -41,7 +41,7 @@ void waitpid_verbose(pid_t pid, const char *test_name) {
 	ft_putstr("\n\n");
 }
 
-int start(void) {
+int main(void) {
 	for (const char **p = tests; *p; p++) {
 		int pid = fork();
 		if (pid == 0) {

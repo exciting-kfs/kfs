@@ -117,7 +117,7 @@ void title(int num, const char *s) {
 	ft_putstr(s);
 }
 
-int start(void) {
+int main(void) {
 	pid_t pid;
 	int stat;
 
