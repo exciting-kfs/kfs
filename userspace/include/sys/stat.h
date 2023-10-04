@@ -2,10 +2,10 @@
 #define _SYS_STAT_H
 
 #include "kfs/internal/prelude.h"
+#include "kfs/syscall.h"
 
 #include <time.h>
 
-int mkdir(const char *path, mode_t mode);
 
 struct stat {
 	mode_t perm;
@@ -18,8 +18,9 @@ struct stat {
 	struct timespec change_time;
 };
 
-int stat(const char *path, struct stat *statbuf);
-int chmod(const char *path, mode_t mode);
-int chown(const char *path, uid_t owner, gid_t group);
+DEFINE_SYSCALL(mkdir, 39, int, const char *, path, mode_t, mode);
+DEFINE_SYSCALL(stat, 18, int, const char *, path, struct stat *, statbuf);
+DEFINE_SYSCALL(chmod, 15, int, const char *, path, mode_t, mode);
+DEFINE_SYSCALL(chown, 212, int, const char *, path, uid_t, owner, gid_t, group);
 
 #endif // _SYS_STAT_H

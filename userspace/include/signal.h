@@ -2,6 +2,7 @@
 #define _SIGNAL_H
 
 #include "kfs/internal/prelude.h"
+#include "kfs/syscall.h"
 
 #define SIGHUP 1
 #define SIGINT 2
@@ -88,8 +89,9 @@ struct sigaction {
 	int sa_flags;
 };
 
-sighandler_t signal(int signum, sighandler_t handler);
-int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
-int kill(pid_t pid, int sig);
+DEFINE_SYSCALL(signal, 48, sighandler_t, int, signum, sighandler_t, handler);
+DEFINE_SYSCALL(sigaction, 67, int, int, signum, const struct sigaction *, act, struct sigaction *,
+	       oldact);
+DEFINE_SYSCALL(kill, 37, int, pid_t, pid, int, sig);
 
 #endif // _SIGNAL_H

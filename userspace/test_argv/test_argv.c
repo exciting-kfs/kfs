@@ -4,7 +4,7 @@
 #include "kfs/ft.h"
 #include "kfs/libft.h"
 
-int start(int argc, char **argv, char **envp) {
+int main(int argc, char **argv, char **envp) {
 
 	ft_printf("argc: %d\n", argc);
 

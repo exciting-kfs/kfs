@@ -4,13 +4,13 @@ OS := $(shell uname -s)
 ifeq ($(OS), Linux)
 PREFIX := i686-linux-gnu-
 CFLAGS := -fno-pie -fno-stack-protector # for removing stack canary.
-LINKER_SCRIPT = $(realpath .)/userspace.ld
-LDFLAGS := -n --script=$(LINKER_SCRIPT) --oformat=binary -nostdlib
 else
 PREFIX := i686-elf-
 CFLAGS :=
-LDFLAGS := -n --oformat=binary -nostdlib
 endif
+
+LINKER_SCRIPT = $(realpath .)/userspace.ld
+LDFLAGS := -n --script=$(LINKER_SCRIPT) --oformat=binary -nostdlib
 
 CC := $(PREFIX)gcc
 export CC

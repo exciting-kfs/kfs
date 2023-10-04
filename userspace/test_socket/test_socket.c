@@ -229,7 +229,7 @@ int check_test_result(char *who, int status) {
 	return result;
 }
 
-int start(void) {
+int main(void) {
 	for (TestCase *tc = test_array; !is_null_test_case(tc); ++tc) {
 		ft_printf("\n> RUN: %s\n\n", tc->test_name);
 

@@ -372,7 +372,7 @@ void get_login_shell() {
 	waitpid(pid, &status, 0);
 }
 
-int start(void) {
+int main(void) {
 	int passwd;
 
 	mkdir("/etc", 0755);

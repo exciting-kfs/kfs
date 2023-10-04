@@ -56,7 +56,7 @@ void test_sigpipe() {
 	_exit(0);
 }
 
-int start(void) {
+int main(void) {
 	// test_eof();
 	test_sigpipe();
 	return 0;
