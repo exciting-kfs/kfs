@@ -1,4 +1,4 @@
-use core::mem::size_of;
+use core::mem::{size_of, transmute};
 use core::ptr::addr_of_mut;
 
 use alloc::sync::Arc;
@@ -69,8 +69,8 @@ impl TmpFileInode {
 }
 
 impl FileInode for TmpFileInode {
-	fn open(&self) -> Box<dyn FileHandle> {
-		TmpFile::new(self.data.clone())
+	fn open(&self) -> Result<Box<dyn FileHandle>, Errno> {
+		Ok(TmpFile::new(self.data.clone()))
 	}
 
 	fn truncate(&self, length: isize) -> Result<(), Errno> {
@@ -231,7 +231,7 @@ impl TmpDirInode {
 }
 
 impl DirInode for Locked<TmpDirInode> {
-	fn open(&self) -> Box<dyn DirHandle> {
+	fn open(&self) -> Result<Box<dyn DirHandle>, Errno> {
 		let this = self.lock();
 
 		let mut v: Vec<(u8, Vec<u8>)> = Vec::new();
@@ -249,7 +249,7 @@ impl DirInode for Locked<TmpDirInode> {
 		v.push((2, b".".to_vec()));
 		v.push((2, b"..".to_vec()));
 
-		Box::new(TmpDir::new(v))
+		Ok(Box::new(TmpDir::new(v)))
 	}
 
 	fn stat(&self) -> Result<RawStat, Errno> {
@@ -406,8 +406,8 @@ impl TmpSymLink {
 }
 
 impl SymLinkInode for TmpSymLink {
-	fn target(&self) -> &Path {
-		&self.target
+	fn target(&self) -> Result<Path, Errno> {
+		Ok(self.target.clone())
 	}
 }
 
@@ -450,7 +450,7 @@ impl DirHandle for TmpDir {
 					ino: 0,
 					private: 0,
 					size: curr_size as u16,
-					file_type: *kind,
+					file_type: transmute(*kind), // FIXME
 					name: (),
 				});
 

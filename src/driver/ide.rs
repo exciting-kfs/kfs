@@ -47,7 +47,7 @@ const IDE_CLASS_CODE: ClassCode = ClassCode {
 	sub_class: 0x01,
 };
 
-pub /* TODO for test*/ static IDE: [Locked<IdeController>; 2] = [
+static IDE: [Locked<IdeController>; 2] = [
 	Locked::new(IdeController::new(AtaController::new(0x1f0, 0x3f6))), // CH: P
 	Locked::new(IdeController::new(AtaController::new(0x170, 0x376))), // CH: S
 ];

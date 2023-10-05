@@ -1,19 +1,22 @@
+mod null;
+mod tty;
+mod zero;
+
 use core::mem::MaybeUninit;
 
 use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::Vec};
 
 use crate::{
-	config::NR_CONSOLES,
-	driver::terminal::{get_tty, TTYFile},
-	process::{get_idle_task, task::CURRENT},
-	syscall::errno::Errno,
+	config::NR_CONSOLES, driver::terminal::get_tty, process::get_idle_task, syscall::errno::Errno,
 };
+
+use self::{null::DevNull, tty::DevTTYFile, zero::DevZero};
 
 use super::{
 	tmpfs::{TmpDir, TmpSb},
 	vfs::{
-		DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident, Permission, RawStat,
-		SymLinkInode, TimeSpec, VfsInode, Whence, ROOT_DIR_ENTRY,
+		DirHandle, DirInode, FileInode, FileSystem, Ident, Permission, RawStat, SymLinkInode,
+		TimeSpec, VfsInode, ROOT_DIR_ENTRY,
 	},
 };
 
@@ -28,18 +31,6 @@ impl FileSystem<TmpSb, DevDirInode> for DevFs {
 }
 
 static mut DEVFS_ROOT_DIR: MaybeUninit<Arc<DevDirInode>> = MaybeUninit::uninit();
-
-pub struct DevDirInode {
-	devices: BTreeMap<Ident, Arc<dyn FileInode>>,
-}
-
-impl DevDirInode {
-	pub fn new() -> Self {
-		Self {
-			devices: BTreeMap::new(),
-		}
-	}
-}
 
 pub fn init() -> Result<(), Errno> {
 	let mut dev_root_dir = DevDirInode::new();
@@ -77,14 +68,25 @@ pub fn init() -> Result<(), Errno> {
 	Ok(())
 }
 
-impl DirInode for DevDirInode {
-	fn open(&self) -> Box<dyn DirHandle> {
-		let mut v: Vec<(u8, Vec<u8>)> = self.devices.keys().map(|x| (3, (&*x.0).clone())).collect();
+pub struct DevDirInode {
+	devices: BTreeMap<Ident, Arc<dyn FileInode>>,
+}
 
+impl DevDirInode {
+	pub fn new() -> Self {
+		Self {
+			devices: BTreeMap::new(),
+		}
+	}
+}
+
+impl DirInode for DevDirInode {
+	fn open(&self) -> Result<Box<dyn DirHandle>, Errno> {
+		let mut v: Vec<(u8, Vec<u8>)> = self.devices.keys().map(|x| (3, (&*x.0).clone())).collect();
 		v.push((2, b".".to_vec()));
 		v.push((2, b"..".to_vec()));
 
-		Box::new(TmpDir::new(v))
+		Ok(Box::new(TmpDir::new(v)))
 	}
 
 	fn stat(&self) -> Result<RawStat, Errno> {
@@ -134,151 +136,5 @@ impl DirInode for DevDirInode {
 
 	fn symlink(&self, _target: &[u8], _name: &[u8]) -> Result<Arc<dyn SymLinkInode>, Errno> {
 		Err(Errno::EPERM)
-	}
-}
-
-struct DevTTYFile {
-	inner: TTYFile,
-}
-
-impl DevTTYFile {
-	pub fn new(inner: TTYFile) -> Self {
-		Self { inner }
-	}
-}
-
-impl FileInode for DevTTYFile {
-	fn open(&self) -> Box<dyn FileHandle> {
-		let current = unsafe { CURRENT.get_mut() };
-
-		if let Some(ref ext) = current.get_user_ext() {
-			let sess = &ext.lock_relation().get_session();
-			if let Ok(_) = self.inner.lock_tty().connect(sess) {
-				sess.lock().set_ctty(self.inner.clone());
-			}
-		}
-
-		Box::new(self.inner.clone())
-	}
-
-	fn stat(&self) -> Result<RawStat, Errno> {
-		Ok(RawStat {
-			perm: 0o666,
-			uid: 0,
-			gid: 0,
-			size: 0,
-			file_type: 1,
-			access_time: TimeSpec::default(),
-			modify_fime: TimeSpec::default(),
-			change_time: TimeSpec::default(),
-		})
-	}
-
-	fn chown(&self, _owner: usize, _groupp: usize) -> Result<(), Errno> {
-		Err(Errno::EPERM)
-	}
-
-	fn chmod(&self, _perm: Permission) -> Result<(), Errno> {
-		Err(Errno::EPERM)
-	}
-
-	fn truncate(&self, _length: isize) -> Result<(), Errno> {
-		Err(Errno::EPERM)
-	}
-}
-
-struct DevNull;
-
-impl FileInode for DevNull {
-	fn open(&self) -> Box<dyn FileHandle> {
-		Box::new(DevNull)
-	}
-
-	fn stat(&self) -> Result<RawStat, Errno> {
-		Ok(RawStat {
-			perm: 0o666,
-			uid: 0,
-			gid: 0,
-			size: 0,
-			file_type: 1,
-			access_time: TimeSpec::default(),
-			modify_fime: TimeSpec::default(),
-			change_time: TimeSpec::default(),
-		})
-	}
-
-	fn chown(&self, _owner: usize, _group: usize) -> Result<(), Errno> {
-		Err(Errno::EPERM)
-	}
-
-	fn chmod(&self, _perm: Permission) -> Result<(), Errno> {
-		Err(Errno::EPERM)
-	}
-
-	fn truncate(&self, _length: isize) -> Result<(), Errno> {
-		Err(Errno::EPERM)
-	}
-}
-
-impl FileHandle for DevNull {
-	fn read(&self, _buf: &mut [u8], _flags: IOFlag) -> Result<usize, Errno> {
-		Ok(0)
-	}
-
-	fn write(&self, buf: &[u8], _flags: IOFlag) -> Result<usize, Errno> {
-		Ok(buf.len())
-	}
-
-	fn lseek(&self, _offset: isize, _whence: Whence) -> Result<usize, Errno> {
-		Ok(0)
-	}
-}
-
-struct DevZero;
-
-impl FileInode for DevZero {
-	fn open(&self) -> Box<dyn FileHandle> {
-		Box::new(DevZero)
-	}
-
-	fn stat(&self) -> Result<RawStat, Errno> {
-		Ok(RawStat {
-			perm: 0o666,
-			uid: 0,
-			gid: 0,
-			size: 0,
-			file_type: 1,
-			access_time: TimeSpec::default(),
-			modify_fime: TimeSpec::default(),
-			change_time: TimeSpec::default(),
-		})
-	}
-
-	fn chown(&self, _owner: usize, _groupp: usize) -> Result<(), Errno> {
-		Err(Errno::EPERM)
-	}
-
-	fn chmod(&self, _perm: Permission) -> Result<(), Errno> {
-		Err(Errno::EPERM)
-	}
-
-	fn truncate(&self, _length: isize) -> Result<(), Errno> {
-		Err(Errno::EPERM)
-	}
-}
-
-impl FileHandle for DevZero {
-	fn read(&self, buf: &mut [u8], _flags: IOFlag) -> Result<usize, Errno> {
-		buf.fill(0);
-
-		Ok(buf.len())
-	}
-
-	fn write(&self, buf: &[u8], _flags: IOFlag) -> Result<usize, Errno> {
-		Ok(buf.len())
-	}
-
-	fn lseek(&self, _offset: isize, _whence: Whence) -> Result<usize, Errno> {
-		Ok(0)
 	}
 }

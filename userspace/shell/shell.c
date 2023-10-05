@@ -179,6 +179,45 @@ void builtin_write(int idx) {
 	close(fd);
 }
 
+void mkfile_name(char *buf, int index) {
+	int prefix_len = 2;
+	buf[0] = 't';
+	buf[1] = 'f';
+
+	int copy = index;
+	int digit = 0;
+	while (copy > 0) {
+		digit++;
+		copy /= 10;
+	}
+
+	buf[prefix_len + digit] = 0;
+
+	while (digit > 0) {
+		buf[prefix_len + digit - 1] = '0' + index % 10;
+		index /= 10;
+		digit--;
+	}
+}
+
+void builtin_ntouch(int idx) {
+	char buf[4096];
+
+	idx = extract(idx, buf);
+
+	int count = ft_atoi(buf);
+
+	for (int i = 0; i < count; i++) {
+		mkfile_name(buf, i);
+		int fd = open(buf, O_CREAT | O_EXCL, 0777);
+		if (fd < 0) {
+			show_error("touch: ntouch", fd);
+			return;
+		}
+		close(fd);
+	}
+}
+
 void builtin_wf(int idx) {
 	char buf[4096];
 
@@ -194,8 +233,8 @@ void builtin_wf(int idx) {
 
 	int size = ft_atoi(buf);
 
-	int len = 10;
-	char *b = "0123456789";
+	int len = 8;
+	char *b = "01234567";
 
 	while (size > 0) {
 		int l = size < len ? size : len;
@@ -207,6 +246,48 @@ void builtin_wf(int idx) {
 		size -= len;
 	}
 
+	close(fd);
+}
+
+void builtin_tc(int idx) {
+	char buf[4096];
+	char buf2[4096];
+
+	idx = extract(idx, buf);
+	idx = ignore_ws(idx);
+	idx = extract(idx, buf2);
+
+	int len = ft_atoi(buf2);
+
+	int ret = truncate(buf, len);
+	if (ret < 0) {
+		show_error("tc:", ret);
+	} else {
+		ft_printf("%s truncated to %d\n", buf, len);
+	}
+}
+
+void builtin_lc(int idx) {
+	char buf[4096];
+
+	idx = extract(idx, buf);
+	int fd = open(buf, O_RDWR);
+	if (fd < 0) {
+		show_error("lc: open", fd);
+		return;
+	}
+
+	int ret = read(fd, buf, 4096);
+	int total_size = 0;
+	while (ret > 0) {
+		total_size += ret;
+		ret = read(fd, buf, 4096);
+		if (ret < 0) {
+			show_error("lc: read", ret);
+		}
+	}
+
+	ft_printf("letter count: %d\n", total_size);
 	close(fd);
 }
 
@@ -394,6 +475,12 @@ int main(void) {
 			builtin_write(ignore_ws(5));
 		} else if (STREQ("wf", line_buf, line_len)) {
 			builtin_wf(ignore_ws(2));
+		} else if (STREQ("lc", line_buf, line_len)) {
+			builtin_lc(ignore_ws(2));
+		} else if (STREQ("tc", line_buf, line_len)) {
+			builtin_tc(ignore_ws(2));
+		} else if (STREQ("ntouch", line_buf, line_len)) {
+			builtin_ntouch(ignore_ws(6));
 		} else if (STREQ("rmdir", line_buf, line_len)) {
 			builtin_rmdir(ignore_ws(5));
 		} else if (STREQ("rm", line_buf, line_len)) {

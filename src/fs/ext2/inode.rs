@@ -74,7 +74,7 @@ pub struct DirInode(Arc<LockRW<Inode>>);
 
 #[allow(unused)]
 impl vfs::DirInode for DirInode {
-	fn open(&self) -> Box<dyn vfs::DirHandle> {
+	fn open(&self) -> Result<Box<dyn vfs::DirHandle>, Errno> {
 		todo!()
 	}
 	fn stat(&self) -> Result<vfs::RawStat, Errno> {
@@ -118,7 +118,7 @@ pub struct FileInode(Arc<LockRW<Inode>>);
 
 #[allow(unused)]
 impl vfs::FileInode for FileInode {
-	fn open(&self) -> Box<dyn vfs::FileHandle> {
+	fn open(&self) -> Result<Box<dyn vfs::FileHandle>, Errno> {
 		todo!()
 	}
 

@@ -167,7 +167,7 @@ pub enum CachePolicy {
 }
 
 pub trait DirInode {
-	fn open(&self) -> Box<dyn DirHandle>;
+	fn open(&self) -> Result<Box<dyn DirHandle>, Errno>;
 	fn stat(&self) -> Result<RawStat, Errno>;
 	fn chown(&self, owner: usize, group: usize) -> Result<(), Errno>;
 	fn chmod(&self, perm: Permission) -> Result<(), Errno>;
@@ -190,7 +190,7 @@ pub trait DirInode {
 }
 
 pub trait FileInode {
-	fn open(&self) -> Box<dyn FileHandle>;
+	fn open(&self) -> Result<Box<dyn FileHandle>, Errno>;
 	fn stat(&self) -> Result<RawStat, Errno>;
 	fn chown(&self, owner: usize, group: usize) -> Result<(), Errno>;
 	fn chmod(&self, perm: Permission) -> Result<(), Errno>;
@@ -208,7 +208,7 @@ pub trait FileInode {
 }
 
 pub trait SymLinkInode {
-	fn target(&self) -> &Path;
+	fn target(&self) -> Result<Path, Errno>;
 }
 
 pub struct SocketInode {

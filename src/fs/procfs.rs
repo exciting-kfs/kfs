@@ -167,7 +167,7 @@ impl ProcFdDirInode {
 }
 
 impl DirInode for Locked<ProcFdDirInode> {
-	fn open(&self) -> Box<dyn DirHandle> {
+	fn open(&self) -> Result<Box<dyn DirHandle>, Errno> {
 		let this = self.lock();
 
 		let mut v: Vec<(u8, Vec<u8>)> = this
@@ -179,7 +179,7 @@ impl DirInode for Locked<ProcFdDirInode> {
 		v.push((2, b".".to_vec()));
 		v.push((2, b"..".to_vec()));
 
-		Box::new(TmpDir::new(v))
+		Ok(Box::new(TmpDir::new(v)))
 	}
 
 	fn stat(&self) -> Result<RawStat, Errno> {
@@ -260,7 +260,7 @@ impl ProcDirInode {
 }
 
 impl DirInode for Locked<ProcDirInode> {
-	fn open(&self) -> Box<dyn DirHandle> {
+	fn open(&self) -> Result<Box<dyn DirHandle>, Errno> {
 		let v = vec![
 			(7, b"cwd".to_vec()),
 			(2, b"fd".to_vec()),
@@ -268,7 +268,7 @@ impl DirInode for Locked<ProcDirInode> {
 			(2, b"..".to_vec()),
 		];
 
-		Box::new(TmpDir::new(v))
+		Ok(Box::new(TmpDir::new(v)))
 	}
 
 	fn stat(&self) -> Result<RawStat, Errno> {
@@ -356,7 +356,7 @@ impl Locked<ProcRootDirInode> {
 }
 
 impl DirInode for Locked<ProcRootDirInode> {
-	fn open(&self) -> Box<dyn DirHandle> {
+	fn open(&self) -> Result<Box<dyn DirHandle>, Errno> {
 		let mut v: Vec<(u8, Vec<u8>)> = PROCESS_TREE
 			.lock()
 			.members()
@@ -367,7 +367,7 @@ impl DirInode for Locked<ProcRootDirInode> {
 		v.push((2, b".".to_vec()));
 		v.push((2, b"..".to_vec()));
 
-		Box::new(TmpDir::new(v))
+		Ok(Box::new(TmpDir::new(v)))
 	}
 
 	fn stat(&self) -> Result<RawStat, Errno> {
