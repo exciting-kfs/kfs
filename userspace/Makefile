@@ -10,7 +10,7 @@ CFLAGS :=
 endif
 
 LINKER_SCRIPT = $(realpath .)/userspace.ld
-LDFLAGS := -n --script=$(LINKER_SCRIPT) --oformat=binary -nostdlib
+LDFLAGS := -n --script=$(LINKER_SCRIPT) -nostdlib
 
 CC := $(PREFIX)gcc
 export CC

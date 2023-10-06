@@ -7,7 +7,8 @@ use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use crate::config::TRAMPOLINE_BASE;
+use crate::config::{MAX_PAGE_PER_ARG, MAX_PAGE_PER_ARGV, TRAMPOLINE_BASE};
+use crate::elf::Elf;
 use crate::mm::alloc::page::free_pages;
 use crate::mm::alloc::virt::{kmap, kunmap};
 use crate::mm::alloc::Zone;
@@ -22,7 +23,7 @@ use super::verify::{verify_ptr, verify_string};
 use super::vma::{AreaFlag, UserAddressSpace};
 
 pub struct Memory {
-	code_end: usize,
+	system_data_base: usize,
 	vma: UserAddressSpace,
 	page_dir: PD,
 }
@@ -33,27 +34,22 @@ extern "C" {
 }
 
 impl Memory {
-	pub fn new(
-		stack_base: usize,
-		nr_stack_pages: usize,
-		code_base: usize,
-		code: &[u8],
-	) -> Result<Self, AllocError> {
+	pub fn from_elf(stack_base: usize, nr_stack_pages: usize, elf: Elf<'_>) -> Result<Self, Errno> {
 		let mut memory = Self {
-			code_end: code_base,
+			system_data_base: TRAMPOLINE_BASE,
 			vma: UserAddressSpace::new(),
-			page_dir: PD::new()?,
+			page_dir: PD::new().map_err(|_| Errno::ENOMEM)?,
 		};
 
 		memory.reserve_stack(stack_base, nr_stack_pages)?;
-		memory.push_data(code)?;
 
 		let len = __trampoline_end as usize - __trampoline_start as usize;
 		let trampoline = unsafe { from_raw_parts(__trampoline_start as *const u8, len) };
-		memory.copy_data_at(TRAMPOLINE_BASE, trampoline)?;
+		memory.push_data(trampoline)?;
 
-		// FIXME: proper BSS handling
-		memory.push_data(&[0; 4096 * 16])?;
+		for section in elf.loadable_sections() {
+			memory.load_section(section.vaddr, section.data, section.mem_size, section.flags)?;
+		}
 
 		Ok(memory)
 	}
@@ -169,9 +165,9 @@ impl Memory {
 		}
 
 		Ok(Self {
+			system_data_base: self.system_data_base,
 			vma,
 			page_dir,
-			code_end: self.code_end,
 		})
 	}
 
@@ -206,8 +202,8 @@ impl Memory {
 				break;
 			}
 
-			let arg = verify_string(*argp, task, PAGE_SIZE)?;
-			if arg.len() + args.len() > 32 * PAGE_SIZE {
+			let arg = verify_string(*argp, task, MAX_PAGE_PER_ARG * PAGE_SIZE)?;
+			if arg.len() + args.len() > MAX_PAGE_PER_ARGV * PAGE_SIZE {
 				return Err(Errno::E2BIG);
 			}
 			args.extend(arg);
@@ -228,7 +224,7 @@ impl Memory {
 		argv_ptr: usize,
 		task: &Arc<Task>,
 	) -> Result<(usize, usize), Errno> {
-		let copy_base = next_align(self.code_end, PAGE_SIZE);
+		let copy_base = next_align(self.system_data_base, PAGE_SIZE);
 
 		let (args, arg_ptrs) = Self::copy_c_argv(argv_ptr, copy_base, task)?;
 
@@ -247,13 +243,52 @@ impl Memory {
 	}
 
 	fn push_data(&mut self, data: &[u8]) -> Result<usize, AllocError> {
-		let addr = next_align(self.code_end, PAGE_SIZE);
+		let addr = next_align(self.system_data_base, PAGE_SIZE);
 
 		self.copy_data_at(addr, data)?;
 
-		self.code_end = addr + data.len();
+		self.system_data_base = addr + data.len();
 
 		Ok(addr)
+	}
+
+	fn load_section(
+		&mut self,
+		addr: usize,
+		data: &[u8],
+		len: usize,
+		flags: AreaFlag,
+	) -> Result<(), Errno> {
+		if len == 0 {
+			return Ok(());
+		}
+
+		let aligned_addr = addr & !(PAGE_SIZE - 1);
+		let l_padding = addr % PAGE_SIZE;
+		let r_padding = next_align(addr + len, PAGE_SIZE) - (addr + len);
+
+		let needed_pages = (l_padding + len + r_padding) / PAGE_SIZE;
+
+		self.vma
+			.allocate_fixed_area(aligned_addr, needed_pages, flags)?;
+
+		for (i, chunk) in PageAlignedChunk::new(addr, data, len).enumerate() {
+			let user_page = PageBox::new(Zone::High)?;
+
+			let page = kmap(user_page.as_phys_addr())?;
+			unsafe { chunk.write_to_page(page) };
+			kunmap(page.as_ptr() as usize);
+
+			self.page_dir.map_user(
+				aligned_addr + i * PAGE_SIZE,
+				user_page.as_phys_addr(),
+				flags.into(),
+			)?;
+
+			user_page.forget();
+		}
+
+		Ok(())
 	}
 
 	fn copy_data_at(&mut self, addr: usize, data: &[u8]) -> Result<(), AllocError> {
@@ -339,5 +374,77 @@ impl Drop for Memory {
 				Self::free_page_if_allocated(&self.page_dir, vaddr);
 			}
 		}
+	}
+}
+
+struct PageAlignedChunk<'a> {
+	next_offset: usize,
+	remain_bytes: usize,
+	data: &'a [u8],
+}
+
+impl<'a> PageAlignedChunk<'a> {
+	pub fn new(start_addr: usize, data: &'a [u8], total_bytes: usize) -> Self {
+		let next_offset = start_addr % PAGE_SIZE;
+
+		Self {
+			next_offset,
+			remain_bytes: total_bytes,
+			data,
+		}
+	}
+}
+
+impl<'a> Iterator for PageAlignedChunk<'a> {
+	type Item = ZeroExtendedChunk<'a>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		if self.remain_bytes == 0 {
+			return None;
+		}
+
+		let data_len = self.data.len().min(PAGE_SIZE - self.next_offset);
+
+		let (curr, next) = self.data.split_at(data_len);
+		let chunk = ZeroExtendedChunk::new(curr, self.next_offset);
+
+		self.remain_bytes = self
+			.remain_bytes
+			.checked_sub(PAGE_SIZE - self.next_offset)
+			.unwrap_or_default();
+
+		self.next_offset = 0;
+		self.data = next;
+
+		Some(chunk)
+	}
+}
+
+struct ZeroExtendedChunk<'a> {
+	offset: usize,
+	data: &'a [u8],
+}
+
+impl<'a> ZeroExtendedChunk<'a> {
+	pub fn new(data: &'a [u8], offset: usize) -> Self {
+		debug_assert!(data.len() + offset <= PAGE_SIZE);
+
+		Self { offset, data }
+	}
+
+	pub unsafe fn write_to_page(&self, page: NonNull<u8>) {
+		let left_zeros_len = self.offset;
+		let data_len = self.data.len();
+		let right_zeros_len = PAGE_SIZE - (left_zeros_len + data_len);
+
+		let mut page = page.as_ptr();
+
+		page.write_bytes(0, left_zeros_len);
+		page = page.add(left_zeros_len);
+
+		page.copy_from_nonoverlapping(self.data.as_ptr(), data_len);
+		page = page.add(data_len);
+
+		page.write_bytes(0, right_zeros_len);
 	}
 }

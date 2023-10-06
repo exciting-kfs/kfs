@@ -1,9 +1,10 @@
-OUTPUT_FORMAT("binary")
 ENTRY(_start)
-phys = 0x08048000;
+
+text_begin = 0x08048000;
+
 SECTIONS
 {
-	.text phys : AT(phys) {
+	.text text_begin : {
 		code = .;
 		*(.entry)
 		*(.text)
@@ -11,13 +12,13 @@ SECTIONS
 		. = ALIGN(4096);
 	}
 
-	.data : AT(phys + (data - code)) {
+	.data : {
 		data = .;
 		*(.data)
 		. = ALIGN(4096);
 	}
 
-	.bss : AT(phys + (bss - code))	{
+	.bss : {
 		bss = .;
 		*(.bss)
 		. = ALIGN(4096);

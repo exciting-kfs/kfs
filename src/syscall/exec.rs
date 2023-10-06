@@ -1,13 +1,13 @@
-use core::{ffi::CStr, mem, ptr::addr_of_mut};
+use core::ffi::CStr;
+use core::mem::{self};
+use core::ptr::addr_of_mut;
 
-use crate::{
-	config::{USER_CODE_BASE, USTACK_BASE, USTACK_PAGES},
-	interrupt::InterruptFrame,
-	mm::user::{memory::Memory, verify::verify_string},
-	process::task::CURRENT,
-	syscall::errno::Errno,
-	user_bin,
-};
+use crate::config::{USTACK_BASE, USTACK_PAGES};
+use crate::interrupt::InterruptFrame;
+use crate::mm::user::{memory::Memory, verify::verify_string};
+use crate::process::task::CURRENT;
+use crate::syscall::errno::Errno;
+use crate::user_bin;
 
 const PATH_MAX: usize = 128;
 
@@ -25,10 +25,10 @@ pub fn sys_execve(
 	let binary_name = unsafe { CStr::from_ptr(raw_binary_name_ptr as *const i8) };
 	let binary_name = binary_name.to_str().map_err(|_| Errno::ENOENT)?;
 
-	let code = user_bin::get_user_bin(binary_name).ok_or_else(|| Errno::ENOENT)?;
+	let elf = user_bin::get_user_elf(binary_name)?;
+	let entry_point = elf.get_entry_point();
 
-	let mut new_memory =
-		Memory::new(USTACK_BASE, USTACK_PAGES, USER_CODE_BASE, code).map_err(|_| Errno::ENOMEM)?;
+	let mut new_memory = Memory::from_elf(USTACK_BASE, USTACK_PAGES, elf)?;
 
 	let (argv_begin, argv_count) = new_memory.push_string_array(argv, current)?;
 	let (envp_begin, _) = new_memory.push_string_array(envp, current)?;
@@ -43,7 +43,7 @@ pub fn sys_execve(
 	mem::drop(mem::replace(&mut *memory, new_memory));
 
 	unsafe {
-		frame.copy_from_nonoverlapping(&InterruptFrame::new_user(USER_CODE_BASE, USTACK_BASE), 1);
+		frame.copy_from_nonoverlapping(&InterruptFrame::new_user(entry_point, USTACK_BASE), 1);
 		addr_of_mut!((*frame).edi).write(argv_begin);
 		addr_of_mut!((*frame).edx).write(argv_count);
 		addr_of_mut!((*frame).esi).write(envp_begin);
