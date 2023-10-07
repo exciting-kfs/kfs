@@ -14,8 +14,6 @@ use super::{
 	real::RealEntry, Entry, Ident, Permission, RawStat, SocketInode, VfsDirEntry, VfsSocketHandle,
 };
 
-pub type ArcVfsSocketEntry = Arc<VfsSocketEntry>;
-
 pub struct VfsSocketEntry {
 	name: Rc<Vec<u8>>,
 	inode: Arc<SocketInode>,

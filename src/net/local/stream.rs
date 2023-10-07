@@ -185,7 +185,7 @@ impl Socket for LocalStreamSocket {
 		let ent = lookup_entry_follow(&addr.path, task)?;
 
 		let sock = match ent {
-			VfsRealEntry::ArcVfsSocketEntry(sock) => sock,
+			VfsRealEntry::Socket(sock) => sock,
 			_ => return Err(Errno::ECONNREFUSED),
 		};
 

@@ -11,8 +11,6 @@ use super::{
 	VfsDirEntry, VfsFileHandle,
 };
 
-pub type ArcVfsFileEntry = Arc<VfsFileEntry>;
-
 pub struct VfsFileEntry {
 	name: Rc<Vec<u8>>,
 	inode: Arc<dyn FileInode>,

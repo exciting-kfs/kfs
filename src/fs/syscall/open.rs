@@ -40,7 +40,7 @@ fn lookup_or_create(
 			Errno::ENOENT => base_entry.downcast_dir().and_then(|dir| {
 				let file = dir.create(&file.unwrap(), perm, task)?;
 
-				Ok(VfsRealEntry::ArcVfsFileEntry(file))
+				Ok(VfsRealEntry::File(file))
 			}),
 			// other errors (EPERM, EACCESS, ....)
 			_ => Err(e),

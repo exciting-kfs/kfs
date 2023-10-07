@@ -9,42 +9,38 @@ use super::{
 
 use enum_dispatch::enum_dispatch;
 
-use super::dir::ArcVfsDirEntry;
-use super::file::ArcVfsFileEntry;
-use super::socket::ArcVfsSocketEntry;
-
 #[enum_dispatch(RealEntry, Entry)]
 #[derive(Clone)]
 pub enum VfsRealEntry {
-	ArcVfsFileEntry,
-	ArcVfsDirEntry,
-	ArcVfsSocketEntry,
+	File(Arc<VfsFileEntry>),
+	Dir(Arc<VfsDirEntry>),
+	Socket(Arc<VfsSocketEntry>),
 }
 
 impl VfsRealEntry {
 	pub fn downcast_dir(self) -> Result<Arc<VfsDirEntry>, Errno> {
 		use VfsRealEntry::*;
 		match self {
-			ArcVfsFileEntry(_) | ArcVfsSocketEntry(_) => Err(Errno::ENOTDIR),
-			ArcVfsDirEntry(d) => Ok(d),
+			File(_) | Socket(_) => Err(Errno::ENOTDIR),
+			Dir(d) => Ok(d),
 		}
 	}
 
 	pub fn downcast_file(self) -> Result<Arc<VfsFileEntry>, Errno> {
 		use VfsRealEntry::*;
 		match self {
-			ArcVfsFileEntry(f) => Ok(f),
-			ArcVfsDirEntry(_) => Err(Errno::EISDIR),
-			ArcVfsSocketEntry(_) => Err(Errno::ESPIPE),
+			File(f) => Ok(f),
+			Dir(_) => Err(Errno::EISDIR),
+			Socket(_) => Err(Errno::ESPIPE),
 		}
 	}
 
 	pub fn downcast_socket(self) -> Result<Arc<VfsSocketEntry>, Errno> {
 		use VfsRealEntry::*;
 		match self {
-			ArcVfsFileEntry(_) => Err(Errno::ECONNREFUSED),
-			ArcVfsDirEntry(_) => Err(Errno::ECONNREFUSED),
-			ArcVfsSocketEntry(s) => Ok(s),
+			File(_) => Err(Errno::ECONNREFUSED),
+			Dir(_) => Err(Errno::ECONNREFUSED),
+			Socket(s) => Ok(s),
 		}
 	}
 
@@ -69,9 +65,9 @@ impl VfsRealEntry {
 
 		use VfsRealEntry::*;
 		match self {
-			ArcVfsFileEntry(f) => Ok(VfsHandle::File(f.open(io_flags, access_flags)?)),
-			ArcVfsDirEntry(d) => Ok(VfsHandle::Dir(d.open(io_flags, access_flags)?)),
-			ArcVfsSocketEntry(_) => Err(Errno::ENOENT),
+			File(f) => Ok(VfsHandle::File(f.open(io_flags, access_flags)?)),
+			Dir(d) => Ok(VfsHandle::Dir(d.open(io_flags, access_flags)?)),
+			Socket(_) => Err(Errno::ENOENT),
 		}
 	}
 }

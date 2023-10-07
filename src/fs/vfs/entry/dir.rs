@@ -15,8 +15,6 @@ use super::{
 	ROOT_DIR_ENTRY,
 };
 
-pub type ArcVfsDirEntry = Arc<VfsDirEntry>;
-
 pub struct VfsDirEntry {
 	name: Rc<Vec<u8>>,
 	pub(super) inode: Arc<dyn DirInode>,
@@ -154,14 +152,12 @@ impl VfsDirEntry {
 				Weak::default(),
 				Arc::downgrade(self),
 			))),
-			VfsInode::SymLink(inode) => {
-				VfsEntry::ArcVfsSymlinkEntry(Arc::new(VfsSymLinkEntry::new(
-					Rc::new(name.to_vec()),
-					inode,
-					Arc::downgrade(self),
-					Arc::clone(&self.super_block),
-				)))
-			}
+			VfsInode::SymLink(inode) => VfsEntry::Symlink(Arc::new(VfsSymLinkEntry::new(
+				Rc::new(name.to_vec()),
+				inode,
+				Arc::downgrade(self),
+				Arc::clone(&self.super_block),
+			))),
 		}
 	}
 

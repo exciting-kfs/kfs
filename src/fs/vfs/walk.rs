@@ -43,8 +43,8 @@ fn do_lookup_entry_at(
 	for comp in path.components() {
 		use VfsEntry::*;
 		curr = match curr {
-			VfsRealEntry(r) => r.downcast_dir(),
-			ArcVfsSymlinkEntry(ref s) => match follow_mid_symlink {
+			Real(r) => r.downcast_dir(),
+			Symlink(ref s) => match follow_mid_symlink {
 				true => curr.parent_dir(task).and_then(|pdir| {
 					do_lookup_entry_at(
 						pdir,
@@ -64,7 +64,7 @@ fn do_lookup_entry_at(
 
 	if follow_last_symlink {
 		use VfsEntry::*;
-		if let ArcVfsSymlinkEntry(s) = curr {
+		if let Symlink(s) = curr {
 			curr = do_lookup_entry_at(
 				s.parent_dir(task)?,
 				&s.target()?,

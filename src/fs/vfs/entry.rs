@@ -55,44 +55,44 @@ use crate::fs::vfs::entry::symlink::ArcVfsSymlinkEntry;
 #[enum_dispatch(Entry)]
 #[derive(Clone)]
 pub enum VfsEntry {
-	VfsRealEntry,
-	ArcVfsSymlinkEntry,
+	Real(VfsRealEntry),
+	Symlink(ArcVfsSymlinkEntry),
 }
 
 impl VfsEntry {
 	pub fn unwrap_real(self) -> VfsRealEntry {
 		use VfsEntry::*;
 		match self {
-			VfsRealEntry(r) => r,
-			ArcVfsSymlinkEntry(_) => panic!("expected Real(..) but got SymLink(..)"),
+			Real(r) => r,
+			Symlink(_) => panic!("expected Real(..) but got SymLink(..)"),
 		}
 	}
 
 	pub fn new_dir(dir: Arc<VfsDirEntry>) -> Self {
-		VfsEntry::VfsRealEntry(dir.into())
+		VfsEntry::Real(dir.into())
 	}
 
 	pub fn new_file(file: Arc<VfsFileEntry>) -> Self {
-		VfsEntry::VfsRealEntry(file.into())
+		VfsEntry::Real(file.into())
 	}
 
 	pub fn new_socket(sock: Arc<VfsSocketEntry>) -> Self {
-		VfsEntry::VfsRealEntry(sock.into())
+		VfsEntry::Real(sock.into())
 	}
 
 	pub fn downcast_dir(self) -> Result<Arc<VfsDirEntry>, Errno> {
 		use VfsEntry::*;
 		match self {
-			VfsRealEntry(r) => r.downcast_dir(),
-			ArcVfsSymlinkEntry(_) => Err(Errno::ENOTDIR),
+			Real(r) => r.downcast_dir(),
+			Symlink(_) => Err(Errno::ENOTDIR),
 		}
 	}
 
 	pub fn downcast_file(self) -> Result<Arc<VfsFileEntry>, Errno> {
 		use VfsEntry::*;
 		match self {
-			VfsRealEntry(r) => r.downcast_file(),
-			ArcVfsSymlinkEntry(_) => Err(Errno::EISDIR),
+			Real(r) => r.downcast_file(),
+			Symlink(_) => Err(Errno::EISDIR),
 		}
 	}
 }
