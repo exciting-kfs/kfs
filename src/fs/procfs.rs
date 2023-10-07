@@ -16,7 +16,7 @@ use crate::{
 
 use super::path::{format_path, Path};
 use super::tmpfs::TmpSb;
-use super::vfs::{lookup_entry_follow, TimeSpec, VfsHandle, ROOT_DIR_ENTRY};
+use super::vfs::{lookup_entry_follow, Entry, RealInode, TimeSpec, VfsHandle, ROOT_DIR_ENTRY};
 use super::{
 	tmpfs::{TmpDir, TmpSymLink},
 	vfs::{
@@ -166,22 +166,7 @@ impl ProcFdDirInode {
 	}
 }
 
-impl DirInode for Locked<ProcFdDirInode> {
-	fn open(&self) -> Box<dyn DirHandle> {
-		let this = self.lock();
-
-		let mut v: Vec<(u8, Vec<u8>)> = this
-			.sub_files
-			.keys()
-			.map(|x| (7, x.to_string().into()))
-			.collect();
-
-		v.push((2, b".".to_vec()));
-		v.push((2, b"..".to_vec()));
-
-		Box::new(TmpDir::new(v))
-	}
-
+impl RealInode for Locked<ProcFdDirInode> {
 	fn stat(&self) -> Result<RawStat, Errno> {
 		let this = self.lock();
 		Ok(RawStat {
@@ -202,6 +187,23 @@ impl DirInode for Locked<ProcFdDirInode> {
 
 	fn chmod(&self, _perm: Permission) -> Result<(), Errno> {
 		Err(Errno::EPERM)
+	}
+}
+
+impl DirInode for Locked<ProcFdDirInode> {
+	fn open(&self) -> Result<Box<dyn DirHandle>, Errno> {
+		let this = self.lock();
+
+		let mut v: Vec<(u8, Vec<u8>)> = this
+			.sub_files
+			.keys()
+			.map(|x| (7, x.to_string().into()))
+			.collect();
+
+		v.push((2, b".".to_vec()));
+		v.push((2, b"..".to_vec()));
+
+		Ok(Box::new(TmpDir::new(v)))
 	}
 
 	fn lookup(&self, name: &[u8]) -> Result<VfsInode, Errno> {
@@ -259,18 +261,7 @@ impl ProcDirInode {
 	}
 }
 
-impl DirInode for Locked<ProcDirInode> {
-	fn open(&self) -> Box<dyn DirHandle> {
-		let v = vec![
-			(7, b"cwd".to_vec()),
-			(2, b"fd".to_vec()),
-			(2, b".".to_vec()),
-			(2, b"..".to_vec()),
-		];
-
-		Box::new(TmpDir::new(v))
-	}
-
+impl RealInode for Locked<ProcDirInode> {
 	fn stat(&self) -> Result<RawStat, Errno> {
 		let this = self.lock();
 
@@ -292,6 +283,19 @@ impl DirInode for Locked<ProcDirInode> {
 
 	fn chmod(&self, _perm: Permission) -> Result<(), Errno> {
 		Err(Errno::EPERM)
+	}
+}
+
+impl DirInode for Locked<ProcDirInode> {
+	fn open(&self) -> Result<Box<dyn DirHandle>, Errno> {
+		let v = vec![
+			(7, b"cwd".to_vec()),
+			(2, b"fd".to_vec()),
+			(2, b".".to_vec()),
+			(2, b"..".to_vec()),
+		];
+
+		Ok(Box::new(TmpDir::new(v)))
 	}
 
 	fn lookup(&self, name: &[u8]) -> Result<VfsInode, Errno> {
@@ -355,21 +359,7 @@ impl Locked<ProcRootDirInode> {
 	}
 }
 
-impl DirInode for Locked<ProcRootDirInode> {
-	fn open(&self) -> Box<dyn DirHandle> {
-		let mut v: Vec<(u8, Vec<u8>)> = PROCESS_TREE
-			.lock()
-			.members()
-			.keys()
-			.map(|x| (2, x.as_raw().to_string().into()))
-			.collect();
-
-		v.push((2, b".".to_vec()));
-		v.push((2, b"..".to_vec()));
-
-		Box::new(TmpDir::new(v))
-	}
-
+impl RealInode for Locked<ProcRootDirInode> {
 	fn stat(&self) -> Result<RawStat, Errno> {
 		Ok(RawStat {
 			perm: 0o555,
@@ -389,6 +379,22 @@ impl DirInode for Locked<ProcRootDirInode> {
 
 	fn chmod(&self, _perm: Permission) -> Result<(), Errno> {
 		Err(Errno::EPERM)
+	}
+}
+
+impl DirInode for Locked<ProcRootDirInode> {
+	fn open(&self) -> Result<Box<dyn DirHandle>, Errno> {
+		let mut v: Vec<(u8, Vec<u8>)> = PROCESS_TREE
+			.lock()
+			.members()
+			.keys()
+			.map(|x| (2, x.as_raw().to_string().into()))
+			.collect();
+
+		v.push((2, b".".to_vec()));
+		v.push((2, b"..".to_vec()));
+
+		Ok(Box::new(TmpDir::new(v)))
 	}
 
 	fn lookup(&self, name: &[u8]) -> Result<VfsInode, Errno> {

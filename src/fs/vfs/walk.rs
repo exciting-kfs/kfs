@@ -1,7 +1,7 @@
 use alloc::sync::Arc;
 
 use crate::fs::path::{Base, Path};
-use crate::fs::vfs::ROOT_DIR_ENTRY;
+use crate::fs::vfs::{Entry, ROOT_DIR_ENTRY};
 use crate::process::task::Task;
 use crate::syscall::errno::Errno;
 
@@ -44,11 +44,11 @@ fn do_lookup_entry_at(
 		use VfsEntry::*;
 		curr = match curr {
 			Real(r) => r.downcast_dir(),
-			SymLink(ref s) => match follow_mid_symlink {
+			Symlink(ref s) => match follow_mid_symlink {
 				true => curr.parent_dir(task).and_then(|pdir| {
 					do_lookup_entry_at(
 						pdir,
-						s.target(),
+						&s.target()?,
 						task,
 						follow_mid_symlink,
 						follow_last_symlink,
@@ -64,10 +64,10 @@ fn do_lookup_entry_at(
 
 	if follow_last_symlink {
 		use VfsEntry::*;
-		if let SymLink(s) = curr {
+		if let Symlink(s) = curr {
 			curr = do_lookup_entry_at(
 				s.parent_dir(task)?,
-				s.target(),
+				&s.target()?,
 				task,
 				follow_mid_symlink,
 				follow_last_symlink,

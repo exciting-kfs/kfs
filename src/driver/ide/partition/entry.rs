@@ -31,6 +31,10 @@ impl MaybeEntry {
 		}
 	}
 
+	pub unsafe fn get_unchecked(&self) -> &PartitionEntry {
+		&self.0
+	}
+
 	pub const fn empty() -> Self {
 		Self(PartitionEntry {
 			attribute: 0,

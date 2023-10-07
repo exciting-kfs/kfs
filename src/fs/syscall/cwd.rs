@@ -1,6 +1,6 @@
 use crate::fs::change_cwd;
 use crate::fs::path::Path;
-use crate::fs::vfs::{lookup_entry_follow, Permission};
+use crate::fs::vfs::{lookup_entry_follow, Permission, RealEntry};
 use crate::{mm::user::verify::verify_path, process::task::CURRENT, syscall::errno::Errno};
 
 pub fn sys_chdir(path: usize) -> Result<usize, Errno> {

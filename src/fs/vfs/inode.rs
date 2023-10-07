@@ -161,13 +161,7 @@ fn default_access(
 	return false;
 }
 
-pub enum CachePolicy {
-	Never,
-	Always,
-}
-
-pub trait DirInode {
-	fn open(&self) -> Box<dyn DirHandle>;
+pub trait RealInode {
 	fn stat(&self) -> Result<RawStat, Errno>;
 	fn chown(&self, owner: usize, group: usize) -> Result<(), Errno>;
 	fn chmod(&self, perm: Permission) -> Result<(), Errno>;
@@ -181,6 +175,10 @@ pub trait DirInode {
 
 		Ok(())
 	}
+}
+
+pub trait DirInode: RealInode {
+	fn open(&self) -> Result<Box<dyn DirHandle>, Errno>;
 	fn lookup(&self, name: &[u8]) -> Result<VfsInode, Errno>;
 	fn mkdir(&self, name: &[u8], perm: Permission) -> Result<Arc<dyn DirInode>, Errno>;
 	fn rmdir(&self, name: &[u8]) -> Result<(), Errno>;
@@ -189,26 +187,13 @@ pub trait DirInode {
 	fn symlink(&self, target: &[u8], name: &[u8]) -> Result<Arc<dyn SymLinkInode>, Errno>;
 }
 
-pub trait FileInode {
-	fn open(&self) -> Box<dyn FileHandle>;
-	fn stat(&self) -> Result<RawStat, Errno>;
-	fn chown(&self, owner: usize, group: usize) -> Result<(), Errno>;
-	fn chmod(&self, perm: Permission) -> Result<(), Errno>;
-	fn access(&self, uid: usize, gid: usize, perm: Permission) -> Result<(), Errno> {
-		let stat = self.stat()?;
-		let file_perm = Permission::from_bits_truncate(stat.perm);
-
-		if !default_access(stat.uid, stat.gid, file_perm, uid, gid, perm) {
-			return Err(Errno::EACCES);
-		}
-
-		Ok(())
-	}
+pub trait FileInode: RealInode {
+	fn open(&self) -> Result<Box<dyn FileHandle>, Errno>;
 	fn truncate(&self, length: isize) -> Result<(), Errno>;
 }
 
 pub trait SymLinkInode {
-	fn target(&self) -> &Path;
+	fn target(&self) -> Result<Path, Errno>;
 }
 
 pub struct SocketInode {
@@ -231,8 +216,10 @@ impl SocketInode {
 			ctime: Locked::default(),
 		}
 	}
+}
 
-	pub fn stat(&self) -> Result<RawStat, Errno> {
+impl RealInode for SocketInode {
+	fn stat(&self) -> Result<RawStat, Errno> {
 		Ok(RawStat {
 			perm: self.perm.lock().bits(),
 			uid: *self.owner.lock(),
@@ -245,20 +232,20 @@ impl SocketInode {
 		})
 	}
 
-	pub fn chown(&self, owner: usize, group: usize) -> Result<(), Errno> {
+	fn chown(&self, owner: usize, group: usize) -> Result<(), Errno> {
 		*self.owner.lock() = owner;
 		*self.group.lock() = group;
 
 		Ok(())
 	}
 
-	pub fn chmod(&self, perm: Permission) -> Result<(), Errno> {
+	fn chmod(&self, perm: Permission) -> Result<(), Errno> {
 		*self.perm.lock() = perm;
 
 		Ok(())
 	}
 
-	pub fn access(&self, uid: usize, gid: usize, perm: Permission) -> Result<(), Errno> {
+	fn access(&self, uid: usize, gid: usize, perm: Permission) -> Result<(), Errno> {
 		let stat = self.stat()?;
 		let file_perm = Permission::from_bits_truncate(stat.perm);
 

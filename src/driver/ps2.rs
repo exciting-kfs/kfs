@@ -4,7 +4,6 @@ pub mod keyboard;
 use kfs_macro::interrupt_handler;
 
 use crate::driver::apic::local::LOCAL_APIC;
-use crate::driver::ide::IDE;
 use crate::driver::ps2::keyboard::{get_raw_scancode, into_key_event};
 use crate::driver::terminal::{console_screen_draw, get_foreground_tty, set_foreground_tty};
 use crate::input::{
@@ -103,12 +102,6 @@ pub extern "C" fn handle_keyboard_impl(_frame: InterruptFrame) {
 
 	into_key_event(code as u8).map(|ev| {
 		if ev.key == Code::Backtick && ev.pressed() {
-			// TODO for test
-			{
-				let mut ide = IDE[0].lock();
-				ide.ata.interrupt_resolve();
-			}
-
 			pr_err!("BACKTICK PRESSED!!");
 		}
 		input::keyboard::change_state(ev);

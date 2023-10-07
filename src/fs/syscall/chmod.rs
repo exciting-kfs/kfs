@@ -1,4 +1,5 @@
 use crate::fs::path::Path;
+use crate::fs::vfs::RealEntry;
 use crate::fs::vfs::{lookup_entry_follow, Permission};
 use crate::mm::user::verify::verify_path;
 use crate::{process::task::CURRENT, syscall::errno::Errno};

@@ -1,3 +1,5 @@
+use core::mem::{size_of, transmute};
+
 use alloc::{boxed::Box, sync::Arc};
 
 use crate::fs::path::Path;
@@ -6,7 +8,7 @@ use crate::net::socket::{Socket, SocketHandle};
 use crate::process::task::Task;
 use crate::syscall::errno::Errno;
 
-use super::{AccessFlag, IOFlag, VfsDirEntry, VfsEntry, VfsFileEntry, VfsSocketEntry};
+use super::{AccessFlag, Entry, IOFlag, VfsDirEntry, VfsEntry, VfsFileEntry, VfsSocketEntry};
 
 #[derive(Clone)]
 pub enum VfsHandle {
@@ -268,8 +270,57 @@ pub struct KfsDirent {
 	pub ino: u32,
 	pub private: u32,
 	pub size: u16,
-	pub file_type: u8,
+	pub file_type: FileType,
 	pub name: (),
+}
+
+impl KfsDirent {
+	#[inline]
+	pub fn header_len() -> usize {
+		size_of::<KfsDirent>() - 1
+	}
+
+	#[inline]
+	pub fn total_len(name: &[u8]) -> usize {
+		Self::header_len() + name.len() + 1
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum FileType {
+	Unknown,
+	Regular,
+	Directory,
+	CharactorDevice,
+	BlockDevice,
+	Pipe,
+	Socket,
+	SymLink,
+}
+
+impl FileType {
+	pub fn from_u8(value: u8) -> Option<Self> {
+		if value >= 8 {
+			None
+		} else {
+			Some(unsafe { transmute(value) })
+		}
+	}
+
+	pub fn mode(self) -> u16 {
+		use FileType::*;
+		match self {
+			Unknown => panic!("Unknown File Type."),
+			Regular => 0x8000,
+			Directory => 0x4000,
+			CharactorDevice => 0x2000,
+			BlockDevice => 0x6000,
+			Pipe => 0x1000,
+			Socket => 0xc000,
+			SymLink => 0xa000,
+		}
+	}
 }
 
 pub trait DirHandle {

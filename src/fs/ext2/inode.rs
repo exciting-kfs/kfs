@@ -72,20 +72,23 @@ impl LockRW<Inode> {
 
 pub struct DirInode(Arc<LockRW<Inode>>);
 
-#[allow(unused)]
-impl vfs::DirInode for DirInode {
-	fn open(&self) -> Box<dyn vfs::DirHandle> {
-		todo!()
-	}
+impl vfs::RealInode for DirInode {
 	fn stat(&self) -> Result<vfs::RawStat, Errno> {
 		todo!()
 	}
 
-	fn chmod(&self, perm: vfs::Permission) -> Result<(), Errno> {
+	fn chmod(&self, _perm: vfs::Permission) -> Result<(), Errno> {
 		todo!()
 	}
 
-	fn chown(&self, owner: usize, group: usize) -> Result<(), Errno> {
+	fn chown(&self, _owner: usize, _group: usize) -> Result<(), Errno> {
+		todo!()
+	}
+}
+
+#[allow(unused)]
+impl vfs::DirInode for DirInode {
+	fn open(&self) -> Result<Box<dyn vfs::DirHandle>, Errno> {
 		todo!()
 	}
 
@@ -116,12 +119,7 @@ impl vfs::DirInode for DirInode {
 
 pub struct FileInode(Arc<LockRW<Inode>>);
 
-#[allow(unused)]
-impl vfs::FileInode for FileInode {
-	fn open(&self) -> Box<dyn vfs::FileHandle> {
-		todo!()
-	}
-
+impl vfs::RealInode for FileInode {
 	fn stat(&self) -> Result<vfs::RawStat, Errno> {
 		let inode = self.0.read_lock();
 
@@ -161,6 +159,13 @@ impl vfs::FileInode for FileInode {
 		inode.info.gid = group as u16;
 
 		Ok(())
+	}
+}
+
+#[allow(unused)]
+impl vfs::FileInode for FileInode {
+	fn open(&self) -> Result<Box<dyn vfs::FileHandle>, Errno> {
+		todo!()
 	}
 
 	fn truncate(&self, length: isize) -> Result<(), Errno> {
