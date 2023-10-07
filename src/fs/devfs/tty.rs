@@ -7,17 +7,17 @@ use crate::{
 	syscall::errno::Errno,
 };
 
-pub struct DevTTYFile {
+pub struct DevTTY {
 	inner: TTYFile,
 }
 
-impl DevTTYFile {
+impl DevTTY {
 	pub fn new(inner: TTYFile) -> Self {
 		Self { inner }
 	}
 }
 
-impl RealInode for DevTTYFile {
+impl RealInode for DevTTY {
 	fn stat(&self) -> Result<RawStat, Errno> {
 		Ok(RawStat {
 			perm: 0o666,
@@ -40,7 +40,7 @@ impl RealInode for DevTTYFile {
 	}
 }
 
-impl FileInode for DevTTYFile {
+impl FileInode for DevTTY {
 	fn open(&self) -> Result<Box<dyn FileHandle>, Errno> {
 		let current = unsafe { CURRENT.get_mut() };
 

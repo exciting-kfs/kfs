@@ -7,7 +7,12 @@ use alloc::{
 	vec::Vec,
 };
 
-use crate::{fs::vfs::RealInode, process::task::Task, sync::Locked, syscall::errno::Errno};
+use crate::{
+	fs::vfs::{entry::block::VfsBlockEntry, RealInode},
+	process::task::Task,
+	sync::Locked,
+	syscall::errno::Errno,
+};
 
 use super::{
 	real::RealEntry, AccessFlag, DirInode, Entry, IOFlag, Ident, Permission, SuperBlock,
@@ -132,31 +137,37 @@ impl VfsDirEntry {
 	}
 
 	pub fn inode_to_entry(self: &Arc<Self>, name: &[u8], inode: VfsInode) -> VfsEntry {
+		use VfsInode::*;
 		match inode {
-			VfsInode::Dir(inode) => VfsEntry::new_dir(Arc::new(VfsDirEntry::new(
+			Dir(inode) => VfsEntry::new_dir(Arc::new(VfsDirEntry::new(
 				Rc::new(name.to_vec()),
 				inode,
 				Arc::downgrade(self),
 				Arc::clone(&self.super_block),
 				false,
 			))),
-			VfsInode::File(inode) => VfsEntry::new_file(Arc::new(VfsFileEntry::new(
+			File(inode) => VfsEntry::new_file(Arc::new(VfsFileEntry::new(
 				Rc::new(name.to_vec()),
 				inode,
 				Arc::downgrade(self),
 				Arc::clone(&self.super_block),
 			))),
-			VfsInode::Socket(inode) => VfsEntry::new_socket(Arc::new(VfsSocketEntry::new(
+			Socket(inode) => VfsEntry::new_socket(Arc::new(VfsSocketEntry::new(
 				Rc::new(name.to_vec()),
 				inode,
 				Weak::default(),
 				Arc::downgrade(self),
 			))),
-			VfsInode::SymLink(inode) => VfsEntry::Symlink(Arc::new(VfsSymLinkEntry::new(
+			SymLink(inode) => VfsEntry::Symlink(Arc::new(VfsSymLinkEntry::new(
 				Rc::new(name.to_vec()),
 				inode,
 				Arc::downgrade(self),
 				Arc::clone(&self.super_block),
+			))),
+			Block(inode) => VfsEntry::new_block(Arc::new(VfsBlockEntry::new(
+				Rc::new(name.to_vec()),
+				inode,
+				Arc::downgrade(self),
 			))),
 		}
 	}

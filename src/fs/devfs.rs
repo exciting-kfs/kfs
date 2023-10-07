@@ -1,3 +1,5 @@
+pub mod partition;
+
 mod null;
 mod tty;
 mod zero;
@@ -7,10 +9,17 @@ use core::mem::MaybeUninit;
 use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::Vec};
 
 use crate::{
-	config::NR_CONSOLES, driver::terminal::get_tty, process::get_idle_task, syscall::errno::Errno,
+	config::NR_CONSOLES,
+	driver::{
+		ide::ide_id::NR_IDE_DEV,
+		partition::{get_block_device, NR_PRIMARY},
+		terminal::get_tty,
+	},
+	process::get_idle_task,
+	syscall::errno::Errno,
 };
 
-use self::{null::DevNull, tty::DevTTYFile, zero::DevZero};
+use self::{null::DevNull, partition::DevPart, tty::DevTTY, zero::DevZero};
 
 use super::{
 	tmpfs::{TmpDir, TmpSb},
@@ -39,18 +48,31 @@ pub fn init() -> Result<(), Errno> {
 	for i in 0..NR_CONSOLES {
 		ttyname[3] = b'0' + (i + 1) as u8;
 		let ident = Ident::new(&ttyname);
-		dev_root_dir
-			.devices
-			.insert(ident, Arc::new(DevTTYFile::new(get_tty(i).unwrap())));
+		dev_root_dir.devices.insert(
+			ident,
+			VfsInode::File(Arc::new(DevTTY::new(get_tty(i).unwrap()))),
+		);
+	}
+
+	let mut partname: [u8; 5] = *b"partx";
+	for i in 0..(NR_PRIMARY * NR_IDE_DEV) {
+		if let Some(dev) = get_block_device(i) {
+			partname[4] = b'0' + (i + 1) as u8;
+			let ident = Ident::new(&partname);
+
+			dev_root_dir
+				.devices
+				.insert(ident, VfsInode::Block(Arc::new(DevPart::new(dev))));
+		}
 	}
 
 	dev_root_dir
 		.devices
-		.insert(Ident::new(b"null"), Arc::new(DevNull));
+		.insert(Ident::new(b"null"), VfsInode::File(Arc::new(DevNull)));
 
 	dev_root_dir
 		.devices
-		.insert(Ident::new(b"zero"), Arc::new(DevZero));
+		.insert(Ident::new(b"zero"), VfsInode::File(Arc::new(DevZero)));
 
 	unsafe { DEVFS_ROOT_DIR.write(Arc::new(dev_root_dir)) };
 
@@ -69,7 +91,7 @@ pub fn init() -> Result<(), Errno> {
 }
 
 pub struct DevDirInode {
-	devices: BTreeMap<Ident, Arc<dyn FileInode>>,
+	devices: BTreeMap<Ident, VfsInode>,
 }
 
 impl DevDirInode {
@@ -113,11 +135,7 @@ impl DirInode for DevDirInode {
 	}
 
 	fn lookup(&self, name: &[u8]) -> Result<VfsInode, Errno> {
-		self.devices
-			.get(name)
-			.cloned()
-			.ok_or(Errno::ENOENT)
-			.map(|x| VfsInode::File(x))
+		self.devices.get(name).cloned().ok_or(Errno::ENOENT)
 	}
 
 	fn mkdir(&self, _name: &[u8], _perm: Permission) -> Result<Arc<dyn DirInode>, Errno> {

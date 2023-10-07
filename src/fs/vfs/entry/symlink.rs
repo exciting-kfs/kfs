@@ -4,7 +4,7 @@ use alloc::{
 	vec::Vec,
 };
 
-use crate::{ fs::path::Path, syscall::errno::Errno};
+use crate::{fs::path::Path, syscall::errno::Errno};
 
 use super::{Entry, Ident, SuperBlock, SymLinkInode, VfsDirEntry};
 

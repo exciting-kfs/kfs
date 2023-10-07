@@ -3,6 +3,7 @@ use alloc::sync::Arc;
 use crate::fs::vfs::RealInode;
 use crate::{process::task::Task, syscall::errno::Errno};
 
+use super::block::VfsBlockEntry;
 use super::{
 	AccessFlag, IOFlag, Permission, RawStat, VfsDirEntry, VfsFileEntry, VfsHandle, VfsSocketEntry,
 };
@@ -15,13 +16,14 @@ pub enum VfsRealEntry {
 	File(Arc<VfsFileEntry>),
 	Dir(Arc<VfsDirEntry>),
 	Socket(Arc<VfsSocketEntry>),
+	Block(Arc<VfsBlockEntry>),
 }
 
 impl VfsRealEntry {
 	pub fn downcast_dir(self) -> Result<Arc<VfsDirEntry>, Errno> {
 		use VfsRealEntry::*;
 		match self {
-			File(_) | Socket(_) => Err(Errno::ENOTDIR),
+			File(_) | Socket(_) | Block(_) => Err(Errno::ENOTDIR),
 			Dir(d) => Ok(d),
 		}
 	}
@@ -31,7 +33,7 @@ impl VfsRealEntry {
 		match self {
 			File(f) => Ok(f),
 			Dir(_) => Err(Errno::EISDIR),
-			Socket(_) => Err(Errno::ESPIPE),
+			Socket(_) | Block(_) => Err(Errno::ESPIPE),
 		}
 	}
 
@@ -40,7 +42,18 @@ impl VfsRealEntry {
 		match self {
 			File(_) => Err(Errno::ECONNREFUSED),
 			Dir(_) => Err(Errno::ECONNREFUSED),
+			Block(_) => Err(Errno::ECONNREFUSED),
 			Socket(s) => Ok(s),
+		}
+	}
+
+	pub fn downcast_block(self) -> Result<Arc<VfsBlockEntry>, Errno> {
+		use VfsRealEntry::*;
+		match self {
+			File(_) => Err(Errno::ESPIPE),
+			Dir(_) => Err(Errno::EISDIR),
+			Socket(_) => Err(Errno::ESPIPE),
+			Block(b) => Ok(b),
 		}
 	}
 
@@ -68,6 +81,7 @@ impl VfsRealEntry {
 			File(f) => Ok(VfsHandle::File(f.open(io_flags, access_flags)?)),
 			Dir(d) => Ok(VfsHandle::Dir(d.open(io_flags, access_flags)?)),
 			Socket(_) => Err(Errno::ENOENT),
+			Block(_) => Err(Errno::ENOENT), // TODO
 		}
 	}
 }

@@ -96,6 +96,7 @@ impl<T: ?Sized> LocalLocked<T> {
 	}
 }
 
+#[derive(Debug)]
 pub struct LocalLockedGuard<'lock, T: ?Sized> {
 	locked: &'lock LocalLocked<T>,
 }
