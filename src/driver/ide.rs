@@ -11,7 +11,6 @@ pub mod dma;
 pub mod handler;
 pub mod ide_id;
 pub mod lba;
-pub mod partition;
 
 use core::{array, mem::MaybeUninit, ptr::NonNull};
 
@@ -27,11 +26,7 @@ use crate::{
 	sync::{Locked, LockedGuard, TryLockFail},
 };
 
-use self::{
-	ide_id::{IdeId, IDE_MAJOR, IDE_MINOR_END},
-	partition::entry::EntryIndex,
-	prd::PRD,
-};
+use self::{ide_id::IdeId, prd::PRD};
 
 use super::{
 	apic::io::{set_irq_mask, IDE_PRIMARY_IRQ, IDE_SECONDARY_IRQ},
@@ -39,7 +34,7 @@ use super::{
 		ata::AtaController,
 		pci::{self, ClassCode},
 	},
-	dev_num::DevNum,
+	partition,
 };
 
 const IDE_CLASS_CODE: ClassCode = ClassCode {
@@ -84,7 +79,8 @@ pub fn init() -> Result<(), pci::Error> {
 		ide.ata.set_interrupt(false);
 		(output.error == 0x01).then_some(dev)
 	});
-	partition::init(existed);
+
+	partition::ide_init(existed);
 
 	// test::test_read_dma();
 	// test::test_write_dma();
@@ -139,16 +135,6 @@ pub fn try_get_ide_controller(
 	}
 
 	Err(TryLockFail)
-}
-
-pub fn device_number(id: IdeId, ei: Option<EntryIndex>) -> DevNum {
-	let minor = id.index() * IDE_MINOR_END
-		+ match ei {
-			None => 0,
-			Some(ei) => ei.index() + 1,
-		};
-
-	DevNum::new(IDE_MAJOR, minor)
 }
 
 pub mod test {
