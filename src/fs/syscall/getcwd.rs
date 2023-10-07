@@ -1,4 +1,7 @@
-use crate::{mm::user::verify::verify_buffer_mut, process::task::CURRENT, syscall::errno::Errno};
+use crate::{
+	fs::vfs::Entry, mm::user::verify::verify_buffer_mut, process::task::CURRENT,
+	syscall::errno::Errno,
+};
 
 pub fn sys_getcwd(buf_ptr: usize, len: usize) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_ref() };

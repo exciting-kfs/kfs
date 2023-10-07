@@ -8,7 +8,7 @@ use crate::net::socket::{Socket, SocketHandle};
 use crate::process::task::Task;
 use crate::syscall::errno::Errno;
 
-use super::{AccessFlag, IOFlag, VfsDirEntry, VfsEntry, VfsFileEntry, VfsSocketEntry};
+use super::{AccessFlag, Entry, IOFlag, VfsDirEntry, VfsEntry, VfsFileEntry, VfsSocketEntry};
 
 #[derive(Clone)]
 pub enum VfsHandle {

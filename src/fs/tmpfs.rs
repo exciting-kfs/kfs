@@ -7,8 +7,8 @@ use alloc::{boxed::Box, collections::BTreeMap};
 
 use super::path::Path;
 use super::vfs::{
-	DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident, RawStat, SuperBlock,
-	SymLinkInode, TimeSpec, VfsInode, Whence,
+	DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident, RawStat, RealInode,
+	SuperBlock, SymLinkInode, TimeSpec, VfsInode, Whence,
 };
 use crate::fs::vfs::{KfsDirent, Permission};
 use crate::mm::util::next_align;
@@ -83,7 +83,9 @@ impl FileInode for TmpFileInode {
 
 		Ok(())
 	}
+}
 
+impl RealInode for TmpFileInode {
 	fn stat(&self) -> Result<RawStat, Errno> {
 		Ok(RawStat {
 			perm: self.perm.lock().bits(),
@@ -230,28 +232,7 @@ impl TmpDirInode {
 	}
 }
 
-impl DirInode for Locked<TmpDirInode> {
-	fn open(&self) -> Result<Box<dyn DirHandle>, Errno> {
-		let this = self.lock();
-
-		let mut v: Vec<(u8, Vec<u8>)> = Vec::new();
-
-		for (name, inode) in this.sub_files.iter() {
-			let kind = match inode {
-				TmpInode::Dir(_) => 2,
-				TmpInode::File(_) => 1,
-				TmpInode::SymLink(_) => 7,
-			};
-
-			v.push((kind, name.to_vec()))
-		}
-
-		v.push((2, b".".to_vec()));
-		v.push((2, b"..".to_vec()));
-
-		Ok(Box::new(TmpDir::new(v)))
-	}
-
+impl RealInode for Locked<TmpDirInode> {
 	fn stat(&self) -> Result<RawStat, Errno> {
 		let this = self.lock();
 
@@ -282,6 +263,29 @@ impl DirInode for Locked<TmpDirInode> {
 		this.perm = perm;
 
 		Ok(())
+	}
+}
+
+impl DirInode for Locked<TmpDirInode> {
+	fn open(&self) -> Result<Box<dyn DirHandle>, Errno> {
+		let this = self.lock();
+
+		let mut v: Vec<(u8, Vec<u8>)> = Vec::new();
+
+		for (name, inode) in this.sub_files.iter() {
+			let kind = match inode {
+				TmpInode::Dir(_) => 2,
+				TmpInode::File(_) => 1,
+				TmpInode::SymLink(_) => 7,
+			};
+
+			v.push((kind, name.to_vec()))
+		}
+
+		v.push((2, b".".to_vec()));
+		v.push((2, b"..".to_vec()));
+
+		Ok(Box::new(TmpDir::new(v)))
 	}
 
 	fn mkdir(&self, name: &[u8], perm: Permission) -> Result<Arc<dyn DirInode>, Errno> {

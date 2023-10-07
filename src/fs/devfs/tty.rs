@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 
 use crate::{
 	driver::terminal::TTYFile,
-	fs::vfs::{FileHandle, FileInode, Permission, RawStat, TimeSpec},
+	fs::vfs::{FileHandle, FileInode, Permission, RawStat, RealInode, TimeSpec},
 	process::task::CURRENT,
 	syscall::errno::Errno,
 };
@@ -17,20 +17,7 @@ impl DevTTYFile {
 	}
 }
 
-impl FileInode for DevTTYFile {
-	fn open(&self) -> Result<Box<dyn FileHandle>, Errno> {
-		let current = unsafe { CURRENT.get_mut() };
-
-		if let Some(ref ext) = current.get_user_ext() {
-			let sess = &ext.lock_relation().get_session();
-			if let Ok(_) = self.inner.lock_tty().connect(sess) {
-				sess.lock().set_ctty(self.inner.clone());
-			}
-		}
-
-		Ok(Box::new(self.inner.clone()))
-	}
-
+impl RealInode for DevTTYFile {
 	fn stat(&self) -> Result<RawStat, Errno> {
 		Ok(RawStat {
 			perm: 0o666,
@@ -50,6 +37,21 @@ impl FileInode for DevTTYFile {
 
 	fn chmod(&self, _perm: Permission) -> Result<(), Errno> {
 		Err(Errno::EPERM)
+	}
+}
+
+impl FileInode for DevTTYFile {
+	fn open(&self) -> Result<Box<dyn FileHandle>, Errno> {
+		let current = unsafe { CURRENT.get_mut() };
+
+		if let Some(ref ext) = current.get_user_ext() {
+			let sess = &ext.lock_relation().get_session();
+			if let Ok(_) = self.inner.lock_tty().connect(sess) {
+				sess.lock().set_ctty(self.inner.clone());
+			}
+		}
+
+		Ok(Box::new(self.inner.clone()))
 	}
 
 	fn truncate(&self, _length: isize) -> Result<(), Errno> {

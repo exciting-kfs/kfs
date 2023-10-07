@@ -1,17 +1,13 @@
 use alloc::boxed::Box;
 
 use crate::{
-	fs::vfs::{FileHandle, FileInode, IOFlag, Permission, RawStat, TimeSpec, Whence},
+	fs::vfs::{FileHandle, FileInode, IOFlag, Permission, RawStat, RealInode, TimeSpec, Whence},
 	syscall::errno::Errno,
 };
 
 pub struct DevZero;
 
-impl FileInode for DevZero {
-	fn open(&self) -> Result<Box<dyn FileHandle>, Errno> {
-		Ok(Box::new(DevZero))
-	}
-
+impl RealInode for DevZero {
 	fn stat(&self) -> Result<RawStat, Errno> {
 		Ok(RawStat {
 			perm: 0o666,
@@ -31,6 +27,12 @@ impl FileInode for DevZero {
 
 	fn chmod(&self, _perm: Permission) -> Result<(), Errno> {
 		Err(Errno::EPERM)
+	}
+}
+
+impl FileInode for DevZero {
+	fn open(&self) -> Result<Box<dyn FileHandle>, Errno> {
+		Ok(Box::new(DevZero))
 	}
 
 	fn truncate(&self, _length: isize) -> Result<(), Errno> {

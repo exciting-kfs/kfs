@@ -1,7 +1,7 @@
 use core::borrow::Borrow;
 
 use crate::fs::path::Path;
-use crate::fs::vfs::lookup_entry_follow_except_last;
+use crate::fs::vfs::{lookup_entry_follow_except_last, Entry};
 use crate::mm::user::verify::verify_path;
 use crate::process::task::CURRENT;
 use crate::syscall::errno::Errno;

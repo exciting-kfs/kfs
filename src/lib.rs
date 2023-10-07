@@ -13,6 +13,7 @@
 #![feature(unboxed_closures)]
 #![feature(iter_intersperse)]
 #![feature(get_mut_unchecked)]
+#![feature(trait_upcasting)]
 
 extern crate alloc;
 extern crate time;

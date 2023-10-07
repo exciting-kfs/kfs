@@ -15,8 +15,8 @@ use self::{null::DevNull, tty::DevTTYFile, zero::DevZero};
 use super::{
 	tmpfs::{TmpDir, TmpSb},
 	vfs::{
-		DirHandle, DirInode, FileInode, FileSystem, Ident, Permission, RawStat, SymLinkInode,
-		TimeSpec, VfsInode, ROOT_DIR_ENTRY,
+		DirHandle, DirInode, FileInode, FileSystem, Ident, Permission, RawStat, RealInode,
+		SymLinkInode, TimeSpec, VfsInode, ROOT_DIR_ENTRY,
 	},
 };
 
@@ -80,15 +80,7 @@ impl DevDirInode {
 	}
 }
 
-impl DirInode for DevDirInode {
-	fn open(&self) -> Result<Box<dyn DirHandle>, Errno> {
-		let mut v: Vec<(u8, Vec<u8>)> = self.devices.keys().map(|x| (3, (&*x.0).clone())).collect();
-		v.push((2, b".".to_vec()));
-		v.push((2, b"..".to_vec()));
-
-		Ok(Box::new(TmpDir::new(v)))
-	}
-
+impl RealInode for DevDirInode {
 	fn stat(&self) -> Result<RawStat, Errno> {
 		Ok(RawStat {
 			perm: 0o555,
@@ -108,6 +100,16 @@ impl DirInode for DevDirInode {
 
 	fn chmod(&self, _perm: Permission) -> Result<(), Errno> {
 		Err(Errno::EPERM)
+	}
+}
+
+impl DirInode for DevDirInode {
+	fn open(&self) -> Result<Box<dyn DirHandle>, Errno> {
+		let mut v: Vec<(u8, Vec<u8>)> = self.devices.keys().map(|x| (3, (&*x.0).clone())).collect();
+		v.push((2, b".".to_vec()));
+		v.push((2, b"..".to_vec()));
+
+		Ok(Box::new(TmpDir::new(v)))
 	}
 
 	fn lookup(&self, name: &[u8]) -> Result<VfsInode, Errno> {

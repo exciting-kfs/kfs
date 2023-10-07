@@ -3,7 +3,7 @@ use core::mem::{align_of, size_of};
 use alloc::sync::Arc;
 
 use crate::fs::path::Path;
-use crate::fs::vfs::{lookup_entry_follow, RawStat};
+use crate::fs::vfs::{lookup_entry_follow, RawStat, RealEntry};
 use crate::mm::user::verify::{verify_buffer_mut, verify_path};
 use crate::process::task::{Task, CURRENT};
 use crate::syscall::errno::Errno;
