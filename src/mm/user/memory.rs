@@ -448,3 +448,172 @@ impl<'a> ZeroExtendedChunk<'a> {
 		page.write_bytes(0, right_zeros_len);
 	}
 }
+
+mod test {
+	use crate::util::lcg::LCG;
+
+	use super::*;
+	use alloc::boxed::Box;
+	use kfs_macro::ktest;
+
+	#[ktest(memory)]
+	pub fn page_chunk_basic() {
+		let mut buffer = Box::new([42; PAGE_SIZE * 2]);
+
+		for (i, chunk) in PageAlignedChunk::new(0, &[1, 2, 3, 4], 4).enumerate() {
+			assert!(i < 1);
+			unsafe {
+				let page = NonNull::new_unchecked(buffer.as_mut_ptr().add(i * PAGE_SIZE));
+
+				chunk.write_to_page(page);
+			}
+		}
+
+		assert_eq!(buffer[0], 1);
+		assert_eq!(buffer[1], 2);
+		assert_eq!(buffer[2], 3);
+		assert_eq!(buffer[3], 4);
+
+		for ch in &buffer[4..PAGE_SIZE] {
+			assert_eq!(*ch, 0);
+		}
+
+		for ch in &buffer[PAGE_SIZE..] {
+			assert_eq!(*ch, 42);
+		}
+	}
+
+	#[ktest(memory)]
+	pub fn page_chunk_misalign_onepage() {
+		let mut buffer = Box::new([42; PAGE_SIZE * 2]);
+
+		for (i, chunk) in PageAlignedChunk::new(1, &[1, 2, 3, 4], 4).enumerate() {
+			assert!(i < 1);
+			unsafe {
+				let page = NonNull::new_unchecked(buffer.as_mut_ptr().add(i * PAGE_SIZE));
+
+				chunk.write_to_page(page);
+			}
+		}
+
+		assert_eq!(buffer[0], 0);
+		assert_eq!(buffer[1], 1);
+		assert_eq!(buffer[2], 2);
+		assert_eq!(buffer[3], 3);
+		assert_eq!(buffer[4], 4);
+
+		for ch in &buffer[5..PAGE_SIZE] {
+			assert_eq!(*ch, 0);
+		}
+
+		for ch in &buffer[PAGE_SIZE..] {
+			assert_eq!(*ch, 42);
+		}
+	}
+
+	#[ktest(memory)]
+	pub fn page_chunk_misalign_multipage() {
+		let mut buffer = Box::new([42; PAGE_SIZE * 3]);
+		let mut data = Vec::new();
+
+		let mut rng = LCG::new(42);
+
+		for _ in 0..5000 {
+			data.push(rng.rand() as u8);
+		}
+
+		for (i, chunk) in PageAlignedChunk::new(42, &data, data.len()).enumerate() {
+			assert!(i < 2);
+			unsafe {
+				let page = NonNull::new_unchecked(buffer.as_mut_ptr().add(i * PAGE_SIZE));
+
+				chunk.write_to_page(page);
+			}
+		}
+
+		for ch in &buffer[..42] {
+			assert_eq!(*ch, 0);
+		}
+
+		for (a, b) in (data.iter()).zip(&buffer[42..42 + data.len()]) {
+			assert_eq!(*a, *b);
+		}
+
+		for ch in &buffer[42 + data.len()..2 * PAGE_SIZE] {
+			assert_eq!(*ch, 0);
+		}
+
+		for ch in &buffer[2 * PAGE_SIZE..] {
+			assert_eq!(*ch, 42);
+		}
+	}
+
+	#[ktest(memory)]
+	pub fn page_chunk_extend() {
+		let mut buffer = Box::new([42; PAGE_SIZE * 2]);
+		let mut data = Vec::new();
+
+		let mut rng = LCG::new(42);
+
+		for _ in 0..5000 {
+			data.push(rng.rand() as u8);
+		}
+
+		for (i, chunk) in PageAlignedChunk::new(0, &[1, 2, 3, 4], 6).enumerate() {
+			assert!(i < 1);
+			unsafe {
+				let page = NonNull::new_unchecked(buffer.as_mut_ptr().add(i * PAGE_SIZE));
+
+				chunk.write_to_page(page);
+			}
+		}
+
+		assert_eq!(buffer[0], 1);
+		assert_eq!(buffer[1], 2);
+		assert_eq!(buffer[2], 3);
+		assert_eq!(buffer[3], 4);
+
+		for ch in &buffer[4..PAGE_SIZE] {
+			assert_eq!(*ch, 0);
+		}
+
+		for ch in &buffer[PAGE_SIZE..] {
+			assert_eq!(*ch, 42);
+		}
+	}
+
+	#[ktest(memory)]
+	pub fn page_chunk_extend_misaligned() {
+		let mut buffer = Box::new([42; PAGE_SIZE * 2]);
+		let mut data = Vec::new();
+
+		let mut rng = LCG::new(42);
+
+		for _ in 0..5000 {
+			data.push(rng.rand() as u8);
+		}
+
+		for (i, chunk) in PageAlignedChunk::new(1, &[1, 2, 3, 4], 6).enumerate() {
+			assert!(i < 1);
+			unsafe {
+				let page = NonNull::new_unchecked(buffer.as_mut_ptr().add(i * PAGE_SIZE));
+
+				chunk.write_to_page(page);
+			}
+		}
+
+		assert_eq!(buffer[0], 0);
+		assert_eq!(buffer[1], 1);
+		assert_eq!(buffer[2], 2);
+		assert_eq!(buffer[3], 3);
+		assert_eq!(buffer[4], 4);
+
+		for ch in &buffer[5..PAGE_SIZE] {
+			assert_eq!(*ch, 0);
+		}
+
+		for ch in &buffer[PAGE_SIZE..] {
+			assert_eq!(*ch, 42);
+		}
+	}
+}
