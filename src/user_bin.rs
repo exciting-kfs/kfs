@@ -1,7 +1,14 @@
+use crate::{elf::Elf, syscall::errno::Errno};
+
 macro_rules! include_user_bin {
-	($name:literal) => {
-		include_bytes!(concat!("../userspace/build/", $name))
-	};
+	($name:literal) => {{
+		#[repr(C, align(16))]
+		struct __Align16(&'static [u8]);
+
+		static __DATA: __Align16 = __Align16(include_bytes!(concat!("../userspace/build/", $name)));
+
+		&__DATA.0
+	}};
 }
 
 macro_rules! define_user_bin {
@@ -9,7 +16,8 @@ macro_rules! define_user_bin {
 		$(
 			pub static $varname: &'static [u8] = include_user_bin!($filename);
 		)*
-		pub fn get_user_bin(name: &str) -> Option<&'static [u8]> {
+
+		fn get_user_bin(name: &str) -> Option<&'static [u8]> {
 			match name {
 				$($filename => Some($varname),)*
 				_ => None,
@@ -18,7 +26,6 @@ macro_rules! define_user_bin {
 	};
 }
 
-// it will define pub fn get_user_bin
 define_user_bin![
 	(INIT, "init.bin"),
 	(SHELL, "shell.bin"),
@@ -32,3 +39,9 @@ define_user_bin![
 	(TEST, "test.bin"),
 	(TEST_ARGV, "test_argv.bin"),
 ];
+
+pub fn get_user_elf(name: &str) -> Result<Elf<'static>, Errno> {
+	get_user_bin(name)
+		.ok_or(Errno::ENOENT)
+		.and_then(|x| Elf::new(x))
+}

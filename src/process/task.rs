@@ -3,7 +3,8 @@ use core::sync::atomic::{AtomicBool, Ordering};
 
 use alloc::sync::Arc;
 
-use crate::config::{USER_CODE_BASE, USTACK_BASE, USTACK_PAGES};
+use crate::config::{USTACK_BASE, USTACK_PAGES};
+use crate::elf::Elf;
 use crate::fs::vfs::{VfsDirEntry, ROOT_DIR_ENTRY};
 use crate::fs::{create_task_node, delete_task_node};
 use crate::interrupt::InterruptFrame;
@@ -92,11 +93,11 @@ impl UserTaskExt {
 impl Task {
 	/// create new init (pid 1) process.
 	/// this must be called only once!!
-	pub(super) fn new_init_task(pid: Pid, code: &[u8]) -> Result<Arc<Self>, AllocError> {
+	pub(super) fn new_init_task(pid: Pid, elf: Elf<'_>) -> Result<Arc<Self>, AllocError> {
 		debug_assert!(pid.as_raw() == 1, "invalid init pid");
 
-		let kstack = Stack::new_user(USER_CODE_BASE, USTACK_BASE)?;
-		let memory = Memory::new(USTACK_BASE, USTACK_PAGES, USER_CODE_BASE, code)?;
+		let kstack = Stack::new_user(elf.get_entry_point(), USTACK_BASE)?;
+		let memory = Memory::from_elf(USTACK_BASE, USTACK_PAGES, elf).expect("FIXME");
 
 		let task = Arc::new_cyclic(|w| Task {
 			kstack,

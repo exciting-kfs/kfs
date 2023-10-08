@@ -23,6 +23,7 @@ mod boot;
 mod collection;
 mod config;
 mod driver;
+mod elf;
 mod fs;
 mod input;
 mod interrupt;

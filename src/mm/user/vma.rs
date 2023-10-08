@@ -3,13 +3,23 @@ use core::{alloc::AllocError, cmp::Ordering, ops::Range};
 use alloc::vec::Vec;
 use bitflags::bitflags;
 
-use crate::mm::constant::*;
+use crate::mm::{constant::*, page::PageFlag};
 
 bitflags! {
 	#[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 	pub struct AreaFlag: u32 {
 		const Readable = (1 << 0);
 		const Writable = (1 << 1);
+	}
+}
+
+impl Into<PageFlag> for AreaFlag {
+	fn into(self) -> PageFlag {
+		if self.contains(AreaFlag::Writable) {
+			PageFlag::USER_RDWR
+		} else {
+			PageFlag::USER_RDONLY
+		}
 	}
 }
 
