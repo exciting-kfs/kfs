@@ -10,4 +10,5 @@ rustflags = [
 	"-C", "panic=abort",
 	"-C", "relocation-model=static",
 	'--cfg', 'log_level="debug"', # ALL = debug > info > warn > error
+	'--cfg', 'trace_feature="ext2-unmount"',
 ]
