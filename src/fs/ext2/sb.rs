@@ -77,13 +77,13 @@ impl SuperBlock {
 		Ok(ret)
 	}
 
-	fn parse_to_inode(&self, inum: Inum, mut block: Block) -> BTreeMap<Inum, Arc<LockRW<Inode>>> {
+	fn parse_to_inode(&self, inum: Inum, block: Block) -> BTreeMap<Inum, Arc<LockRW<Inode>>> {
 		let data = self.info.read_lock();
 		let count = data.inode_per_block();
 
 		block
 			.as_chunks(data.inode_size as usize)
-			.map(|mut chunk| unsafe {
+			.map(|chunk| unsafe {
 				let data = chunk.cast::<InodeInfo>();
 				Arc::new(LockRW::new(Inode::new(data.clone())))
 			})
