@@ -1,9 +1,14 @@
 use crate::{elf::Elf, syscall::errno::Errno};
 
 macro_rules! include_user_bin {
-	($name:literal) => {
-		include_bytes!(concat!("../userspace/build/", $name))
-	};
+	($name:literal) => {{
+		#[repr(C, align(16))]
+		struct __Align16(&'static [u8]);
+
+		static __DATA: __Align16 = __Align16(include_bytes!(concat!("../userspace/build/", $name)));
+
+		&__DATA.0
+	}};
 }
 
 macro_rules! define_user_bin {
