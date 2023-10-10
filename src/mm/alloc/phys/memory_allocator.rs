@@ -1,4 +1,5 @@
 use core::alloc::{AllocError, Layout};
+use core::cmp::max;
 use core::ptr::NonNull;
 
 use crate::mm::alloc::cache::{CacheAllocator, CacheAllocatorStat};
@@ -31,11 +32,11 @@ impl PMemAlloc {
 		allocator
 	}
 
-	pub fn statistic(&mut self) -> MemoryAllocatorStat {
+	pub fn stat(&mut self) -> MemoryAllocatorStat {
 		let (cache, rank) = (&mut self.cache, &mut self.rank_count);
 
 		let rank_stat = rank.clone();
-		let cache_stat = cache.statistic();
+		let cache_stat = cache.stat();
 
 		MemoryAllocatorStat {
 			cache_stat,
@@ -46,10 +47,10 @@ impl PMemAlloc {
 	pub fn allocate(&mut self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
 		let (cache, rank_count) = (&mut self.cache, &mut self.rank_count);
 
-		let level = level_of(layout);
-		match level.checked_sub(LEVEL_END) {
-			None => cache.allocate(level),
-			Some(rank) => {
+		use Dispatch::*;
+		match Dispatch::from_layout(layout) {
+			Cache(index) => cache.get(index).allocate(),
+			Page(rank) => {
 				rank_count[rank] += 1;
 				page::alloc_pages(rank, Zone::Normal)
 			}
@@ -59,10 +60,10 @@ impl PMemAlloc {
 	pub unsafe fn deallocate(&mut self, ptr: NonNull<u8>, layout: Layout) {
 		let (cache, rank_count) = (&mut self.cache, &mut self.rank_count);
 
-		let level = level_of(layout);
-		match level.checked_sub(LEVEL_END) {
-			None => cache.deallocate(ptr, level),
-			Some(rank) => {
+		use Dispatch::*;
+		match Dispatch::from_layout(layout) {
+			Cache(index) => cache.get(index).deallocate(ptr),
+			Page(rank) => {
 				rank_count[rank] -= 1;
 				page::free_pages(ptr);
 			}
@@ -96,6 +97,26 @@ impl MemoryAllocatorStat {
 	}
 }
 
+enum Dispatch {
+	Page(usize),
+	Cache(usize),
+}
+
+impl Dispatch {
+	fn from_layout(layout: Layout) -> Self {
+		let size = max(layout.size(), layout.align());
+
+		if size > MAX_CAHCE_SIZE {
+			Self::Page(size_to_rank(size))
+		} else {
+			let size = next_align(size, MIN_CAHCE_SIZE);
+			let multiplier = multiplier_bigger_than(size);
+			let index = multiplier - MIN_CACHE_SIZE_MULTIPLIER;
+			Self::Cache(index)
+		}
+	}
+}
+
 mod tests {
 	use super::*;
 	use crate::mm::alloc::cache::CacheStat;
@@ -107,7 +128,7 @@ mod tests {
 		let cache = core::array::from_fn(|_| CacheStat::hand_made(0, 0, 0));
 		let ca_stat = CacheAllocatorStat::hand_made(cache);
 		assert_eq!(
-			normal.statistic(),
+			normal.stat(),
 			MemoryAllocatorStat::hand_made(ca_stat, [0; MAX_RANK + 1])
 		)
 	}
@@ -126,7 +147,7 @@ mod tests {
 
 			rank_count[rank] = 1;
 			assert_eq!(
-				normal.statistic(),
+				normal.stat(),
 				MemoryAllocatorStat::hand_made(ca_stat, rank_count)
 			);
 
@@ -135,7 +156,7 @@ mod tests {
 
 			rank_count[rank] = 0;
 			assert_eq!(
-				normal.statistic(),
+				normal.stat(),
 				MemoryAllocatorStat::hand_made(ca_stat, rank_count)
 			);
 		}
@@ -154,7 +175,7 @@ mod tests {
 
 		rank_count[rank] = 2;
 		assert_eq!(
-			normal.statistic(),
+			normal.stat(),
 			MemoryAllocatorStat::hand_made(ca_stat, rank_count)
 		);
 
@@ -164,7 +185,7 @@ mod tests {
 
 		rank_count[rank] = 0;
 		assert_eq!(
-			normal.statistic(),
+			normal.stat(),
 			MemoryAllocatorStat::hand_made(ca_stat, rank_count)
 		);
 	}

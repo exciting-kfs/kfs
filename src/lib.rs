@@ -50,6 +50,7 @@ use scheduler::context::yield_now;
 use scheduler::schedule_last;
 use scheduler::work::slow_worker;
 use test::{exit_qemu_with, TEST_ARRAY};
+use test_threads::{oom_test, show_page_stat};
 
 use crate::driver::apic::apic_timer::jiffies;
 use crate::driver::ide::dma::test::TEST_SECTOR_COUNT;
@@ -95,8 +96,11 @@ fn run_test() -> ! {
 }
 
 fn run_process() -> ! {
-	// let stat = Task::new_kernel(show_page_stat as usize, 0).expect("OOM");
-	// schedule_last(stat);
+	let stat = Task::new_kernel(show_page_stat as usize, 0).expect("OOM");
+	schedule_last(stat);
+
+	let stat = Task::new_kernel(oom_test as usize, 0).expect("OOM");
+	schedule_last(stat);
 
 	let init = process::get_init_task();
 	schedule_last(init);
@@ -186,6 +190,15 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 }
 
 mod test_threads {
+	use core::alloc::{Allocator, Layout};
+
+	use alloc::{boxed::Box, vec::Vec};
+
+	use crate::{
+		mm::{alloc::phys::Normal, constant::KB, oom::wake_up_oom_handler},
+		scheduler::preempt::preempt_disable,
+	};
+
 	use super::*;
 
 	pub fn run_dma_test(_: usize) {
@@ -209,6 +222,46 @@ mod test_threads {
 			let pages = get_available_pages();
 			pr_info!("AVAILABLE PAGES: {} ({} MB)", pages, pages * PAGE_SIZE / MB);
 			yield_now();
+		}
+	}
+
+	pub fn leak_test() {
+		#[repr(align(1024))]
+		struct T;
+
+		loop {
+			let mut v = Vec::new();
+
+			for _ in 0..100 {
+				let b = Box::new(T);
+				v.push(b);
+			}
+
+			yield_now();
+		}
+	}
+
+	pub fn oom_test(_: usize) {
+		let layout = unsafe { Layout::from_size_align_unchecked(2 * KB, KB) };
+		let mut basket = Vec::new();
+		loop {
+			let _ = preempt_disable();
+			while let Ok(ptr) = Normal.allocate(layout) {
+				basket.push(ptr);
+			}
+
+			pr_warn!("allocated count: {}", basket.len());
+
+			basket.iter().enumerate().for_each(|(i, ptr)| unsafe {
+				if i % 2048 == 0 {
+					pr_debug!("dalloc: {} MB", i * 2048 / MB)
+				}
+				Normal.deallocate(ptr.cast(), layout)
+			});
+
+			basket.clear();
+
+			wake_up_oom_handler();
 		}
 	}
 }

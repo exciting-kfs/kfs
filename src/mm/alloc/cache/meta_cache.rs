@@ -11,7 +11,8 @@ pub struct Dummy;
 
 #[derive(Debug)]
 pub struct MetaCache {
-	pub inuse: usize,
+	inuse: usize,
+	pub total: usize,
 	pub cache_size: usize,
 	pub free_list: NAList<Dummy>,
 }
@@ -43,31 +44,42 @@ impl MetaCache {
 		let ptr = mem.as_ptr().cast::<MetaCache>();
 
 		(*ptr).inuse = 0;
+		(*ptr).total = count;
 		(*ptr).cache_size = cache_size;
 		(*ptr).free_list = free_list;
 
 		&mut (*ptr)
 	}
 
-	#[inline(always)]
+	#[inline]
 	pub fn is_full(&self) -> bool {
-		self.inuse == self.total()
+		self.inuse == self.total
 	}
 
-	#[inline(always)]
+	#[inline]
+	pub fn is_free(&self) -> bool {
+		self.inuse == 0
+	}
+
+	#[inline]
+	pub fn inuse(&self) -> usize {
+		self.inuse
+	}
+
+	#[inline]
 	pub fn total(&self) -> usize {
-		count_total(self.rank(), Self::META_SIZE, self.cache_size)
+		self.total
 	}
 
 	pub fn alloc(&mut self) -> Result<NonNull<[u8]>, AllocError> {
-		self.inuse += 1;
-
 		let ptr = self
 			.free_list
 			.pop_front()
 			.ok_or(AllocError)?
 			.as_ptr()
 			.cast::<u8>();
+
+		self.inuse += 1;
 
 		let ptr = unsafe { core::slice::from_raw_parts_mut(ptr, self.cache_size) };
 		Ok(unsafe { NonNull::new_unchecked(ptr) })
@@ -114,7 +126,7 @@ pub fn get_rank(ptr: NonNull<u8>) -> usize {
 	unsafe { ptr_to_meta(ptr).as_ref().rank() }
 }
 
-#[inline(always)]
+#[inline]
 fn count_total(rank: usize, meta_size: usize, cache_size: usize) -> usize {
 	(size_of_rank(rank) - meta_size) / cache_size
 }

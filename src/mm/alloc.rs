@@ -1,4 +1,4 @@
-mod cache;
+pub mod cache;
 pub mod page;
 pub mod phys;
 pub mod virt;

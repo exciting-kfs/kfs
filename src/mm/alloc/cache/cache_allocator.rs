@@ -2,22 +2,29 @@ use super::cache_manager::CM;
 use super::size_cache::SizeCache;
 use super::traits::{CacheStat, CacheTrait};
 
-use core::alloc::AllocError;
 use core::array::from_fn;
 use core::mem::MaybeUninit;
 use core::ptr::NonNull;
 
 use crate::mm::constant::*;
-use crate::new_cache_allocator;
+use crate::sync::Locked;
+
+macro_rules! new_cache_allocator {
+	($size:literal) => {
+		CM.new_allocator::<Locked<SizeCache<$size>>>()
+			.expect("out of memory.")
+	};
+}
+use new_cache_allocator;
 
 #[derive(Debug)]
 pub struct CacheAllocator {
-	cache: [MaybeUninit<NonNull<dyn CacheTrait>>; LEVEL_RNG],
+	cache: [MaybeUninit<NonNull<dyn CacheTrait>>; NR_CACHE_ALLOCATOR],
 }
 
 impl CacheAllocator {
 	pub const fn uninit() -> Self {
-		let cache = MaybeUninit::uninit_array::<LEVEL_RNG>();
+		let cache = MaybeUninit::uninit_array::<NR_CACHE_ALLOCATOR>();
 
 		CacheAllocator { cache }
 	}
@@ -40,45 +47,17 @@ impl CacheAllocator {
 		}
 	}
 
-	pub fn statistic(&mut self) -> CacheAllocatorStat {
+	pub fn stat(&mut self) -> CacheAllocatorStat {
 		let cache = &mut self.cache;
-		let cache_stat = from_fn(|i| unsafe { cache[i].assume_init_mut().as_mut().statistic() });
+		let cache_stat = from_fn(|i| unsafe { cache[i].assume_init_mut().as_mut().stat() });
 
 		CacheAllocatorStat { cache_stat }
 	}
 
-	pub fn allocate(&mut self, level: usize) -> Result<NonNull<[u8]>, AllocError> {
-		match level.checked_sub(LEVEL_END) {
-			None => self.get_allocator(level).allocate(),
-			Some(_) => panic!("invalid request!"),
-		}
+	#[inline]
+	pub fn get(&mut self, index: usize) -> &mut dyn CacheTrait {
+		unsafe { self.cache[index].assume_init_mut().as_mut() }
 	}
-
-	/// # Safety
-	///
-	/// `ptr` must point memory allocated by `self`.
-	pub unsafe fn deallocate(&mut self, ptr: NonNull<u8>, level: usize) {
-		match level.checked_sub(LEVEL_END) {
-			None => self.get_allocator(level).deallocate(ptr),
-			Some(_) => panic!("invalid request!"),
-		}
-	}
-
-	fn get_allocator(&mut self, level: usize) -> &mut dyn CacheTrait {
-		let index = level - LEVEL_MIN;
-		match level {
-			6..=11 => unsafe { self.cache[index].assume_init_mut().as_mut() },
-			_ => panic!("invalid level!"),
-		}
-	}
-}
-
-#[macro_export]
-macro_rules! new_cache_allocator {
-	($size:literal) => {
-		CM.new_allocator::<SizeCache<$size>>()
-			.expect("out of memory.") // FIXME
-	};
 }
 
 impl Drop for CacheAllocator {
@@ -101,46 +80,60 @@ impl CacheAllocatorStat {
 }
 
 mod tests {
+	use core::cmp::max;
+
 	use super::*;
 	use kfs_macro::ktest;
 
-	#[ktest]
+	#[ktest(cache_allocator)]
 	fn alloc_dealloc_cache() {
-		for level in LEVEL_MIN..LEVEL_END {
+		for index in 0..NR_CACHE_ALLOCATOR {
 			let mut cache = CacheAllocator::initialized();
 			let mut cache_stat = core::array::from_fn(|_| CacheStat::hand_made(0, 0, 0));
-			let total = PAGE_SIZE / (1 << level) - 1;
-			cache_stat[level - LEVEL_MIN] = CacheStat::hand_made(1, total, 1);
 
-			let ptr = cache.allocate(level);
+			let (ptr, total, count) = {
+				let allocator = cache.get(index);
 
-			assert_eq!(cache.statistic(), CacheAllocatorStat::hand_made(cache_stat));
+				let total = max(7, PAGE_SIZE / allocator.size() - 1);
+				let count = max(allocator.size() * 7, PAGE_SIZE).next_power_of_two() / PAGE_SIZE;
+				(allocator.allocate(), total, count)
+			};
+
+			cache_stat[index] = CacheStat::hand_made(count, total, 1);
+			assert_eq!(cache.stat(), CacheAllocatorStat::hand_made(cache_stat));
 
 			// if not dealloc, then panic! will be called.
-			unsafe { cache.deallocate(ptr.unwrap().cast(), level) };
+			unsafe { cache.get(index).deallocate(ptr.unwrap().cast()) };
 
-			cache_stat[level - LEVEL_MIN] = CacheStat::hand_made(1, total, 0);
-			assert_eq!(cache.statistic(), CacheAllocatorStat::hand_made(cache_stat));
+			cache_stat[index] = CacheStat::hand_made(count, total, 0);
+			assert_eq!(cache.stat(), CacheAllocatorStat::hand_made(cache_stat));
 		}
 	}
 
-	#[ktest]
+	#[ktest(cache_allocator)]
 	fn alloc_twice() {
-		let level = 8;
+		let multiplier = 8;
+		let index = multiplier - MIN_CACHE_SIZE_MULTIPLIER;
+
 		let mut cache = CacheAllocator::initialized();
 		let mut cache_stat = core::array::from_fn(|_| CacheStat::hand_made(0, 0, 0));
-		let total = PAGE_SIZE / (1 << level) - 1;
-		cache_stat[level - LEVEL_MIN] = CacheStat::hand_made(1, total, 2);
 
-		let ptr = [cache.allocate(level), cache.allocate(level)];
+		let (ptr, total, count) = {
+			let allocator = cache.get(index);
 
-		assert_eq!(cache.statistic(), CacheAllocatorStat::hand_made(cache_stat));
+			let total = max(7, PAGE_SIZE / allocator.size() - 1);
+			let count = max(allocator.size() * 7, PAGE_SIZE).next_power_of_two() / PAGE_SIZE;
+			([allocator.allocate(), allocator.allocate()], total, count)
+		};
+
+		cache_stat[index] = CacheStat::hand_made(count, total, 2);
+		assert_eq!(cache.stat(), CacheAllocatorStat::hand_made(cache_stat));
 
 		// if not dealloc, then panic! will be called.
-		unsafe { cache.deallocate(ptr[0].unwrap().cast(), level) };
-		unsafe { cache.deallocate(ptr[1].unwrap().cast(), level) };
+		unsafe { cache.get(index).deallocate(ptr[0].unwrap().cast()) };
+		unsafe { cache.get(index).deallocate(ptr[1].unwrap().cast()) };
 
-		cache_stat[level - LEVEL_MIN] = CacheStat::hand_made(1, total, 0);
-		assert_eq!(cache.statistic(), CacheAllocatorStat::hand_made(cache_stat));
+		cache_stat[index] = CacheStat::hand_made(count, total, 0);
+		assert_eq!(cache.stat(), CacheAllocatorStat::hand_made(cache_stat));
 	}
 }

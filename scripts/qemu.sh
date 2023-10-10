@@ -19,7 +19,7 @@ shift
 qemu-system-i386                                                \
     -cpu max                                                    \
     -smp sockets=1,cores=4,threads=1                            \
-    -machine pc,max-ram-below-4g=4G                             \
+    -machine pc,max-ram-below-4g=1G                             \
     -m 4000                                                     \
     -vga std                                                    \
     -drive file=$RESCUE,if=none,format=raw,id=rescue            \

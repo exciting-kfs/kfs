@@ -99,7 +99,7 @@ impl<T> NAList<T> {
 		self.iter().count()
 	}
 
-	pub fn head(&self) -> Option<NonNull<T>> {
+	pub fn first(&self) -> Option<NonNull<T>> {
 		let n = unsafe { self.head?.as_mut() };
 		let p = unsafe { NonNull::new_unchecked(&mut n.data) };
 		Some(p)
@@ -110,6 +110,14 @@ impl<T> NAList<T> {
 		F: FnMut(&&mut T) -> bool,
 	{
 		self.iter_mut().find(|n| f(n))
+	}
+
+	pub fn head_to_next(&mut self) {
+		if let Some(curr_head) = self.head.as_ref() {
+			let next_head = unsafe { curr_head.as_ref() }.next;
+
+			self.head = Some(next_head)
+		}
 	}
 
 	pub fn push_front(&mut self, node: &mut Node<T>) {
@@ -141,15 +149,18 @@ impl<T> NAList<T> {
 	}
 
 	fn insert(&mut self, node: &mut Node<T>) {
-		let head = unsafe { self.head.unwrap().as_mut() };
-		let prev = unsafe { head.prev.as_mut() };
+		let mut head = self.head.unwrap();
+		let mut prev = unsafe { head.as_mut().prev };
+
 		let node_ptr = node.as_non_null();
 
-		prev.next = node_ptr;
-		head.prev = node_ptr;
+		unsafe {
+			prev.as_mut().next = node_ptr;
+			head.as_mut().prev = node_ptr;
 
-		node.next = head.as_non_null();
-		node.prev = prev.as_non_null();
+			node.next = head;
+			node.prev = prev;
+		}
 	}
 
 	pub fn remove_if<'a, F>(&mut self, f: F) -> Option<NonNull<Node<T>>>
@@ -165,7 +176,7 @@ impl<T> NAList<T> {
 		Some(unsafe { NonNull::new_unchecked(node) })
 	}
 
-	fn remove(&mut self, node: &mut Node<T>) {
+	pub fn remove(&mut self, node: &mut Node<T>) {
 		self.head.map(|mut head_ptr| {
 			let head = unsafe { head_ptr.as_mut() };
 			if node == head {
