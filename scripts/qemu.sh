@@ -29,7 +29,7 @@ qemu-system-i386                                                \
     -device isa-debug-exit                                      \
     -action reboot=shutdown                                     \
     -serial $COM1                                               \
-    $@
+    $@ | tee log/log-"$(date "+%m.%d-%H:%M:%S")"
 
 RESULT=$?
 if [ \( $RESULT -eq 0 \) -a ! "$SIGNALED" ]; then

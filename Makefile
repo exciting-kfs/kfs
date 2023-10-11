@@ -86,6 +86,7 @@ USERSPACE_SRC_ROOT := userspace
 
 .PHONY : all
 all : rescue hdd
+	@mkdir -p log
 
 .PHONY : build
 build : $(KERNEL_BIN)
@@ -111,6 +112,7 @@ clean :
 	@echo '[-] cleanup...'
 	@cargo clean -v
 	@rm -f .sw*
+	@rm -rf log/
 	@$(MAKE) -s -C $(USERSPACE_SRC_ROOT) clean
 
 .PHONY : re
