@@ -104,6 +104,8 @@ fn run_process() -> ! {
 	let worker = Task::new_kernel(slow_worker as usize, 0).expect("OOM");
 	schedule_last(worker);
 
+	mm::oom::init().expect("OOM");
+
 	idle();
 }
 
@@ -147,7 +149,6 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	unsafe { kernel_boot_alloc(bi_header, magic) };
 
 	interrupt::idt::init();
-
 	mm::alloc::page::init();
 	mm::alloc::phys::init();
 	mm::alloc::virt::init();
@@ -170,6 +171,7 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 
 	fs::init_devfs().expect("failed to mount /dev");
 	fs::init_procfs().expect("failed to mount /proc");
+	fs::ext2::init().expect("failed to mount /ext2");
 
 	scheduler::work::init().expect("worker thread init");
 

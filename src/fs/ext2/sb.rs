@@ -1,301 +1,409 @@
-use core::{
-	alloc::AllocError,
-	fmt::{Debug, Display},
+mod bitmap;
+
+pub mod bgd;
+pub mod info;
+
+use core::{alloc::AllocError, ptr::copy_nonoverlapping};
+
+use alloc::{
+	boxed::Box,
+	collections::{BTreeMap, BTreeSet},
+	sync::Arc,
+	vec::Vec,
 };
 
-use alloc::{boxed::Box, collections::BTreeMap, sync::Arc};
-
 use crate::{
-	driver::{
-		ide::{
-			block::{Block, BlockSize},
-			dma::{dma_req::ReqInit, dma_schedule, event::DmaInit, hook::OwnHook, wait_io::WaitIO},
-			get_ide_controller,
-			ide_id::IdeId,
-			lba::LBA28,
-		},
-		partition::entry::MaybeEntry,
-	},
+	driver::hpet::get_timestamp_second,
+	driver::partition::BlockId,
 	fs::vfs,
-	process::task::CURRENT,
-	scheduler::preempt::preempt_disable,
-	sync::{LockRW, Locked, ReadLockGuard},
+	mm::util::next_align,
+	pr_debug,
+	sync::{LocalLocked, LockRW, Locked},
 	syscall::errno::Errno,
-	write_field,
+	trace_feature,
+};
+
+use self::{
+	bgd::BGDT,
+	bitmap::{BitMap, InGroupBid, InGroupInum},
+	info::SuperBlockInfo,
 };
 
 use super::{
-	bgd::BGDT,
-	inode::{Inode, InodeInfo, Inum},
+	block_pool::BlockPool,
+	constant::{MAX_CACHED_BLOCK, SYNC_INTERVAL},
+	inode::{info::InodeInfo, inum::Inum, Inode},
+	staged::Staged,
+	Block, Ext2,
 };
-
-#[derive(Debug)]
-pub enum Error {
-	InvalidInum,
-	MemoryAlloc,
-	FullBlock,
-	FullInode,
-}
-
 pub struct SuperBlock {
-	pub ide_id: IdeId,
-	pub entry: ReadLockGuard<'static, MaybeEntry>,
-	pub info: LockRW<SuperBlockInfo>,
-	pub bgd_table: LockRW<BGDT>,
-	pub inode_cache: Locked<BTreeMap<Inum, Arc<LockRW<Inode>>>>,
-	pub wait_io: WaitIO,
+	pub(super) info: LockRW<SuperBlockInfo>,
+	pub(super) bgd_table: LocalLocked<BGDT>,
+	pub(super) block_pool: Arc<BlockPool>,
+	pub(super) inode_cache: Locked<BTreeMap<Inum, Arc<LockRW<Inode>>>>,
+	pub(super) dirty_icache: Locked<BTreeSet<Inum>>,
 }
 
 impl SuperBlock {
+	#[inline]
+	pub fn block_size(&self) -> usize {
+		self.block_pool.block_size()
+	}
+
 	pub fn read_inode_dma(self: &Arc<Self>, inum: Inum) -> Result<Arc<LockRW<Inode>>, Errno> {
-		let this = self.clone();
-		let f = |bid| this.read_block_dma(bid);
-		self.read_inode(inum, f)
+		self.__read_inode(inum, |pool, bid| pool.get_or_load(bid))
 	}
 
 	pub fn read_inode_pio(self: &Arc<Self>, inum: Inum) -> Result<Arc<LockRW<Inode>>, AllocError> {
-		let this = self.clone();
-		let f = |bid| this.read_block_pio(bid);
-		self.read_inode(inum, f)
+		self.__read_inode(inum, |pool, bid| pool.get_or_load_pio(bid))
 	}
 
-	fn read_inode<F, E>(self: &Arc<Self>, inum: Inum, f: F) -> Result<Arc<LockRW<Inode>>, E>
+	fn __read_inode<F, E>(self: &Arc<Self>, inum: Inum, f: F) -> Result<Arc<LockRW<Inode>>, E>
 	where
-		F: FnOnce(usize) -> Result<Block, E>,
+		F: Fn(&Arc<BlockPool>, BlockId) -> Result<Arc<LockRW<Block>>, E>,
 	{
 		if let Some(inode) = self.inode_cache.lock().get(&inum) {
+			pr_debug!("read_inode: from cache: {:?}", inum);
 			return Ok(inode.clone());
 		}
 
-		let bid = self.inum_to_block_id(inum).unwrap();
-		let block = f(bid)?;
-		let mut inode = self.parse_to_inode(inum, block);
+		let bid = self.inum_to_block_id(inum);
+		let block = f(&self.block_pool, bid)?;
+		let inode = self.parse_to_inode(inum, block);
 
-		let ret = inode.get(&inum).unwrap().clone();
-		self.inode_cache.lock().append(&mut inode);
+		pr_debug!("read_inode: from drive: {:?}", inum);
+		self.inode_cache.lock().insert(inum, inode.clone());
 
-		Ok(ret)
+		Ok(inode)
 	}
 
-	fn parse_to_inode(&self, inum: Inum, block: Block) -> BTreeMap<Inum, Arc<LockRW<Inode>>> {
-		let data = self.info.read_lock();
-		let count = data.inode_per_block();
+	fn parse_to_inode(
+		self: &Arc<Self>,
+		inum: Inum,
+		block: Arc<LockRW<Block>>,
+	) -> Arc<LockRW<Inode>> {
+		let info = self.info.read_lock();
+		let count = info.nr_inode_in_block();
+		let local_index = inum.index() % count;
 
-		block
-			.as_chunks(data.inode_size as usize)
-			.map(|chunk| unsafe {
-				let data = chunk.cast::<InodeInfo>();
-				Arc::new(LockRW::new(Inode::new(data.clone())))
-			})
-			.enumerate()
-			.map(|(i, inode)| unsafe {
-				let base = inum.index() / count * count;
-				(Inum::new_unchecked(base + (i + 1)), inode)
-			})
-			.collect::<BTreeMap<_, _>>()
+		let mut block = block.write_lock();
+		let mut chunk = block
+			.as_chunks_mut(info.inode_size())
+			.skip(local_index)
+			.next()
+			.unwrap();
+
+		unsafe {
+			let info = chunk.cast::<InodeInfo>();
+			Arc::new(LockRW::new(Inode::from_info(inum, info.clone(), self)))
+		}
 	}
 
-	fn read_block_dma(self: &Arc<Self>, block_id: usize) -> Result<Block, Errno> {
-		let current = unsafe { CURRENT.get_mut() }.clone();
-		let sb = self.clone();
-		let size = self.info.read_lock().block_size();
+	pub fn dirty_inode(&self, inum: Inum) {
+		self.dirty_icache.lock().insert(inum);
+	}
 
-		let prepare = move || Block::new(size);
-		let cleanup = move |result: Result<Block, AllocError>| {
-			sb.wait_io.submit(&current, result);
+	pub fn try_sync_icache(&self) -> Result<(), Errno> {
+		let mut first = self.dirty_icache.lock().first().cloned();
+		while let Some(inum) = first {
+			let inode = self.inode_cache.lock().get(&inum).cloned();
+			if let Some(inode) = inode {
+				self.sync_one_icache(&inode)?;
+			}
+
+			first = {
+				let mut dirty = self.dirty_icache.lock();
+				dirty.pop_first();
+				dirty.first().cloned()
+			}
+		}
+		Ok(())
+	}
+
+	fn sync_one_icache(&self, inode: &Arc<LockRW<Inode>>) -> Result<(), Errno> {
+		inode.sync_bid()?; // TODO NOSPC handle
+
+		let inum = inode.read_lock().inum();
+		let bid = self.inum_to_block_id(inum);
+		let block = self.block_pool.get_or_load(bid)?;
+
+		let (local_index, inode_size) = {
+			let info = self.info.read_lock();
+			let local_index = inum.index() % info.nr_inode_in_block();
+			(local_index, info.inode_size())
 		};
 
-		let start = self.block_id_to_lba(block_id);
-		let end = start + size.sector_count();
+		{
+			let mut block = block.write_lock();
+			let mut chunk = block
+				.as_chunks_mut(inode_size)
+				.skip(local_index)
+				.next()
+				.unwrap();
 
-		let cb = OwnHook::new(start, Box::new(prepare), Box::new(cleanup));
-		let req = ReqInit::new(start..end, cb);
-		let event = DmaInit::Read(req);
-
-		let atomic = preempt_disable();
-		dma_schedule(self.ide_id, event);
-		self.wait_io.wait(atomic)
+			let info: &InodeInfo = &inode.info();
+			unsafe { copy_nonoverlapping(info, chunk.cast::<InodeInfo>(), 1) };
+		}
+		Ok(())
 	}
 
-	fn read_block_pio(&self, block_id: usize) -> Result<Block, AllocError> {
-		let lba = self.block_id_to_lba(block_id);
-		let size = self.info.read_lock().block_size();
-		let mut mem = Block::new(size)?.into();
+	pub fn alloc_inum_staged(self: &Arc<Self>) -> Result<Staged<(), Inum>, Errno> {
+		let count = self.info.read_lock().nr_inode_in_group();
+		let (bgid, bitmap_bid) = {
+			let mut bgdt = self.bgd_table.lock();
+			let (bgid, bgd) = bgdt
+				.find_bgd(|bgd| bgd.free_inodes_count > 0)
+				.ok_or(Errno::ENOSPC)?;
+			(bgid, bgd.inode_bitmap())
+		};
 
-		let raw_sector = unsafe { mem.as_slice_mut(size.sector_count()) };
+		let block = self.block_pool.get_or_load(bitmap_bid)?;
+		let mut bitmap = BitMap::new(block.clone(), count);
+		let sb = self.clone();
 
-		let ide = get_ide_controller(self.ide_id);
-		ide.ata.read_sectors(lba, raw_sector);
+		Ok(Staged::func(move |_| {
+			let index = bitmap.find_free_space().unwrap();
+			bitmap.toggle_bitmap(index);
+			let mut bgdt = sb.bgd_table.lock();
+			let bgd = bgdt.get_bgd_mut(bgid).unwrap();
+			bgd.free_inodes_count -= 1;
 
-		Ok(mem.into())
+			sb.info.read_lock().bitmap_index_to_inum(bgid, index)
+		}))
 	}
 
-	fn inum_to_block_id(&self, inum: Inum) -> Option<usize> {
-		let data = self.info.read_lock();
-		let bgdt = self.bgd_table.read_lock();
-		let bgd = bgdt.get_bgd(data.group_id(inum))?;
+	pub fn alloc_blocks(&self, count: usize) -> Result<Vec<Arc<LockRW<Block>>>, Errno> {
+		let block_pool = &self.block_pool;
 
-		Some(bgd.inode_table as usize + data.block_offset_in_table(inum))
+		let mut blocks = Vec::new();
+
+		for _ in 0..count {
+			blocks.push(unsafe { block_pool.unregistered_block()? })
+		}
+
+		let bids = self.reserve_blocks(count)?;
+
+		bids.iter()
+			.zip(blocks.iter())
+			.for_each(|(i, b)| unsafe { self.block_pool.register(*i, b.clone()) });
+
+		Ok(blocks)
 	}
 
-	fn block_id_to_lba(&self, block_id: usize) -> LBA28 {
-		let block_size = self.info.read_lock().block_size();
-		let entry = self.entry.get().unwrap();
+	pub fn reserve_blocks(&self, count: usize) -> Result<Vec<BlockId>, Errno> {
+		let count_in_group = self.info.read_lock().nr_block_in_group();
 
-		unsafe { entry.begin().block_size_add_unchecked(block_size, block_id) }
+		let mut bgdt = self.bgd_table.lock();
+		let mut groups = bgdt.find_groups(count).ok_or_else(|| Errno::ENOSPC)?;
+
+		let mut bitmaps = Vec::new();
+		for (_, grp, _) in groups.iter() {
+			let bitmap = self.block_pool.get_or_load(grp.block_bitmap())?;
+			let bitmap = BitMap::new(bitmap, count_in_group);
+			bitmaps.push(bitmap);
+		}
+
+		let mut bids = Vec::new();
+		for ((id, grp, cnt), bitmap) in groups.iter_mut().zip(bitmaps.iter_mut()) {
+			// pr_debug!("id {} grp {} cnt {}", id, grp, cnt);
+			let indexes = bitmap.find_free_space_multi(*cnt).unwrap();
+			indexes
+				.iter()
+				.for_each(|index| bitmap.toggle_bitmap(*index));
+
+			let info = self.info.read_lock();
+			let bid = indexes
+				.into_iter()
+				.map(|index| info.bitmap_index_to_block_id(*id, index));
+
+			bids.extend(bid);
+
+			grp.free_blocks_count -= *cnt as u16;
+		}
+		Ok(bids)
+	}
+
+	pub fn dealloc_inum_staged(self: &Arc<Self>, inum: Inum) -> Result<Staged, Errno> {
+		let info = self.info.read_lock();
+
+		let inum_in_group = InGroupInum::new(inum, &info);
+		let bitmap_bid = {
+			let bgdt = self.bgd_table.lock();
+			let bgd = bgdt.bgd_of_inum(inum, &info);
+			BlockId::from(bgd.inode_bitmap())
+		};
+
+		let bitmap = self.block_pool.get_or_load(bitmap_bid)?;
+		let mut bitmap = BitMap::new(bitmap, inum_in_group.count());
+		let sb = self.clone();
+
+		Ok(Staged::new(move |_| {
+			bitmap.toggle_bitmap(inum_in_group.index_in_group());
+			let info = sb.info.read_lock();
+			let mut bgdt = sb.bgd_table.lock();
+			let bgd = bgdt.bgd_of_inum_mut(inum, &info);
+			bgd.free_inodes_count += 1;
+
+			sb.inode_cache.lock().remove(&inum);
+		}))
+	}
+
+	pub fn dealloc_block_staged(self: &Arc<Self>, bid: BlockId) -> Result<Staged, Errno> {
+		self.__dealloc_block_staged(bid, |block_pool, bid| block_pool.get_or_load(bid))
+	}
+
+	fn __dealloc_block_staged<F, E>(self: &Arc<Self>, bid: BlockId, f: F) -> Result<Staged, E>
+	where
+		F: Fn(&Arc<BlockPool>, BlockId) -> Result<Arc<LockRW<Block>>, E>,
+	{
+		let info = self.info.read_lock();
+		let mut bgdt = self.bgd_table.lock();
+		let bgd = bgdt.bgd_of_bid_mut(bid, &info);
+
+		let bid_in_grp = InGroupBid::new(bid, &info);
+		let bitmap_bid = bgd.block_bitmap();
+		let bitmap = f(&self.block_pool, bitmap_bid)?;
+		let mut bitmap = BitMap::new(bitmap, bid_in_grp.count());
+		let sb = self.clone();
+
+		Ok(Staged::new(move |_| {
+			bitmap.toggle_bitmap(bid_in_grp.index_in_group());
+			let info = sb.info.read_lock();
+			let mut bgdt = sb.bgd_table.lock();
+			let bgd = bgdt.bgd_of_bid_mut(bid, &info);
+			bgd.free_blocks_count += 1;
+
+			// pr_debug!("dealloc block staged: bid: {:?}", bid);
+			sb.block_pool.delete(bid);
+		}))
+	}
+
+	fn inum_to_block_id(&self, inum: Inum) -> BlockId {
+		let info = self.info.read_lock();
+		let bgdt = self.bgd_table.lock();
+		let bgd = bgdt.bgd_of_inum(inum, &info);
+		bgd.block_of_inode(inum, &info)
+	}
+
+	pub fn sb_backup_bid(&self) -> Vec<BlockId> {
+		self.__backup_bid(0)
+	}
+
+	pub fn bgdt_backup_bid(&self) -> Vec<BlockId> {
+		self.__backup_bid(1)
+	}
+
+	fn __backup_bid(&self, off: usize) -> Vec<BlockId> {
+		let mut v = Vec::new();
+		v.reserve(5);
+
+		let mut buf = [0; 5];
+
+		self.info.read_lock().sb_backup_bid(&mut buf);
+
+		for b in buf {
+			if let Some(bid) = self.block_pool.validate_bid(b + off) {
+				v.push(bid)
+			}
+		}
+		v
+	}
+
+	fn sync_self(&self) -> Result<(), Errno> {
+		let mut info = self.info.write_lock();
+		let sec = get_timestamp_second() as u32;
+		let is_expired = (sec - info.wtime) >= SYNC_INTERVAL;
+
+		if is_expired {
+			info.wtime = sec;
+			drop(info);
+
+			self.sync_info()?;
+			self.sync_bgdt()?;
+		}
+
+		Ok(())
+	}
+
+	fn sync_info(&self) -> Result<(), Errno> {
+		let bids = self.sb_backup_bid();
+		trace_feature!("ext2-sb-sync", "info: bid list: {:?}", bids);
+
+		for bid in bids {
+			let block = self.block_pool.get_or_load(bid)?;
+			let mut block = block.write_lock();
+			let slice = block.as_slice_mut();
+
+			let dst = if bid.inner() == 0 {
+				let dst = &mut slice[1024..];
+				dst.as_mut_ptr() as *mut SuperBlockInfo
+			} else {
+				slice.as_mut_ptr() as *mut SuperBlockInfo
+			};
+
+			let src = &*self.info.read_lock();
+			unsafe { copy_nonoverlapping(src, dst, 1) }
+		}
+		Ok(())
+	}
+
+	fn sync_bgdt(&self) -> Result<(), Errno> {
+		let bids = self.bgdt_backup_bid();
+		let table_size = self.info.read_lock().bgdt_size();
+		let block_size = self.block_size();
+		let block_count = next_align(table_size, block_size) / block_size;
+
+		let mut bgdt_iter = self.bgd_table.iter(block_size);
+
+		trace_feature!("ext2-sb-sync", "bgdt: bid list: {:?}", bids);
+
+		for bid in bids {
+			let start = bid.inner();
+			let end = start + block_count;
+			for bid in (start..end).map(|i| unsafe { BlockId::new_unchecked(i) }) {
+				let block = self.block_pool.get_or_load(bid)?;
+				let dst = block.write_lock().as_slice_mut().as_mut_ptr().cast();
+
+				if let Some(slice) = bgdt_iter.next() {
+					unsafe { copy_nonoverlapping(slice.as_ptr(), dst, slice.len()) }
+				} else {
+					break;
+				}
+			}
+		}
+		Ok(())
+	}
+}
+
+#[cfg(log_level = "debug")]
+impl Drop for SuperBlock {
+	fn drop(&mut self) {
+		trace_feature!("ext2-unmount", "drop: sb");
 	}
 }
 
 impl vfs::SuperBlock for SuperBlock {
-	fn sync(&self) {
-		todo!()
-	}
-}
-
-#[derive(Clone)]
-#[repr(C)]
-pub struct SuperBlockInfo {
-	pub inodes_count: u32,
-	pub blocks_count: u32,
-	pub r_blocks_count: u32,
-	pub free_blocks_count: u32,
-	pub free_inodes_count: u32,
-	pub first_data_block: u32,
-	pub log_block_size: u32,
-	pub log_frag_size: u32,
-	pub blocks_per_group: u32,
-	pub frags_per_group: u32,
-	pub inodes_per_group: u32,
-	pub mtime: u32,
-	pub wtime: u32,
-	pub mnt_count: u16,
-	pub max_mnt_count: u16,
-	pub magic: u16,
-	pub state: u16,
-	pub errors: u16,
-	pub minor_rev_level: u16,
-	pub lastcheck: u32,
-	pub checkinterval: u32,
-	pub creator_os: u32,
-	pub rev_level: u32,
-	pub def_resuid: u16,
-	pub def_resgid: u16,
-	pub first_ino: u32,
-	pub inode_size: u16,
-	pub block_group_nr: u16,
-	pub feature_compat: u32,
-	pub feature_incompat: u32,
-	pub feature_ro_compat: u32,
-	pub uuid: u128,
-	pub volume_name: u128,
-	pub last_mounted0: u128,
-	pub last_mounted1: u128,
-	pub last_mounted2: u128,
-	pub last_mounted3: u128,
-	pub algo_bitmap: u32,
-	pub prealloc_blocks: u8,
-	pub prealloc_dir_blocks: u8,
-	_pad: u16,
-}
-
-impl SuperBlockInfo {
-	#[inline]
-	pub fn group_count(&self) -> usize {
-		((self.blocks_count - 1) / self.blocks_per_group + 1) as usize
-	}
-
-	#[inline]
-	pub fn block_size(&self) -> BlockSize {
-		BlockSize::from_bytes(1024 << self.log_block_size).unwrap()
-	}
-
-	#[inline]
-	pub fn inode_per_block(&self) -> usize {
-		self.block_size().as_bytes() / self.inode_size as usize
-	}
-
-	#[inline]
-	pub fn group_id(&self, inum: Inum) -> usize {
-		inum.index() / self.inodes_per_group as usize
-	}
-
-	#[inline]
-	pub fn group_local_inode(&self, inum: Inum) -> usize {
-		inum.index() % self.inodes_per_group as usize
-	}
-
-	#[inline]
-	pub fn block_local_inode(&self, inum: Inum) -> usize {
-		self.group_local_inode(inum) % self.inode_per_block()
-	}
-
-	#[inline]
-	pub fn block_offset_in_table(&self, inum: Inum) -> usize {
-		self.group_local_inode(inum) / self.inode_per_block()
-	}
-
-	pub fn bgdt_lba(&self, part_begin: LBA28) -> LBA28 {
-		let block_size = self.block_size();
-		unsafe {
-			part_begin.block_size_add_unchecked(block_size, 1)
-				+ match block_size.as_bytes() {
-					1024 => 2,
-					_ => 0,
-				}
-		}
-	}
-}
-
-impl Debug for SuperBlockInfo {
-	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-		Display::fmt(&self, f)
-	}
-}
-
-impl Display for SuperBlockInfo {
-	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-		write!(f, "\n")?;
-		write_field!(f, self, inodes_count)?;
-		write_field!(f, self, blocks_count)?;
-		write_field!(f, self, r_blocks_count)?;
-		write_field!(f, self, free_blocks_count)?;
-		write_field!(f, self, free_inodes_count)?;
-		write_field!(f, self, first_data_block)?;
-		write_field!(f, self, log_block_size)?;
-		write_field!(f, self, log_frag_size)?;
-		write_field!(f, self, blocks_per_group)?;
-		write_field!(f, self, frags_per_group)?;
-		write_field!(f, self, inodes_per_group)?;
-		write_field!(f, self, mtime)?;
-		write_field!(f, self, wtime)?;
-		write_field!(f, self, mnt_count)?;
-		write_field!(f, self, max_mnt_count)?;
-		write_field!(f, self, magic)?;
-		write_field!(f, self, state)?;
-		write_field!(f, self, errors)?;
-		write_field!(f, self, minor_rev_level)?;
-		write_field!(f, self, lastcheck)?;
-		write_field!(f, self, checkinterval)?;
-		write_field!(f, self, creator_os)?;
-		write_field!(f, self, rev_level)?;
-		write_field!(f, self, def_resuid)?;
-		write_field!(f, self, def_resgid)?;
-		write_field!(f, self, first_ino)?;
-		write_field!(f, self, inode_size)?;
-		write_field!(f, self, block_group_nr)?;
-		write_field!(f, self, feature_compat)?;
-		write_field!(f, self, feature_incompat)?;
-		write_field!(f, self, feature_ro_compat)?;
-		write_field!(f, self, uuid)?;
-		write_field!(f, self, volume_name)?;
-		write_field!(f, self, last_mounted0)?;
-		write_field!(f, self, last_mounted1)?;
-		write_field!(f, self, last_mounted2)?;
-		write_field!(f, self, last_mounted3)?;
-		write_field!(f, self, algo_bitmap)?;
-		write_field!(f, self, prealloc_blocks)?;
-		write_field!(f, self, prealloc_dir_blocks)?;
-
+	fn sync(&self) -> Result<(), Errno> {
+		self.try_sync_icache()?;
+		self.sync_self()?;
+		self.block_pool.sync();
+		self.block_pool.handle_overflow(MAX_CACHED_BLOCK);
 		Ok(())
+	}
+
+	fn unmount(&self) -> Result<(), Errno> {
+		// TODO edit somthing
+		self.sync()?;
+
+		self.inode_cache.lock().clear();
+		Ok(())
+	}
+
+	fn filesystem(&self) -> Box<dyn vfs::FileSystem> {
+		Box::new(Ext2)
+	}
+
+	fn id(&self) -> Vec<u8> {
+		self.info.read_lock().uuid().to_vec()
 	}
 }

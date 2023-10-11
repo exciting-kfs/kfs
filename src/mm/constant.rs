@@ -31,3 +31,6 @@ pub const SECTOR_SIZE: usize = 512;
 pub const LEVEL_MIN: usize = 6;
 pub const LEVEL_END: usize = 12;
 pub const LEVEL_RNG: usize = LEVEL_END - LEVEL_MIN;
+
+/// OOM
+pub const OOM_WATER_MARK: usize = 1024 * 10;
