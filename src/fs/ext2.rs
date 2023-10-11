@@ -77,9 +77,11 @@ impl Ext2 {
 
 			// read sectors
 			let buf = unsafe { mem.as_slice_mut(block_size.sector_count()) };
-			let lba = sb
-				.bgdt_lba(entry.begin())
-				.block_size_add(BlockSize::BIGGEST, idx);
+			let lba = unsafe {
+				sb.bgdt_lba(entry.begin())
+					.block_size_add_unchecked(BlockSize::BIGGEST, idx)
+			};
+
 			ide.ata.read_sectors(lba, buf);
 
 			// store result

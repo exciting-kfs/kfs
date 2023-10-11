@@ -35,8 +35,14 @@ impl LBA28 {
 		self.0
 	}
 
-	pub fn block_size_add(&self, block_size: BlockSize, count: usize) -> Self {
-		*self + block_size.as_bytes() / SECTOR_SIZE * count
+	pub fn block_size_add(&self, block_size: BlockSize, count: usize) -> Option<Self> {
+		(block_size.as_bytes() / SECTOR_SIZE)
+			.checked_mul(count)
+			.map(|r| *self + r)
+	}
+
+	pub unsafe fn block_size_add_unchecked(&self, block_size: BlockSize, count: usize) -> Self {
+		*self + (block_size.as_bytes() / SECTOR_SIZE) * count
 	}
 }
 

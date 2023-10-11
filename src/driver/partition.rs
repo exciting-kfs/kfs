@@ -107,7 +107,7 @@ impl Partition {
 
 	pub fn load_pio(&self, bid: BlockId) -> Result<Block, AllocError> {
 		let size = self.block_size();
-		let start = self.entry_begin().block_size_add(size, bid.inner());
+		let start = self.bid_to_lba(bid);
 
 		let mut block = Block::new(size)?.into();
 
@@ -180,7 +180,7 @@ impl Partition {
 
 	pub fn validate_bid(&self, maybe_bid: usize) -> Option<BlockId> {
 		let entry = unsafe { self.entry.get_unchecked() };
-		let lba = entry.begin().block_size_add(self.block_size(), maybe_bid);
+		let lba = entry.begin().block_size_add(self.block_size(), maybe_bid)?;
 
 		(lba < entry.end()).then_some(unsafe { BlockId::new_unchecked(maybe_bid) })
 	}
@@ -188,7 +188,11 @@ impl Partition {
 	fn bid_to_lba(&self, bid: BlockId) -> LBA28 {
 		let entry = unsafe { self.entry.get_unchecked() };
 
-		entry.begin().block_size_add(self.block_size(), bid.inner())
+		unsafe {
+			entry
+				.begin()
+				.block_size_add_unchecked(self.block_size(), bid.inner())
+		}
 	}
 }
 

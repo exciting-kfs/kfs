@@ -142,7 +142,7 @@ impl SuperBlock {
 		let block_size = self.info.read_lock().block_size();
 		let entry = self.entry.get().unwrap();
 
-		entry.begin().block_size_add(block_size, block_id)
+		unsafe { entry.begin().block_size_add_unchecked(block_size, block_id) }
 	}
 }
 
@@ -236,11 +236,13 @@ impl SuperBlockInfo {
 
 	pub fn bgdt_lba(&self, part_begin: LBA28) -> LBA28 {
 		let block_size = self.block_size();
-		part_begin.block_size_add(block_size, 1)
-			+ match block_size.as_bytes() {
-				1024 => 2,
-				_ => 0,
-			}
+		unsafe {
+			part_begin.block_size_add_unchecked(block_size, 1)
+				+ match block_size.as_bytes() {
+					1024 => 2,
+					_ => 0,
+				}
+		}
 	}
 }
 
