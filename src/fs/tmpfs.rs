@@ -138,7 +138,7 @@ impl FileHandle for Locked<TmpFile> {
 			let source = &data[this.cursor..];
 			let size = source.len().min(buf.len());
 
-			buf.copy_from_slice(&source[..size]);
+			buf[..size].copy_from_slice(&source[..size]);
 
 			size
 		};
