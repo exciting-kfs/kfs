@@ -7,8 +7,8 @@ use alloc::{boxed::Box, collections::BTreeMap};
 
 use super::path::Path;
 use super::vfs::{
-	DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident, RawStat, RealInode,
-	SuperBlock, SymLinkInode, TimeSpec, VfsInode, Whence,
+	DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident, MemoryFileSystem,
+	RawStat, RealInode, SuperBlock, SymLinkInode, TimeSpec, VfsInode, Whence,
 };
 use crate::fs::vfs::{KfsDirent, Permission};
 use crate::mm::util::next_align;
@@ -18,7 +18,9 @@ use crate::syscall::errno::Errno;
 
 pub struct TmpFs;
 
-impl FileSystem<TmpSb, Locked<TmpDirInode>> for TmpFs {
+impl FileSystem for TmpFs {}
+
+impl MemoryFileSystem<TmpSb, Locked<TmpDirInode>> for TmpFs {
 	fn mount() -> Result<(Arc<TmpSb>, Arc<Locked<TmpDirInode>>), Errno> {
 		Ok((
 			Arc::new(TmpSb),
@@ -30,7 +32,9 @@ impl FileSystem<TmpSb, Locked<TmpDirInode>> for TmpFs {
 pub struct TmpSb;
 
 impl SuperBlock for TmpSb {
-	fn sync(&self) {}
+	fn filesystem(&self) -> Box<dyn FileSystem> {
+		Box::new(TmpFs)
+	}
 }
 
 #[derive(Clone)]

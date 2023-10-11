@@ -405,16 +405,20 @@ void builtin_chown(int idx) {
 }
 
 void builtin_mount(int idx) {
-	char buf1[2048];
-	char buf2[2048];
+	char dev_path[1024];
+	char mount_point[1024];
+	char fs_name[1024];
 
-	idx = extract(idx, buf1);
+	idx = extract(idx, dev_path);
 	idx = ignore_ws(idx);
 
-	idx = extract(idx, buf2);
+	idx = extract(idx, mount_point);
 	idx = ignore_ws(idx);
 
-	int ret = mount(buf1, buf2);
+	idx = extract(idx, fs_name);
+	idx = ignore_ws(idx);
+
+	int ret = mount(dev_path, mount_point, fs_name);
 	if (ret < 0) {
 		show_error("mount: mount", ret);
 	}

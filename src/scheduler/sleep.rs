@@ -9,6 +9,7 @@ use crate::{
 	scheduler::{context::yield_now, schedule_last},
 	sync::Locked,
 	syscall::errno::Errno,
+	trace_feature,
 };
 
 use super::preempt::AtomicOps;
@@ -26,8 +27,6 @@ pub fn sleep_and_yield(sleep: Sleep) {
 		Sleep::Light => State::Sleeping,
 	};
 
-	// pr_debug!("pid[{}] sleep!", current.get_pid().as_raw());
-
 	yield_now();
 }
 
@@ -38,7 +37,7 @@ pub fn sleep_and_yield_atomic(sleep: Sleep, atomic: AtomicOps) {
 		Sleep::Light => State::Sleeping,
 	};
 
-	// pr_debug!("{:?} Sleep::{:?}!", current.get_pid(), sleep);
+	trace_feature!("sleep_atomic", "sleep: {:?}", current.get_pid());
 
 	drop(atomic);
 	yield_now();

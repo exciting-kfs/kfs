@@ -24,14 +24,16 @@ use self::{null::DevNull, partition::DevPart, tty::DevTTY, zero::DevZero};
 use super::{
 	tmpfs::{TmpDir, TmpSb},
 	vfs::{
-		DirHandle, DirInode, FileInode, FileSystem, Ident, Permission, RawStat, RealInode,
-		SymLinkInode, TimeSpec, VfsInode, ROOT_DIR_ENTRY,
+		DirHandle, DirInode, FileInode, FileSystem, Ident, MemoryFileSystem, Permission, RawStat,
+		RealInode, SymLinkInode, TimeSpec, VfsInode, ROOT_DIR_ENTRY,
 	},
 };
 
 pub struct DevFs;
 
-impl FileSystem<TmpSb, DevDirInode> for DevFs {
+impl FileSystem for DevFs {}
+
+impl MemoryFileSystem<TmpSb, DevDirInode> for DevFs {
 	fn mount() -> Result<(Arc<TmpSb>, Arc<DevDirInode>), Errno> {
 		Ok((Arc::new(TmpSb), unsafe {
 			DEVFS_ROOT_DIR.assume_init_ref().clone()

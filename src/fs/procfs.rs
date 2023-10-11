@@ -16,11 +16,14 @@ use crate::{
 
 use super::path::{format_path, Path};
 use super::tmpfs::TmpSb;
-use super::vfs::{lookup_entry_follow, Entry, RealInode, TimeSpec, VfsHandle, ROOT_DIR_ENTRY};
+use super::vfs::{
+	lookup_entry_follow, Entry, FileSystem, RealInode, TimeSpec, VfsHandle, ROOT_DIR_ENTRY,
+};
 use super::{
 	tmpfs::{TmpDir, TmpSymLink},
 	vfs::{
-		DirHandle, DirInode, FileInode, FileSystem, Permission, RawStat, SymLinkInode, VfsInode,
+		DirHandle, DirInode, FileInode, MemoryFileSystem, Permission, RawStat, SymLinkInode,
+		VfsInode,
 	},
 };
 
@@ -46,7 +49,9 @@ pub fn init() -> Result<(), Errno> {
 
 pub struct ProcFs;
 
-impl FileSystem<TmpSb, Locked<ProcRootDirInode>> for ProcFs {
+impl FileSystem for ProcFs {}
+
+impl MemoryFileSystem<TmpSb, Locked<ProcRootDirInode>> for ProcFs {
 	fn mount() -> Result<(Arc<TmpSb>, Arc<Locked<ProcRootDirInode>>), Errno> {
 		Ok((Arc::new(TmpSb), unsafe {
 			PROCFS_ROOT_DIR.assume_init_ref().clone()
