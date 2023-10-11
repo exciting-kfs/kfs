@@ -31,7 +31,8 @@ qemu-system-i386                                                \
     -serial $COM1                                               \
     $@ | tee log/log-"$(date "+%m.%d-%H:%M:%S")"
 
-RESULT=$?
+RESULT=${PIPESTATUS[0]}
+
 if [ \( $RESULT -eq 0 \) -a ! "$SIGNALED" ]; then
     echo "[!] Automatic shutdown detected. (triple fault?)"
     exit 1
