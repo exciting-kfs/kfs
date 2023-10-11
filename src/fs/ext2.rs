@@ -16,11 +16,11 @@ use crate::{
 			dma::wait_io::WaitIO,
 			get_ide_controller,
 			ide_id::IdeId,
-			partition::{
-				entry::{EntryIndex, PartitionEntry},
-				get_partition_entry,
-			},
 			IdeController,
+		},
+		partition::{
+			entry::{EntryIndex, PartitionEntry},
+			table::get_partition_entry,
 		},
 	},
 	fs::ext2::{
@@ -35,7 +35,6 @@ use crate::{
 use self::{
 	bgd::{BGD, BGDT},
 	inode::DirInode,
-	sb::Error,
 };
 
 use super::vfs;
@@ -51,7 +50,7 @@ impl Ext2 {
 	) -> Result<SuperBlockInfo, Errno> {
 		let block_size = BlockSize::from_sector_count(1).unwrap();
 		let mut mem = Block::new(block_size).map_err(|_| Errno::ENOMEM)?.into();
-		let sector = unsafe { mem.as_slice(1) };
+		let sector = unsafe { mem.as_slice_mut(1) };
 
 		// The superblock is always located at byte offset 1024 from the begining of the partition.
 		let lba = entry.begin() + 2;
@@ -71,16 +70,18 @@ impl Ext2 {
 		for (idx, start) in (0..table_size).step_by(BlockSize::MAX_KB).enumerate() {
 			// alloc block
 			let block_size = match table_size - start > BlockSize::MAX_KB {
-				true => BlockSize::BLOCK_SIZE_MAX,
+				true => BlockSize::BIGGEST,
 				false => unsafe { BlockSize::new_unchecked(table_size - start) },
 			};
 			let mut mem = Block::new(block_size).map_err(|_| Errno::ENOMEM)?.into();
 
 			// read sectors
-			let buf = unsafe { mem.as_slice(block_size.sector_count()) };
-			let lba = sb
-				.bgdt_lba(entry.begin())
-				.block_size_add(BlockSize::BLOCK_SIZE_MAX, idx);
+			let buf = unsafe { mem.as_slice_mut(block_size.sector_count()) };
+			let lba = unsafe {
+				sb.bgdt_lba(entry.begin())
+					.block_size_add_unchecked(BlockSize::BIGGEST, idx)
+			};
+
 			ide.ata.read_sectors(lba, buf);
 
 			// store result
@@ -116,13 +117,8 @@ impl vfs::PhysicalFileSystem<SuperBlock, DirInode> for Ext2 {
 		let inum = unsafe { Inum::new_unchecked(2) };
 		let root = match RUN_TIME.load(Ordering::Relaxed) {
 			true => sb.read_inode_dma(inum),
-			false => sb.read_inode_pio(inum),
-		}
-		.map_err(|e| match e {
-			Error::MemoryAlloc => Errno::ENOMEM,
-			Error::InvalidInum => panic!("check the root directory inode number"),
-			_ => unreachable!(),
-		})?
+			false => sb.read_inode_pio(inum).map_err(|_| Errno::ENOMEM),
+		}?
 		.downcast_dir()
 		.unwrap();
 

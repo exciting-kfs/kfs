@@ -31,10 +31,10 @@ impl<ArgType> Workable for Work<ArgType> {
 	}
 }
 
-#[derive(Debug)]
 pub enum Error {
-	AllocError,
-	Yield,
+	Alloc,
+	Retry,
+	Next(Box<dyn Workable>),
 }
 
 static FAST_WORK_POOL: Locked<LinkedList<Box<dyn Workable>>> = Locked::new(LinkedList::new());
@@ -79,7 +79,7 @@ pub fn fast_worker(_: usize) {
 	}
 
 	while let Some(mut w) = take_work() {
-		w.work().expect("Any errors are not expected.");
+		let _ = w.work();
 	}
 }
 
@@ -95,11 +95,12 @@ pub fn slow_worker(_: usize) {
 			yield_now();
 		}
 
-		for mut w in works {
-			if let Err(e) = w.work() {
+		for mut work in works {
+			if let Err(e) = work.work() {
 				match e {
-					Error::AllocError => panic!("OOM Handling please"),
-					Error::Yield => SLOW_WORK_POOL.lock().push_back(w),
+					Error::Alloc => panic!("OOM Handling please"),
+					Error::Retry => SLOW_WORK_POOL.lock().push_back(work),
+					Error::Next(next) => SLOW_WORK_POOL.lock().push_back(next),
 				}
 			}
 		}

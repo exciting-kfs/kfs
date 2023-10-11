@@ -6,19 +6,21 @@ use core::{
 use alloc::{boxed::Box, collections::BTreeMap, sync::Arc};
 
 use crate::{
-	driver::ide::{
-		block::{Block, BlockSize},
-		dma::{
-			call_back::CallBack, dma_req::ReqInit, dma_schedule, event::DmaInit, wait_io::WaitIO,
+	driver::{
+		ide::{
+			block::{Block, BlockSize},
+			dma::{dma_req::ReqInit, dma_schedule, event::DmaInit, hook::OwnHook, wait_io::WaitIO},
+			get_ide_controller,
+			ide_id::IdeId,
+			lba::LBA28,
 		},
-		get_ide_controller,
-		ide_id::IdeId,
-		lba::LBA28,
 		partition::entry::MaybeEntry,
 	},
 	fs::vfs,
 	process::task::CURRENT,
+	scheduler::preempt::preempt_disable,
 	sync::{LockRW, Locked, ReadLockGuard},
+	syscall::errno::Errno,
 	write_field,
 };
 
@@ -45,28 +47,28 @@ pub struct SuperBlock {
 }
 
 impl SuperBlock {
-	pub fn read_inode_dma(self: &Arc<Self>, inum: Inum) -> Result<Arc<LockRW<Inode>>, Error> {
+	pub fn read_inode_dma(self: &Arc<Self>, inum: Inum) -> Result<Arc<LockRW<Inode>>, Errno> {
 		let this = self.clone();
 		let f = |bid| this.read_block_dma(bid);
 		self.read_inode(inum, f)
 	}
 
-	pub fn read_inode_pio(self: &Arc<Self>, inum: Inum) -> Result<Arc<LockRW<Inode>>, Error> {
+	pub fn read_inode_pio(self: &Arc<Self>, inum: Inum) -> Result<Arc<LockRW<Inode>>, AllocError> {
 		let this = self.clone();
 		let f = |bid| this.read_block_pio(bid);
 		self.read_inode(inum, f)
 	}
 
-	fn read_inode<F>(self: &Arc<Self>, inum: Inum, f: F) -> Result<Arc<LockRW<Inode>>, Error>
+	fn read_inode<F, E>(self: &Arc<Self>, inum: Inum, f: F) -> Result<Arc<LockRW<Inode>>, E>
 	where
-		F: FnOnce(usize) -> Result<Block, AllocError>,
+		F: FnOnce(usize) -> Result<Block, E>,
 	{
 		if let Some(inode) = self.inode_cache.lock().get(&inum) {
 			return Ok(inode.clone());
 		}
 
-		let bid = self.inum_to_block_id(inum).ok_or(Error::InvalidInum)?;
-		let block = f(bid).map_err(|_| Error::MemoryAlloc)?;
+		let bid = self.inum_to_block_id(inum).unwrap();
+		let block = f(bid)?;
 		let mut inode = self.parse_to_inode(inum, block);
 
 		let ret = inode.get(&inum).unwrap().clone();
@@ -75,13 +77,13 @@ impl SuperBlock {
 		Ok(ret)
 	}
 
-	fn parse_to_inode(&self, inum: Inum, mut block: Block) -> BTreeMap<Inum, Arc<LockRW<Inode>>> {
+	fn parse_to_inode(&self, inum: Inum, block: Block) -> BTreeMap<Inum, Arc<LockRW<Inode>>> {
 		let data = self.info.read_lock();
 		let count = data.inode_per_block();
 
 		block
 			.as_chunks(data.inode_size as usize)
-			.map(|mut chunk| unsafe {
+			.map(|chunk| unsafe {
 				let data = chunk.cast::<InodeInfo>();
 				Arc::new(LockRW::new(Inode::new(data.clone())))
 			})
@@ -93,7 +95,7 @@ impl SuperBlock {
 			.collect::<BTreeMap<_, _>>()
 	}
 
-	fn read_block_dma(self: &Arc<Self>, block_id: usize) -> Result<Block, AllocError> {
+	fn read_block_dma(self: &Arc<Self>, block_id: usize) -> Result<Block, Errno> {
 		let current = unsafe { CURRENT.get_mut() }.clone();
 		let sb = self.clone();
 		let size = self.info.read_lock().block_size();
@@ -106,12 +108,13 @@ impl SuperBlock {
 		let start = self.block_id_to_lba(block_id);
 		let end = start + size.sector_count();
 
-		let cb = CallBack::new(start, Box::new(prepare), Box::new(cleanup));
+		let cb = OwnHook::new(start, Box::new(prepare), Box::new(cleanup));
 		let req = ReqInit::new(start..end, cb);
 		let event = DmaInit::Read(req);
 
+		let atomic = preempt_disable();
 		dma_schedule(self.ide_id, event);
-		self.wait_io.wait()
+		self.wait_io.wait(atomic)
 	}
 
 	fn read_block_pio(&self, block_id: usize) -> Result<Block, AllocError> {
@@ -119,7 +122,7 @@ impl SuperBlock {
 		let size = self.info.read_lock().block_size();
 		let mut mem = Block::new(size)?.into();
 
-		let raw_sector = unsafe { mem.as_slice(size.sector_count()) };
+		let raw_sector = unsafe { mem.as_slice_mut(size.sector_count()) };
 
 		let ide = get_ide_controller(self.ide_id);
 		ide.ata.read_sectors(lba, raw_sector);
@@ -139,7 +142,7 @@ impl SuperBlock {
 		let block_size = self.info.read_lock().block_size();
 		let entry = self.entry.get().unwrap();
 
-		entry.begin().block_size_add(block_size, block_id)
+		unsafe { entry.begin().block_size_add_unchecked(block_size, block_id) }
 	}
 }
 
@@ -233,11 +236,13 @@ impl SuperBlockInfo {
 
 	pub fn bgdt_lba(&self, part_begin: LBA28) -> LBA28 {
 		let block_size = self.block_size();
-		part_begin.block_size_add(block_size, 1)
-			+ match block_size.as_bytes() {
-				1024 => 2,
-				_ => 0,
-			}
+		unsafe {
+			part_begin.block_size_add_unchecked(block_size, 1)
+				+ match block_size.as_bytes() {
+					1024 => 2,
+					_ => 0,
+				}
+		}
 	}
 }
 

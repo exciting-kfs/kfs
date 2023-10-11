@@ -3,6 +3,7 @@ pub mod bus;
 pub mod dev_num;
 pub mod hpet;
 pub mod ide;
+pub mod partition;
 pub mod pipe;
 pub mod ps2;
 pub mod rtc;

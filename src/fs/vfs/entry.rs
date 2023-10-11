@@ -1,3 +1,4 @@
+mod block;
 mod dir;
 mod file;
 mod real;
@@ -24,6 +25,8 @@ use crate::{
 	process::{get_idle_task, task::Task},
 	syscall::errno::Errno,
 };
+
+use self::block::VfsBlockEntry;
 
 use super::{
 	AccessFlag, DirInode, FileInode, IOFlag, Permission, RawStat, SocketInode, SuperBlock,
@@ -80,6 +83,10 @@ impl VfsEntry {
 		VfsEntry::Real(sock.into())
 	}
 
+	pub fn new_block(block: Arc<VfsBlockEntry>) -> Self {
+		VfsEntry::Real(block.into())
+	}
+
 	pub fn downcast_dir(self) -> Result<Arc<VfsDirEntry>, Errno> {
 		use VfsEntry::*;
 		match self {
@@ -92,6 +99,14 @@ impl VfsEntry {
 		use VfsEntry::*;
 		match self {
 			Real(r) => r.downcast_file(),
+			Symlink(_) => Err(Errno::EISDIR),
+		}
+	}
+
+	pub fn downcast_block(self) -> Result<Arc<VfsBlockEntry>, Errno> {
+		use VfsEntry::*;
+		match self {
+			Real(r) => r.downcast_block(),
 			Symlink(_) => Err(Errno::EISDIR),
 		}
 	}

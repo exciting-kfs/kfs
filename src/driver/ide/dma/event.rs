@@ -1,23 +1,48 @@
-use core::alloc::AllocError;
+use core::{alloc::AllocError, ops::Range};
 
-use crate::{driver::ide::IdeController, pr_debug, sync::LockedGuard};
+use crate::{
+	driver::ide::{bmide::BMIDE, lba::LBA28, IdeController},
+	sync::LockedGuard,
+};
 
 use super::{
-	dma_req::{ReqInit, ReqReady},
+	dma_req::{ReqInit, ReqReady, ReqWBInit, ReqWBReady},
 	DmaOps,
 };
 
 pub enum DmaInit {
 	Read(ReqInit),
 	Write(ReqInit),
+	WriteBack(ReqWBInit),
 }
 
 impl DmaInit {
 	pub const MAX_KB: usize = 128;
 
 	pub fn prepare(self) -> Result<DmaReady, AllocError> {
-		let (ops, inner) = self.divide();
-		let ReqInit { range, cb } = inner;
+		match self {
+			Self::Read(req) => Self::prepare_own(req, DmaOps::Read),
+			Self::Write(req) => Self::prepare_own(req, DmaOps::Write),
+			Self::WriteBack(req) => Ok(Self::prepare_wb(req)),
+		}
+	}
+
+	pub fn try_merge(&mut self, mut other: &mut Self) -> Result<(), ()> {
+		use DmaInit::*;
+		match (self, &mut other) {
+			(Read(in_q), Read(req)) | (Write(in_q), Write(req)) => {
+				ReqInit::can_merge(in_q, req).then(|| in_q.merge(req))
+			}
+			(WriteBack(in_q), WriteBack(req)) => {
+				ReqWBInit::can_merge(in_q, &req).then(|| in_q.merge(req))
+			}
+			_ => None,
+		}
+		.ok_or(())
+	}
+
+	fn prepare_own(req: ReqInit, ops: DmaOps) -> Result<DmaReady, AllocError> {
+		let ReqInit { range, cb } = req;
 
 		match cb.prepare() {
 			Ok((blocks, cleanup)) => {
@@ -38,51 +63,83 @@ impl DmaInit {
 		}
 	}
 
-	pub(super) fn inner(&mut self) -> &mut ReqInit {
-		match self {
-			DmaInit::Read(req) => req,
-			DmaInit::Write(req) => req,
-		}
-	}
+	fn prepare_wb(req: ReqWBInit) -> DmaReady {
+		let ReqWBInit { range, cb } = req;
 
-	pub(super) fn divide(self) -> (DmaOps, ReqInit) {
-		match self {
-			DmaInit::Read(req) => (DmaOps::Read, req),
-			DmaInit::Write(req) => (DmaOps::Write, req),
-		}
+		let (blocks, cleanup) = cb.prepare();
+		let req = ReqWBReady {
+			range,
+			blocks,
+			cleanup,
+		};
+
+		DmaReady::WriteBack(req)
 	}
 }
 
 pub enum DmaReady {
 	Read(ReqReady),
 	Write(ReqReady),
+	WriteBack(ReqWBReady),
 }
 
 impl DmaReady {
 	pub fn perform(self, mut ide: LockedGuard<'_, IdeController>) -> DmaRun {
-		pr_debug!("+++++ perform called +++++");
-		let (ops, inner) = self.divide();
+		let ops = self.operation();
+		let range = self.range();
+		let count = self.count();
 
-		// (write)cache writeback for blocks
 		let bmi = unsafe { ide.bmi.assume_init_mut() };
-		bmi.set_prd_table(&inner.blocks);
+		self.set_prd_table(bmi);
 		bmi.set_dma(ops);
 
 		let ata = &mut ide.ata;
-		ata.do_dma(ops, inner.range.start, inner.count() as u16);
-
+		ata.do_dma(ops, range.start, count as u16);
 		unsafe { ide.bmi.assume_init_mut().start() };
 
-		match ops {
-			DmaOps::Read => DmaRun::Read(inner),
-			DmaOps::Write => DmaRun::Write(inner),
+		self.into()
+	}
+
+	fn set_prd_table(&self, bmi: &mut BMIDE) {
+		match self {
+			Self::Read(req) => bmi.set_prd_table(&req.blocks),
+			Self::Write(req) => {
+				// (write)cache writeback for blocks
+				bmi.set_prd_table(&req.blocks);
+			}
+			Self::WriteBack(req) => {
+				// (write)cache writeback for blocks
+				bmi.set_prd_table_wb(&req.blocks)
+			}
 		}
 	}
 
-	fn divide(self) -> (DmaOps, ReqReady) {
+	fn range(&self) -> Range<LBA28> {
 		match self {
-			DmaReady::Read(req) => (DmaOps::Read, req),
-			DmaReady::Write(req) => (DmaOps::Write, req),
+			Self::Read(req) | Self::Write(req) => req.range.clone(),
+			Self::WriteBack(req) => req.range.clone(),
+		}
+	}
+
+	fn count(&self) -> usize {
+		let range = self.range();
+		range.end - range.start
+	}
+
+	fn operation(&self) -> DmaOps {
+		match self {
+			Self::Read(_) => DmaOps::Read,
+			Self::WriteBack(_) | Self::Write(_) => DmaOps::Write,
+		}
+	}
+}
+
+impl From<DmaRun> for DmaReady {
+	fn from(value: DmaRun) -> Self {
+		match value {
+			DmaRun::Read(req) => DmaReady::Read(req),
+			DmaRun::Write(req) => DmaReady::Write(req),
+			DmaRun::WriteBack(req) => DmaReady::WriteBack(req),
 		}
 	}
 }
@@ -90,34 +147,54 @@ impl DmaReady {
 pub enum DmaRun {
 	Read(ReqReady),
 	Write(ReqReady),
+	WriteBack(ReqWBReady),
 }
 
 impl DmaRun {
-	pub fn cleanup(self) {
-		let inner = self.inner();
+	pub fn ready(self) -> DmaReady {
+		self.into()
+	}
 
+	pub fn cleanup(self) {
+		match self {
+			Self::Read(req) | Self::Write(req) => Self::cleanup_own(req),
+			Self::WriteBack(req) => Self::cleanup_ref(req),
+		}
+	}
+
+	fn cleanup_own(req: ReqReady) {
 		let ReqReady {
 			range: _,
-			blocks: own,
+			blocks,
 			cleanup,
-		} = inner;
+		} = req;
 
-		own.into_iter()
+		blocks
+			.into_iter()
 			.zip(cleanup)
 			.for_each(|(block, mut cb)| cb(Ok(block)))
 	}
 
-	pub fn ready(self) -> DmaReady {
-		match self {
-			DmaRun::Read(req) => DmaReady::Read(req),
-			DmaRun::Write(req) => DmaReady::Write(req),
-		}
-	}
+	fn cleanup_ref(req: ReqWBReady) {
+		let ReqWBReady {
+			range: _,
+			blocks,
+			cleanup,
+		} = req;
 
-	fn inner(self) -> ReqReady {
-		match self {
-			DmaRun::Read(req) => req,
-			DmaRun::Write(req) => req,
+		blocks
+			.into_iter()
+			.zip(cleanup)
+			.for_each(|(block, mut cb)| cb(block))
+	}
+}
+
+impl From<DmaReady> for DmaRun {
+	fn from(value: DmaReady) -> Self {
+		match value {
+			DmaReady::Read(req) => DmaRun::Read(req),
+			DmaReady::Write(req) => DmaRun::Write(req),
+			DmaReady::WriteBack(req) => DmaRun::WriteBack(req),
 		}
 	}
 }

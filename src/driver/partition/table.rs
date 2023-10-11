@@ -1,5 +1,3 @@
-pub mod entry;
-
 use core::{
 	array,
 	fmt::LowerHex,
@@ -10,17 +8,15 @@ use core::{
 use alloc::boxed::Box;
 
 use crate::{
+	driver::ide::{
+		ide_id::{IdeId, NR_IDE_DEV},
+		lba::LBA28,
+	},
 	mm::{constant::SECTOR_SIZE, util::next_align},
 	sync::{LockRW, ReadLockGuard},
 };
 
-use self::entry::{EntryIndex, MaybeEntry};
-
-use super::{
-	get_ide_controller,
-	ide_id::{IdeId, NR_IDE_DEV},
-	lba::LBA28,
-};
+use super::{entry::EntryIndex, entry::MaybeEntry, get_ide_controller};
 
 pub const NR_PRIMARY: usize = 4;
 
@@ -67,7 +63,7 @@ const BOOT_SECTOR_MAGIC: u16 = 0xaa55;
 const BOOT_SECTOR_OFFSET: usize = 0x1fe / 2;
 const PART_TABLE_OFFSET: usize = 0x1be / 2;
 
-fn read_partition_table(dev: IdeId) -> Option<[MaybeEntry; NR_PRIMARY]> {
+pub fn read_partition_table(dev: IdeId) -> Option<[MaybeEntry; NR_PRIMARY]> {
 	let ide = get_ide_controller(dev);
 
 	let mut sector = Box::new_uninit_slice(1);
@@ -92,13 +88,11 @@ fn read_partition_table(dev: IdeId) -> Option<[MaybeEntry; NR_PRIMARY]> {
 }
 
 pub fn init(devices: [Option<IdeId>; NR_IDE_DEV]) {
-	for dev in devices {
-		if let Some(dev) = dev {
-			if let Some(entries) = read_partition_table(dev) {
-				unsafe { PART_TABLE[dev.index()] = PartitionTable::new(entries) }
-			}
+	devices.into_iter().filter_map(|dev| dev).for_each(|dev| {
+		if let Some(entries) = read_partition_table(dev) {
+			unsafe { PART_TABLE[dev.index()] = PartitionTable::new(entries) }
 		}
-	}
+	});
 }
 
 pub fn byte_to_sector_count(byte: usize) -> usize {
@@ -108,6 +102,10 @@ pub fn byte_to_sector_count(byte: usize) -> usize {
 // TODO hda1 => a: minor, 1: entry index
 pub fn get_partition_entry<'a>(id: IdeId, ei: EntryIndex) -> ReadLockGuard<'a, MaybeEntry> {
 	unsafe { PART_TABLE[id.index()][ei.index()].read_lock() }
+}
+
+pub fn entrires() -> impl Iterator<Item = &'static LockRW<MaybeEntry>> {
+	unsafe { PART_TABLE.iter().flat_map(|tab| tab.0.iter()) }
 }
 
 /// From fdisk & [Partition Type](https://en.wikipedia.org/wiki/Partition_type)

@@ -6,12 +6,19 @@ use crate::{
 	driver::ide::block::Block,
 	process::{
 		relation::Pid,
+		signal::poll_signal_queue,
 		task::{Task, CURRENT},
 	},
-	scheduler::sleep::{sleep_and_yield, wake_up, Sleep},
+	scheduler::sleep::{sleep_and_yield, wake_up},
+	scheduler::{
+		preempt::AtomicOps,
+		sleep::{sleep_and_yield_atomic, Sleep},
+	},
 	sync::Locked,
+	syscall::errno::Errno,
 };
 
+#[derive(Debug)]
 pub struct WaitIO {
 	io_result: Locked<BTreeMap<Pid, Result<Block, AllocError>>>,
 }
@@ -28,15 +35,19 @@ impl WaitIO {
 		wake_up(target, Sleep::Deep);
 	}
 
-	pub fn wait(&self) -> Result<Block, AllocError> {
+	pub fn wait(&self, atomic: AtomicOps) -> Result<Block, Errno> {
 		let current = unsafe { CURRENT.get_mut() }.clone();
-
-		sleep_and_yield(Sleep::Deep);
-
 		let pid = current.get_pid();
-		self.io_result
-			.lock()
-			.remove(&pid)
-			.expect("lost dma io request")
+
+		sleep_and_yield_atomic(Sleep::Light, atomic);
+
+		loop {
+			if let Some(result) = self.io_result.lock().remove(&pid) {
+				return result.map_err(|_| Errno::ENOMEM);
+			}
+
+			sleep_and_yield(Sleep::Light);
+			unsafe { poll_signal_queue() }?;
+		}
 	}
 }

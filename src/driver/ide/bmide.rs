@@ -8,7 +8,12 @@ use crate::{
 	mm::util::virt_to_phys,
 };
 
-use super::{block::Block, dma::DmaOps, prd::PRD, IDE_CLASS_CODE};
+use super::{
+	block::Block,
+	dma::{hook::ItemWB, DmaOps},
+	prd::PRD,
+	IDE_CLASS_CODE,
+};
 
 /// BUS MASTER IDE
 pub struct BMIDE {
@@ -59,6 +64,16 @@ impl BMIDE {
 		// set BMIDE
 		for (i, block) in blocks.iter().enumerate() {
 			prdt[i] = PRD::new(block.as_phys_addr(), block.size() as u16);
+		}
+		prdt[blocks.len() - 1].set_eot(true);
+	}
+
+	pub fn set_prd_table_wb(&mut self, blocks: &Vec<ItemWB>) {
+		let prdt = &mut self.prd_table;
+
+		// set BMIDE
+		for (i, item) in blocks.iter().enumerate() {
+			prdt[i] = PRD::new(item.as_phys_addr(), item.size() as u16);
 		}
 		prdt[blocks.len() - 1].set_eot(true);
 	}

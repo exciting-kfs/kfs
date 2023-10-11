@@ -141,3 +141,7 @@ pub fn get_timestamp_nano() -> u64 {
 
 	unsafe { BOOT_TIMESTAMP + elapsed }
 }
+
+pub fn get_timestamp_second() -> u64 {
+	get_timestamp_nano() / 1000 / 1000 / 1000
+}

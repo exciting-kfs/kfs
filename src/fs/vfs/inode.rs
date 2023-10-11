@@ -1,7 +1,11 @@
 use alloc::{boxed::Box, sync::Arc};
 use bitflags::bitflags;
 
-use crate::{fs::path::Path, sync::Locked, syscall::errno::Errno};
+use crate::{
+	fs::{devfs::partition::DevPart, path::Path},
+	sync::Locked,
+	syscall::errno::Errno,
+};
 
 use super::{DirHandle, FileHandle};
 
@@ -109,6 +113,7 @@ pub enum VfsInode {
 	Dir(Arc<dyn DirInode>),
 	SymLink(Arc<dyn SymLinkInode>),
 	Socket(Arc<SocketInode>),
+	Block(Arc<DevPart>),
 }
 
 #[derive(Default, Clone)]

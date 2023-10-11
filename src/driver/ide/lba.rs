@@ -5,7 +5,7 @@ use crate::mm::constant::SECTOR_SIZE;
 use super::block::BlockSize;
 
 /// Logical Block Address
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
 #[repr(transparent)]
 pub struct LBA28(usize);
 
@@ -23,6 +23,10 @@ impl LBA28 {
 		LBA28(value)
 	}
 
+	pub unsafe fn from_bytes(bytes: usize) -> Self {
+		Self::new_unchecked(bytes / SECTOR_SIZE)
+	}
+
 	pub fn end() -> Self {
 		LBA28(Self::END as usize)
 	}
@@ -31,20 +35,14 @@ impl LBA28 {
 		self.0
 	}
 
-	/// This function only works for CHS in partition table.
-	pub fn from_chs(c: u8, h: u8, s: u8) -> Self {
-		const HPC: isize = 16;
-		const SPT: isize = 63;
-
-		let c = (s as isize & 0xc0 << 8) + c as isize;
-		let s = s as isize & 0x3f;
-		let h = h as isize;
-
-		unsafe { LBA28::new_unchecked(((c * HPC + h) * SPT + (s - 1)) as usize) }
+	pub fn block_size_add(&self, block_size: BlockSize, count: usize) -> Option<Self> {
+		(block_size.as_bytes() / SECTOR_SIZE)
+			.checked_mul(count)
+			.map(|r| *self + r)
 	}
 
-	pub fn block_size_add(&self, block_size: BlockSize, count: usize) -> Self {
-		*self + block_size.as_bytes() * count / SECTOR_SIZE
+	pub unsafe fn block_size_add_unchecked(&self, block_size: BlockSize, count: usize) -> Self {
+		*self + (block_size.as_bytes() / SECTOR_SIZE) * count
 	}
 }
 

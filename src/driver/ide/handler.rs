@@ -7,7 +7,7 @@ use crate::{
 		ide::IDE_CLASS_CODE,
 	},
 	interrupt::InterruptFrame,
-	pr_debug, pr_warn,
+	pr_debug,
 	scheduler::work::schedule_slow_work,
 };
 
@@ -15,17 +15,17 @@ use super::{dma::dma_q::work, ide_id::IdeId, IDE};
 
 #[interrupt_handler]
 pub extern "C" fn handle_ide_ch0_impl(_frame: InterruptFrame) {
-	pr_warn!("ide ch 0");
 	handle_ide_impl(0);
 }
 
 #[interrupt_handler]
 pub extern "C" fn handle_ide_ch1_impl(_frame: InterruptFrame) {
-	pr_warn!("ide ch 1");
 	handle_ide_impl(1);
 }
 
 pub fn handle_ide_impl(channel: usize) {
+	// pr_warn!("ide ch {}", channel);
+
 	let mut ide = IDE[channel].lock();
 
 	let output = ide.ata.output();
@@ -49,7 +49,7 @@ pub fn handle_ide_impl(channel: usize) {
 		let num = channel * 2 + (is_secondary as usize);
 		let id = unsafe { IdeId::new_unchecked(num) };
 		schedule_slow_work(work::do_next_dma, id);
-		pr_debug!("ide handler: do_next_dma scheduled: {:?}", id);
+		// pr_debug!("** ide handler: do_next_dma scheduled: {:?} **", id);
 	}
 
 	bmi.sync_data();
