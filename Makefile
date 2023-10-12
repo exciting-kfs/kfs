@@ -48,13 +48,13 @@ else
 TARGET_ROOT := target/i686-unknown-none-elf/debug
 endif
 
-LIB_BOOT_NAME := libboot.a
-LIB_BOOT_MODULE_NAME := boot
-LIB_BOOT := $(TARGET_ROOT)/${LIB_BOOT_NAME}
+LIB_KERNEL_NAME := libkernel.a
+LIB_KERNEL_SRC_ROOT := src
 
-LIB_KERNEL_NAME := libkernel.rlib
-LIB_KERNEL_MODULE_NAME := kfs
 LIB_KERNEL := $(TARGET_ROOT)/$(LIB_KERNEL_NAME)
+LIB_KERNEL_SRC := $(shell find $(LIB_KERNEL_SRC_ROOT) -type f -and \( -name '*.[sS]' -or -name '*.rs' \))
+CARGO_CONFIG := Cargo.toml .cargo/config.toml
+BUILD_SCRIPT := build.rs
 
 KERNEL_BIN_NAME := kernel
 KERNEL_BIN := $(TARGET_ROOT)/$(KERNEL_BIN_NAME)
@@ -189,17 +189,18 @@ test : all
 
 .PHONY : $(LIB_KERNEL)
 $(LIB_KERNEL) : userspace
-	@cargo rustc -p $(LIB_KERNEL_MODULE_NAME) $(CARGO_FLAG) -- $(RUSTC_FLAG)
+	@cargo rustc $(CARGO_FLAG) -- $(RUSTC_FLAG)
 
-.PHONY : $(LIB_BOOT)
-$(LIB_BOOT) : $(LIB_KERNEL)
-	@cargo rustc -p $(LIB_BOOT_MODULE_NAME) $(CARGO_FLAG) -- $(RUSTC_FLAG)
+# TODO: better dependency tracking.
+#
+# $(LIB_KERNEL) : $(LIB_KERNEL_SRC) $(BUILD_SCRIPT) $(CARGO_CONFIG)
+# 	@cargo build
 
-$(KERNEL_ELF) : $(LIB_BOOT) $(LINKER_SCRIPT)
+$(KERNEL_ELF) : $(LIB_KERNEL) $(LINKER_SCRIPT)
 	@echo "[-] linking kernel image..."
 	@$(LD) $(LDFLAG)		\
 		--whole-archive		\
-		$(LIB_BOOT)   		\
+		$(LIB_KERNEL)		\
 		-o $@
 
 $(KERNEL_BIN) : $(KERNEL_ELF)
