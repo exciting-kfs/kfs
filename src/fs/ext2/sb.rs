@@ -31,7 +31,7 @@ use self::{
 
 use super::{
 	block_pool::BlockPool,
-	constant::{MAX_CACHED_BLOCK, SYNC_INTERVAL},
+	constant::{MAX_CACHED_BLOCK_BYTE, SYNC_INTERVAL},
 	inode::{info::InodeInfo, inum::Inum, Inode},
 	staged::Staged,
 	Block, Ext2,
@@ -384,10 +384,13 @@ impl Drop for SuperBlock {
 
 impl vfs::SuperBlock for SuperBlock {
 	fn sync(&self) -> Result<(), Errno> {
+		let block_size = self.block_size();
+
 		self.try_sync_icache()?;
 		self.sync_self()?;
 		self.block_pool.sync();
-		self.block_pool.handle_overflow(MAX_CACHED_BLOCK);
+		self.block_pool
+			.handle_overflow(MAX_CACHED_BLOCK_BYTE / block_size);
 		Ok(())
 	}
 

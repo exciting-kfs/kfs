@@ -77,16 +77,3 @@ fn ptr_to_allocated_meta(ptr: NonNull<u8>) -> Option<NonNull<MetaPage>> {
 pub fn ptr_to_allocated_page(ptr: NonNull<u8>) -> Option<NonNull<u8>> {
 	ptr_to_allocated_meta(ptr).map(|m| meta_to_ptr(m))
 }
-
-mod test {
-	use kfs_macro::ktest;
-
-	#[ktest(pfn)]
-	fn test() {
-		let a: *const usize = core::ptr::null();
-
-		unsafe {
-			let _ = *a;
-		}
-	}
-}

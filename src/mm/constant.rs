@@ -27,6 +27,7 @@ pub const BLOCK_SIZE: usize = PAGE_SIZE * (1 << MAX_RANK);
 /// SIZE
 pub const KB: usize = 1024;
 pub const MB: usize = 1024 * KB;
+pub const GB: usize = 1024 * MB;
 pub const SECTOR_SIZE: usize = 512;
 
 /// cache allocator
@@ -35,8 +36,8 @@ pub const MIN_CAHCE_SIZE: usize = 64;
 pub const MIN_CACHE_SIZE_MULTIPLIER: usize = multiplier_bigger_than(MIN_CAHCE_SIZE);
 pub const MAX_CACHE_SIZE_MULTIPLIER: usize = multiplier_bigger_than(MAX_CAHCE_SIZE);
 pub const NR_CACHE_ALLOCATOR: usize = MAX_CACHE_SIZE_MULTIPLIER - MIN_CACHE_SIZE_MULTIPLIER + 1;
-pub const MAX_CACHE_PAGE_PER_ALLOCATOR: usize = usize::MAX;
+pub const MAX_CACHE_PAGE_PER_ALLOCATOR: usize = GB / NR_CACHE_ALLOCATOR;
 
 /// OOM
-const OOM_WATER_MARK_BYTE: usize = 980 * MB;
+const OOM_WATER_MARK_BYTE: usize = 100 * MB;
 pub const OOM_WATER_MARK: usize = OOM_WATER_MARK_BYTE / PAGE_SIZE;

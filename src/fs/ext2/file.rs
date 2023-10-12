@@ -175,8 +175,6 @@ impl FileInode {
 			slice.fill(0);
 
 			total -= slice.len();
-
-			// pr_debug!("file: expand: total: {}", total);
 		}
 		Ok(())
 	}

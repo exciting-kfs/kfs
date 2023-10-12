@@ -55,18 +55,6 @@ impl<const N: usize> SizeCache<N> {
 				let meta_cache = MetaCache::construct_at(page.cast(), Self::SIZE);
 				Some(NonNull::new_unchecked(meta_cache))
 			})
-
-		// self.partial
-		// 	.find(|e| !e.is_full())
-		// 	.map(|e| NonNull::from(e))
-		// 	.or_else(|| unsafe {
-		// 		let page = self.alloc_pages(Self::RANK).ok()?;
-		// 		let node = Node::alloc_at(page.cast());
-		// 		self.partial.push_front(node);
-
-		// 		let meta_cache = MetaCache::construct_at(page.cast(), Self::SIZE);
-		// 		Some(NonNull::new_unchecked(meta_cache))
-		// 	})
 	}
 
 	fn alloc_pages(&mut self, rank: usize) -> Result<NonNull<[u8]>> {
