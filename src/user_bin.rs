@@ -3,11 +3,12 @@ use crate::{elf::Elf, syscall::errno::Errno};
 macro_rules! include_user_bin {
 	($name:literal) => {{
 		#[repr(C, align(16))]
-		struct __Align16(&'static [u8]);
+		struct __Align16<T: ?Sized>(T);
 
-		static __DATA: __Align16 = __Align16(include_bytes!(concat!("../userspace/build/", $name)));
+		static __ALIGNED: &'static __Align16<[u8]> =
+			&__Align16(*include_bytes!(concat!("../userspace/build/", $name)));
 
-		&__DATA.0
+		&__ALIGNED.0
 	}};
 }
 
