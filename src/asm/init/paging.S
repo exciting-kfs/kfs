@@ -1,7 +1,7 @@
 %include "address.S"
 
-; first 4 PDE (16MB) will be marked as present
-%define INIT_DIRS 4
+; first 8 PDE (32MB) will be marked as present
+%define INIT_DIRS 8
 
 ; global, PS(4M), user, write, present.
 %define PD_ATTRIBUTE 0b110000111
