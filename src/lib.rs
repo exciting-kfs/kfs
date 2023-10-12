@@ -264,3 +264,7 @@ mod test_threads {
 		}
 	}
 }
+
+pub fn do_something() {
+	pr_warn!("123");
+}

@@ -3,10 +3,10 @@
 OS := $(shell uname -s)
 ifeq ($(OS), Linux)
 PREFIX := i686-linux-gnu-
-LDFLAG = -n --script=$(LINKER_SCRIPT) --gc-sections
+LDFLAG = -n 
 else
 PREFIX := i686-elf-
-LDFLAG = -n --no-warn-rwx-segments --no-warn-execstack --script=$(LINKER_SCRIPT) --gc-sections
+LDFLAG = -n --no-warn-rwx-segments --no-warn-execstack
 endif
 
 # === User settings / toolchain ===
@@ -48,13 +48,19 @@ else
 TARGET_ROOT := target/i686-unknown-none-elf/debug
 endif
 
+KERNEL_MODULE_NAMES := hello
+
+KERNEL_MODULES := $(addprefix $(TARGET_ROOT)/,$(KERNEL_MODULE_NAMES))
+KERNEL_MODULES := $(addsuffix .ko,$(KERNEL_MODULES))
+
+KERNEL_MODULE_LIBS := $(addprefix lib,$(KERNEL_MODULE_NAMES))
+KERNEL_MODULE_LIBS := $(addsuffix .a,$(KERNEL_MODULE_LIBS))
+KERNEL_MODULE_LIBS := $(addprefix $(TARGET_ROOT)/,$(KERNEL_MODULE_LIBS))
+
 LIB_KERNEL_NAME := libkernel.a
 LIB_KERNEL_SRC_ROOT := src
 
 LIB_KERNEL := $(TARGET_ROOT)/$(LIB_KERNEL_NAME)
-LIB_KERNEL_SRC := $(shell find $(LIB_KERNEL_SRC_ROOT) -type f -and \( -name '*.[sS]' -or -name '*.rs' \))
-CARGO_CONFIG := Cargo.toml .cargo/config.toml
-BUILD_SCRIPT := build.rs
 
 KERNEL_BIN_NAME := kernel
 KERNEL_BIN := $(TARGET_ROOT)/$(KERNEL_BIN_NAME)
@@ -96,7 +102,7 @@ rescue : $(RESCUE_IMG)
 
 .PHONY : userspace
 userspace :
-	@echo "[-] build userspace binaries"
+	@echo MAKE $@
 	@$(MAKE) EXTRA_CFLAGS=$(CFLAGS) -s -C $(USERSPACE_SRC_ROOT)
 
 .PHONY : ci
@@ -109,10 +115,12 @@ hdd: $(HDD_IMG)
 
 .PHONY : clean
 clean :
-	@echo '[-] cleanup...'
+	@echo 'CARGO clean'
 	@cargo clean -v
+	@echo 'RM .sw* log/'
 	@rm -f .sw*
 	@rm -rf log/
+	@echo 'MAKE clean'
 	@$(MAKE) -s -C $(USERSPACE_SRC_ROOT) clean
 
 .PHONY : re
@@ -187,39 +195,52 @@ test : all
 
 # === Main recipes ===
 
-.PHONY : $(LIB_KERNEL)
-$(LIB_KERNEL) : userspace
-	@cargo rustc $(CARGO_FLAG) -- $(RUSTC_FLAG)
+modules : $(KERNEL_MODULES)
 
-# TODO: better dependency tracking.
-#
-# $(LIB_KERNEL) : $(LIB_KERNEL_SRC) $(BUILD_SCRIPT) $(CARGO_CONFIG)
-# 	@cargo build
+.PHONY : $(KERNEL_MODULE_LIBS)
+$(KERNEL_MODULE_LIBS) :
+	@echo CARGO $(notdir $@)
+	@cargo rustc -p $(patsubst lib%.a,%,$(notdir $@)) $(CARGO_FLAG) -- $(RUSTC_FLAG)
 
-$(KERNEL_ELF) : $(LIB_KERNEL) $(LINKER_SCRIPT)
-	@echo "[-] linking kernel image..."
+$(TARGET_ROOT)/%.ko : $(TARGET_ROOT)/lib%.a $(KERNEL_BIN)
+	@echo LD $(notdir $@)
 	@$(LD) $(LDFLAG)		\
 		--whole-archive		\
-		$(LIB_KERNEL)		\
-		-o $@
+		-R $(KERNEL_BIN)	\
+		-r					\
+		-o $@				\
+		$<
+
+.PHONY : $(LIB_KERNEL)
+$(LIB_KERNEL) : userspace
+	@echo CARGO $(notdir $@)
+	@cargo rustc $(CARGO_FLAG) -- $(RUSTC_FLAG)
+
+$(KERNEL_ELF) : $(LIB_KERNEL) $(LINKER_SCRIPT)
+	@echo LD $(notdir $@)
+	@$(LD) $(LDFLAG)		\
+		--whole-archive		\
+		-T $(LINKER_SCRIPT) \
+		-o $@				\
+		$(LIB_KERNEL)
 
 $(KERNEL_BIN) : $(KERNEL_ELF)
-	@echo "[-] stripping debug-symbols..."
+	@echo OBJCOPY $(notdir $@)
 	@$(OBJCOPY) --strip-debug $< $(KERNEL_BIN)
 
 $(KERNEL_DEBUG_SYMBOL) : $(KERNEL_ELF)
-	@echo "[-] extracting debug-symbols..."
+	@echo OBJCOPY $(notdir $@)
 	@$(OBJCOPY) --only-keep-debug $< $(KERNEL_DEBUG_SYMBOL)
 
 $(RESCUE_IMG) : $(KERNEL_BIN) $(shell find $(RESUCE_SRC_ROOT) -type f) $(KERNEL_DEBUG_SYMBOL)
-	@echo "[-] creating rescue image..."
+	@echo MKRESCUE $(notdir $@)
 	@mkdir -p $(TARGET_ROOT)/boot
 	@cp -r $(RESUCE_SRC_ROOT) $(TARGET_ROOT)
 	@cp $(KERNEL_BIN) $(RESCUE_TARGET_ROOT)/boot
 	@$(GRUB2_MKRESCUE) -d $(GRUB2_I386_LIB) $(RESCUE_TARGET_ROOT) -o $@ 2>/dev/null >/dev/null
 
-$(HDD_IMG) : scripts/hdd/make-hdd.sh
-	@echo "[-] creating disk.img"
+$(HDD_IMG) : $(KERNEL_MODULES) scripts/hdd/make-hdd.sh
+	@echo BUILD $(notdir $@)
 	@scripts/hdd/make-hdd.sh $@
 
 hello.txt: 
