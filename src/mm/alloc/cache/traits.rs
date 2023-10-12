@@ -1,34 +1,16 @@
 use core::alloc::AllocError;
 use core::ptr::NonNull;
 
-use super::meta_cache::MetaCache;
-use super::no_alloc_list::NAList;
-
-use crate::mm::alloc::page;
-
-pub trait CacheTrait {
-	fn partial(&mut self) -> &mut NAList<MetaCache>;
+pub trait CacheTrait: Sync {
 	fn empty(&self) -> bool;
+	fn size(&self) -> usize;
+	fn contains(&mut self, ptr: NonNull<u8>) -> bool;
 
-	fn cache_shrink(&mut self) {
-		let m_cache_list = self.partial();
+	fn cache_shrink(&mut self);
 
-		let (mut satisfied, not) = m_cache_list.iter_mut().partition(|m| m.inuse == 0);
-		(*m_cache_list) = not;
-
-		satisfied.iter_mut().for_each(|meta_cache| unsafe {
-			let ptr = meta_cache as *mut MetaCache;
-			let ptr = NonNull::new_unchecked(ptr.cast());
-			page::free_pages(ptr);
-		});
-	}
-
-	fn statistic(&self) -> CacheStat;
+	fn stat(&self) -> CacheStat;
 	fn allocate(&mut self) -> Result<NonNull<[u8]>, AllocError>;
 	unsafe fn deallocate(&mut self, ptr: NonNull<u8>);
-
-	fn contains(&mut self, ptr: NonNull<u8>) -> bool;
-	fn size(&self) -> usize;
 }
 
 impl PartialEq for dyn CacheTrait {

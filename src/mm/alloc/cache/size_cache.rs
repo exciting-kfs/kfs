@@ -3,7 +3,10 @@ use core::mem::size_of;
 use core::ptr::NonNull;
 
 use crate::mm::alloc::{page, Zone};
+use crate::mm::page::ptr_to_allocated_page;
 use crate::mm::{constant::*, util::*};
+use crate::sync::Locked;
+use crate::trace_feature;
 
 use super::meta_cache::MetaCache;
 use super::no_alloc_list::{NAList, Node};
@@ -18,8 +21,9 @@ pub struct SizeCache<const N: usize> {
 }
 
 impl<const N: usize> SizeCache<N> {
+	const DEFAULT_COUNT: usize = 7;
 	const SIZE: usize = align_with_hw_cache(N);
-	const RANK: usize = rank_of(Self::SIZE);
+	const RANK: usize = rank_of(Self::SIZE, Self::DEFAULT_COUNT);
 
 	pub const fn new() -> Self {
 		SizeCache {
@@ -29,7 +33,7 @@ impl<const N: usize> SizeCache<N> {
 	}
 
 	pub fn reserve(&mut self, count: usize) -> Result<()> {
-		let rank = rank_of(Self::SIZE * count);
+		let rank = rank_of(Self::SIZE, count);
 		let page = self.alloc_pages(rank)?;
 		unsafe {
 			let node = Node::alloc_at(page.cast());
@@ -41,14 +45,8 @@ impl<const N: usize> SizeCache<N> {
 
 	fn get_meta_cache(&mut self) -> Option<NonNull<MetaCache>> {
 		self.partial
-			.head()
-			.and_then(|mut meta_cache_ptr| {
-				let meta_cache = unsafe { meta_cache_ptr.as_mut() };
-				match meta_cache.is_full() {
-					true => None,
-					false => Some(meta_cache_ptr),
-				}
-			})
+			.first()
+			.filter(|e| unsafe { !(*e).as_ref().is_full() })
 			.or_else(|| unsafe {
 				let page = self.alloc_pages(Self::RANK).ok()?;
 				let node = Node::alloc_at(page.cast());
@@ -64,84 +62,142 @@ impl<const N: usize> SizeCache<N> {
 		self.page_count += 1 << rank;
 		Ok(page)
 	}
+
+	fn dealloc_pages(&mut self, meta: &mut MetaCache) {
+		unsafe {
+			self.page_count -= 1 << meta.rank();
+			let ptr = meta as *mut MetaCache;
+			let ptr = NonNull::new_unchecked(ptr.cast());
+			page::free_pages(ptr);
+		}
+	}
 }
 
-impl<const N: usize> CacheInit for SizeCache<N> {}
+impl<const N: usize> CacheInit for Locked<SizeCache<N>> {}
 
-impl<const N: usize> CacheTrait for SizeCache<N> {
-	fn partial(&mut self) -> &mut NAList<MetaCache> {
-		&mut self.partial
-	}
-
+impl<const N: usize> CacheTrait for Locked<SizeCache<N>> {
+	#[inline]
 	fn empty(&self) -> bool {
-		self.partial.head() == None
+		self.lock().partial.first() == None
 	}
 
+	#[inline]
 	fn size(&self) -> usize {
-		Self::SIZE
+		SizeCache::<N>::SIZE
 	}
 
-	fn statistic(&self) -> CacheStat {
-		let (total, inuse) = self.partial.iter().fold((0, 0), |(mut t, mut i), m| {
-			i += m.inuse;
-			t += m.total();
-			(t, i)
-		});
+	fn stat(&self) -> CacheStat {
+		let (total, inuse) = self
+			.lock()
+			.partial
+			.iter()
+			.fold((0, 0), |(mut t, mut i), m| {
+				i += m.inuse();
+				t += m.total();
+				(t, i)
+			});
 
 		CacheStat {
-			page_count: self.page_count,
+			page_count: self.lock().page_count,
 			total,
 			inuse,
 		}
 	}
 
+	fn contains(&mut self, ptr: NonNull<u8>) -> bool {
+		self.lock()
+			.partial
+			.find(|meta_cache| meta_cache.contains(ptr))
+			.is_some()
+	}
+
 	fn allocate(&mut self) -> Result<NonNull<[u8]>> {
-		let mut meta_cache_ptr = self.get_meta_cache().ok_or(AllocError)?;
+		let mut size_cache = self.lock();
+		let mut meta_cache_ptr = size_cache.get_meta_cache().ok_or(AllocError)?;
+
 		let meta_cache = unsafe { meta_cache_ptr.as_mut() };
-		meta_cache.alloc()
+		let ret = meta_cache.alloc();
+
+		if size_cache
+			.partial
+			.first()
+			.is_some_and(|h| unsafe { h.as_ref() }.is_full())
+		{
+			size_cache.partial.head_to_next();
+		}
+
+		ret
 	}
 
 	/// # Safety
 	///
 	/// `ptr` must point a memory block allocated by `self`.
 	unsafe fn deallocate(&mut self, ptr: NonNull<u8>) {
-		self.partial
-			.remove_if(|meta_cache| meta_cache.contains(ptr))
-			.map(|mut node| {
-				let meta_cache = unsafe { node.cast::<MetaCache>().as_mut() };
-				meta_cache.dealloc(ptr);
+		let mut size_cache = self.lock();
 
-				let node = unsafe { node.as_mut() };
-				self.partial.push_front(node);
-			});
+		let page = match ptr_to_allocated_page(ptr) {
+			Some(p) => p,
+			None => return,
+		};
+
+		let mut node = page.cast::<Node<MetaCache>>();
+
+		size_cache.partial.remove(node.as_mut());
+
+		let meta_cache = node.as_mut().data_mut();
+		meta_cache.dealloc(ptr);
+
+		if meta_cache.is_free() && size_cache.page_count >= MAX_CACHE_PAGE_PER_ALLOCATOR {
+			size_cache.dealloc_pages(meta_cache);
+		} else {
+			size_cache.partial.push_front(node.as_mut());
+		}
 	}
 
-	fn contains(&mut self, ptr: NonNull<u8>) -> bool {
-		self.partial
-			.find(|meta_cache| meta_cache.contains(ptr))
-			.is_some()
+	fn cache_shrink(&mut self) {
+		let mut size_cache = self.lock();
+
+		trace_feature!(
+			"oom",
+			"size_cache<{}>: before shrink: page_count: {}",
+			SizeCache::<N>::SIZE,
+			size_cache.page_count
+		);
+
+		let m_cache_list = &mut size_cache.partial;
+
+		let (mut satisfied, not) = m_cache_list.iter_mut().partition(|m| m.is_free());
+		(*m_cache_list) = not;
+
+		satisfied
+			.iter_mut()
+			.for_each(|meta_cache| size_cache.dealloc_pages(meta_cache));
+
+		trace_feature!(
+			"oom",
+			"size_cache<{}>: after shrink: page_count: {}",
+			SizeCache::<N>::SIZE,
+			size_cache.page_count
+		);
 	}
 }
 
-impl<const N: usize> Default for SizeCache<N> {
+impl<const N: usize> Default for Locked<SizeCache<N>> {
 	fn default() -> Self {
-		Self::new()
+		trace_feature!("size_cache", "size_cache<{}> generated", N);
+		Locked::new(SizeCache::<N>::new())
 	}
 }
 
-const fn rank_of(size: usize) -> usize {
+const fn rank_of(size: usize, count: usize) -> usize {
 	const NODE_SIZE: usize = size_of::<Node<MetaCache>>();
-	const META_CACHE_SIZE: usize = align_with_hw_cache(NODE_SIZE);
+	const META_SIZE: usize = align_with_hw_cache(NODE_SIZE);
 
-	let size = size + META_CACHE_SIZE;
-	let mut rank = 0;
-	let mut count = (size - 1) / PAGE_SIZE;
+	let size = size * count + META_SIZE;
+	let page_align = next_align(size, PAGE_SIZE);
+	let page_size = page_align.next_power_of_two();
 
-	while count > 0 {
-		count /= 2;
-		rank += 1;
-	}
-	rank
+	size_to_rank(page_size)
 }
 
 pub mod tests {
@@ -149,17 +205,17 @@ pub mod tests {
 	use core::ptr::NonNull;
 	use kfs_macro::ktest;
 
-	pub fn get_head(cache: &mut dyn CacheTrait) -> &mut MetaCache {
-		let ret = unsafe { cache.partial().head().unwrap().as_mut() };
+	pub fn get_head<const N: usize>(cache: &mut SizeCache<N>) -> &mut MetaCache {
+		let ret = unsafe { cache.partial.first().unwrap().as_mut() };
 		ret
 	}
 
-	pub fn head_check(cache: &mut dyn CacheTrait, inuse: usize, rank: usize) {
+	pub fn head_check<const N: usize>(cache: &mut SizeCache<N>, inuse: usize, rank: usize) {
 		let head = get_head(cache);
 		let max = (size_of_rank(head.rank()) - MetaCache::META_SIZE) / head.cache_size;
 
 		assert_eq!(head.free_list.count(), max - inuse);
-		assert_eq!(head.inuse, inuse);
+		assert_eq!(head.inuse(), inuse);
 		assert_eq!(head.rank(), rank);
 	}
 
@@ -181,71 +237,71 @@ pub mod tests {
 	fn test_alloc() {
 		const SIZE: usize = 60;
 		const MAX_COUNT: usize = 63;
-		let mut cache = SizeCache::<SIZE>::new();
+		let mut cache = Locked::new(SizeCache::<SIZE>::new());
 
 		for i in 0..MAX_COUNT {
-			// 64 * 63 => 4032 + meta_cache(16) => full
+			// 64 * 63 => 4032 + meta_cache(64) => full
 			let _ = cache.allocate();
-			assert_eq!(cache.page_count, 1);
-			assert_eq!(cache.partial.count(), 1);
+			assert_eq!(cache.lock().page_count, 1);
+			assert_eq!(cache.lock().partial.count(), 1);
 
-			head_check(&mut cache, i + 1, 0);
+			head_check(&mut cache.lock(), i + 1, 0);
 		}
 
 		let _ = cache.allocate();
-		assert_eq!(cache.page_count, 2);
-		assert_eq!(cache.partial.count(), 2);
+		assert_eq!(cache.lock().page_count, 2);
+		assert_eq!(cache.lock().partial.count(), 2);
 
-		head_check(&mut cache, 1, 0);
+		head_check(&mut cache.lock(), 1, 0);
 	}
 
 	#[ktest]
 	fn test_dealloc() {
 		const SIZE: usize = 60;
-		const MAX_COUNT: usize = 63;
-		let mut cache = SizeCache::<SIZE>::new();
+		const END: usize = 63;
+		let mut cache = Locked::new(SizeCache::<SIZE>::new());
 
 		// dealloc one when the inuse is 1.
 		let ptr = cache.allocate();
-		head_check(&mut cache, 1, 0);
+		head_check(&mut cache.lock(), 1, 0);
 		unsafe { cache.deallocate(ptr.unwrap().cast()) };
 
-		assert_eq!(cache.partial.count(), 1);
-		head_check(&mut cache, 0, 0);
+		assert_eq!(cache.lock().partial.count(), 1);
+		head_check(&mut cache.lock(), 0, 0);
 
 		// dealloc one when the inuse of 2nd memory block is 1.
 		let mut ptrs: [NonNull<u8>; 64] = [NonNull::dangling(); 64];
-		for i in 0..MAX_COUNT {
+		for i in 0..END {
 			ptrs[i] = cache.allocate().unwrap().cast();
 		}
 
 		let ptr = cache.allocate();
 		unsafe { cache.deallocate(ptr.unwrap().cast()) };
 
-		assert_eq!(cache.partial.count(), 2);
-		head_check(&mut cache, 0, 0);
+		assert_eq!(cache.lock().partial.count(), 2);
+		head_check(&mut cache.lock(), 0, 0);
 
 		// dealloc whole in one memory block.
-		for i in 0..MAX_COUNT {
+		for i in 0..END {
 			let ptr = ptrs[i];
 			unsafe { cache.deallocate(ptr.cast()) };
 
-			let head = unsafe { cache.partial.head().unwrap().as_mut() };
+			let head = unsafe { cache.lock().partial.first().unwrap().as_mut() };
 			assert_eq!(head.free_list.count(), i + 1);
-			assert_eq!(head.inuse, MAX_COUNT - (i + 1));
+			assert_eq!(head.inuse(), END - (i + 1));
 		}
 	}
 
 	#[ktest]
 	fn test_alloc_bound() {
 		fn do_test<const N: usize>(rank: usize) {
-			let mut cache = SizeCache::<N>::new();
+			let mut cache = Locked::new(SizeCache::<N>::new());
 			let _ = cache.allocate();
-			head_check(&mut cache, 1, rank);
+			head_check(&mut cache.lock(), 1, rank);
 		}
-		do_test::<4032>(0);
-		do_test::<4064>(1);
-		do_test::<4080>(1);
+		do_test::<1024>(1);
+		do_test::<2048>(2);
+		do_test::<4096>(3);
 	}
 
 	#[ktest]
@@ -270,20 +326,20 @@ pub mod tests {
 	fn test_shrink() {
 		const SIZE: usize = 1024;
 
-		fn meta_cache_count_check(cache: &mut SizeCache<SIZE>, previous: usize) {
-			assert_eq!(cache.partial.count(), previous);
+		fn meta_cache_count_check(cache: &mut Locked<SizeCache<SIZE>>, previous: usize) {
+			assert_eq!(cache.lock().partial.count(), previous);
 			cache.cache_shrink();
-			assert_eq!(cache.partial.count(), 0);
+			assert_eq!(cache.lock().partial.count(), 0);
 		}
 
 		// shrink one memory block.
-		let mut cache = SizeCache::<SIZE>::new();
+		let mut cache = Locked::new(SizeCache::<SIZE>::new());
 		let ptr = cache.allocate().unwrap();
 		unsafe { cache.deallocate(ptr.cast()) }
 		meta_cache_count_check(&mut cache, 1);
 
 		// shrink two memory block.
-		const MAX_COUNT: usize = 3;
+		const MAX_COUNT: usize = SizeCache::<SIZE>::DEFAULT_COUNT + 1;
 		let mut ptrs: [NonNull<u8>; MAX_COUNT] = [NonNull::dangling(); MAX_COUNT];
 		for i in 0..MAX_COUNT {
 			ptrs[i] = cache.allocate().unwrap().cast();

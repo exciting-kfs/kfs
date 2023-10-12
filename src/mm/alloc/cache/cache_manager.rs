@@ -2,6 +2,8 @@ use core::alloc::AllocError;
 use core::mem::size_of;
 use core::ptr::NonNull;
 
+use crate::sync::Locked;
+
 use super::{
 	no_alloc_list::{NAList, Node},
 	size_cache::SizeCache,
@@ -12,20 +14,20 @@ type Result<T> = core::result::Result<T, AllocError>;
 
 pub static mut CM: CacheManager = CacheManager::new();
 
-const CACHE_ALLOCATOR_SIZE: usize = size_of::<SizeCache<42>>();
+const CACHE_ALLOCATOR_SIZE: usize = size_of::<Locked<SizeCache<42>>>();
 const NODE_SIZE: usize = size_of::<Node<NonNull<dyn CacheTrait>>>();
 
 pub struct CacheManager {
-	cache_space: SizeCache<CACHE_ALLOCATOR_SIZE>,
-	node_space: SizeCache<NODE_SIZE>,
+	cache_space: Locked<SizeCache<CACHE_ALLOCATOR_SIZE>>,
+	node_space: Locked<SizeCache<NODE_SIZE>>,
 	list: NAList<NonNull<dyn CacheTrait>>,
 }
 
 impl CacheManager {
 	pub const fn new() -> Self {
 		CacheManager {
-			cache_space: SizeCache::new(),
-			node_space: SizeCache::new(),
+			cache_space: Locked::new(SizeCache::new()),
+			node_space: Locked::new(SizeCache::new()),
 			list: NAList::new(),
 		}
 	}
@@ -61,6 +63,7 @@ impl CacheManager {
 	pub unsafe fn drop_allocator(&mut self, ptr: NonNull<dyn CacheTrait>) {
 		let cache = &mut *(ptr.as_ptr() as *mut dyn CacheTrait);
 		cache.cache_shrink();
+
 		if !cache.empty() {
 			panic!("It can cause memory leak!");
 		}
@@ -114,7 +117,6 @@ unsafe fn init_list_node<'a>(
 	Node::construct_at(ptr, data)
 }
 
-#[cfg(ktest)]
 mod tests {
 	use super::*;
 	use crate::mm::alloc::cache::size_cache::tests::head_check;
@@ -123,21 +125,21 @@ mod tests {
 	#[ktest]
 	fn test_cache_alloc_dealloc() {
 		let mut cm = CacheManager::new();
-		let ptr = cm.new_allocator::<SizeCache<2048>>().unwrap();
+		let ptr = cm.new_allocator::<Locked<SizeCache<2048>>>().unwrap();
 		let _ = unsafe { &mut *(ptr.as_ptr()) };
 
-		head_check(&mut cm.cache_space, 1, 0);
-		head_check(&mut cm.node_space, 1, 0);
+		head_check(&mut cm.cache_space.lock(), 1, 0);
+		head_check(&mut cm.node_space.lock(), 1, 0);
 		assert_eq!(1, cm.list.count());
 
 		unsafe { cm.drop_allocator(ptr) };
 
-		head_check(&mut cm.node_space, 0, 0);
-		head_check(&mut cm.cache_space, 0, 0);
+		head_check(&mut cm.node_space.lock(), 0, 0);
+		head_check(&mut cm.cache_space.lock(), 0, 0);
 		assert_eq!(0, cm.list.count());
 	}
 
-	static mut SIZE_CACHE: SizeCache<1024> = SizeCache::new();
+	static mut SIZE_CACHE: Locked<SizeCache<1024>> = Locked::new(SizeCache::new());
 
 	#[ktest]
 	fn test_register_unregister() {
@@ -145,12 +147,16 @@ mod tests {
 
 		cm.register(unsafe { &mut SIZE_CACHE }).unwrap();
 
-		head_check(&mut cm.node_space, 1, 0);
+		head_check(&mut cm.node_space.lock(), 1, 0);
 		assert_eq!(1, cm.list.count());
 
 		cm.unregister(unsafe { &mut SIZE_CACHE });
 
-		head_check(&mut cm.node_space, 0, 0);
+		head_check(&mut cm.node_space.lock(), 0, 0);
 		assert_eq!(0, cm.list.count());
 	}
+}
+
+pub fn oom_handler() {
+	unsafe { CM.cache_shrink() };
 }

@@ -84,7 +84,7 @@ pub struct BlockPool {
 	pool: Locked<BTreeMap<BlockId, MaybeBlock>>,
 	lru: Arc<Locked<List<BidNode>>>,
 	dirty: Locked<BTreeSet<BlockId>>,
-	registered_count: AtomicUsize,
+	nr_block: AtomicUsize,
 }
 
 impl BlockPool {
@@ -94,7 +94,7 @@ impl BlockPool {
 			pool: Locked::new(BTreeMap::new()),
 			lru: Arc::new(Locked::new(List::new())),
 			dirty: Locked::new(BTreeSet::new()),
-			registered_count: AtomicUsize::new(0),
+			nr_block: AtomicUsize::new(0),
 		}
 	}
 
@@ -118,7 +118,7 @@ impl BlockPool {
 
 			lru.push_back(block.read_lock().node());
 			pool.insert(bid, MaybeBlock::Block(block));
-			self.registered_count.fetch_add(1, Ordering::Relaxed);
+			self.nr_block.fetch_add(1, Ordering::Relaxed);
 
 			self.dirty(bid);
 		}
@@ -151,7 +151,7 @@ impl BlockPool {
 		if let Some(block) = self.pool.lock().remove(&bid) {
 			if let MaybeBlock::Block(block) = block {
 				self.lru.lock().remove(block.read_lock().node());
-				self.registered_count.fetch_sub(1, Ordering::Relaxed);
+				self.nr_block.fetch_sub(1, Ordering::Relaxed);
 			}
 		}
 	}
@@ -268,13 +268,7 @@ impl BlockPool {
 	}
 
 	pub fn handle_overflow(&self, nr_block_limit: usize) {
-		trace_feature!(
-			"lru",
-			"handle_overflow: registered_count: {}",
-			self.registered_count.load(Ordering::Relaxed)
-		);
-
-		if self.registered_count.load(Ordering::Relaxed) <= nr_block_limit {
+		if self.nr_block.load(Ordering::Relaxed) <= nr_block_limit {
 			return;
 		}
 
@@ -297,10 +291,16 @@ impl BlockPool {
 
 			pool.remove(&bid);
 
-			if self.registered_count.fetch_sub(1, Ordering::Relaxed) <= nr_block_limit {
+			if self.nr_block.fetch_sub(1, Ordering::Relaxed) <= nr_block_limit {
 				break;
 			}
 		}
+
+		trace_feature!(
+			"lru" | "oom",
+			"handle_overflow: remain nr_block in pool: {}",
+			self.nr_block.load(Ordering::Relaxed)
+		);
 	}
 
 	fn insert_block(self: &Arc<Self>, bid: BlockId, block: IdeBlock) -> Arc<LockRW<Block>> {
@@ -315,7 +315,7 @@ impl BlockPool {
 
 					*o.get_mut() = MaybeBlock::Block(block.clone());
 					self.lru.lock().push_back(block.read_lock().node());
-					self.registered_count.fetch_add(1, Ordering::Relaxed);
+					self.nr_block.fetch_add(1, Ordering::Relaxed);
 					block
 				}
 			},

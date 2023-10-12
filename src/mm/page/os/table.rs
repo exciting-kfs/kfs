@@ -4,6 +4,7 @@ use core::ptr::NonNull;
 use core::slice::from_raw_parts_mut;
 
 use crate::boot::{self, BootAlloc};
+use crate::mm::constant::MAX_RANK;
 use crate::mm::util::*;
 use crate::sync::Locked;
 
@@ -52,4 +53,27 @@ pub fn meta_to_index(page: NonNull<MetaPage>) -> usize {
 
 pub fn index_to_meta(index: usize) -> NonNull<MetaPage> {
 	NonNull::from(unsafe { META_PAGE_TABLE.lock().assume_init_mut() }.index_mut(index))
+}
+
+fn pfn_to_rank(pfn: usize) -> Option<usize> {
+	let rank = pfn.trailing_zeros() as usize;
+
+	(rank <= MAX_RANK).then_some(rank)
+}
+
+fn ptr_to_allocated_meta(ptr: NonNull<u8>) -> Option<NonNull<MetaPage>> {
+	let mut index = addr_to_pfn(virt_to_phys(ptr.as_ptr() as usize));
+	let mut page = index_to_meta(index);
+
+	while !unsafe { page.as_ref() }.inuse() {
+		let rank = pfn_to_rank(index)?;
+		index ^= rank_to_pages(rank);
+		page = index_to_meta(index);
+	}
+
+	Some(page)
+}
+
+pub fn ptr_to_allocated_page(ptr: NonNull<u8>) -> Option<NonNull<u8>> {
+	ptr_to_allocated_meta(ptr).map(|m| meta_to_ptr(m))
 }

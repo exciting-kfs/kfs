@@ -1,5 +1,5 @@
 use super::constant::*;
-use core::{alloc::Layout, arch::asm};
+use core::arch::asm;
 
 #[inline]
 pub const fn addr_to_pfn(addr: usize) -> usize {
@@ -164,30 +164,17 @@ mod test {
 	}
 }
 
-pub fn level_of(layout: Layout) -> usize {
-	let size = layout.size();
-	let align = layout.align();
-
-	if size <= 1 && align == 1 {
-		return LEVEL_MIN;
-	}
-
-	let rank = unsafe {
-		match size > align {
-			true => bit_scan_reverse(size - 1) + 1,
-			false => bit_scan_reverse(align - 1) + 1,
-		}
-	};
-
-	LEVEL_MIN + rank.checked_sub(LEVEL_MIN).unwrap_or_default()
-}
-
 pub const fn align_with_hw_cache(bytes: usize) -> usize {
 	const CACHE_LINE_SIZE: usize = 64; // L1
 
 	match bytes {
 		0..=16 => 16,
 		17..=32 => 32,
-		_ => CACHE_LINE_SIZE * ((bytes - 1) / CACHE_LINE_SIZE + 1),
+		_ => next_align(bytes, CACHE_LINE_SIZE),
 	}
+}
+
+pub const fn multiplier_bigger_than(bytes: usize) -> usize {
+	let size = bytes.next_power_of_two();
+	(size - 1).trailing_ones() as usize
 }

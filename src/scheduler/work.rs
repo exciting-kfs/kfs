@@ -4,6 +4,7 @@ use core::{alloc::AllocError, mem::MaybeUninit};
 use alloc::sync::Arc;
 use alloc::{boxed::Box, collections::LinkedList};
 
+use crate::mm::oom::wake_up_oom_handler;
 use crate::process::task::{State, Task};
 use crate::sync::Locked;
 
@@ -98,7 +99,7 @@ pub fn slow_worker(_: usize) {
 		for mut work in works {
 			if let Err(e) = work.work() {
 				match e {
-					Error::Alloc => panic!("OOM Handling please"),
+					Error::Alloc => wake_up_oom_handler(),
 					Error::Retry => SLOW_WORK_POOL.lock().push_back(work),
 					Error::Next(next) => SLOW_WORK_POOL.lock().push_back(next),
 				}
