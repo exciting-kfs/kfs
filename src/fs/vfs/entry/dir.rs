@@ -10,7 +10,7 @@ use alloc::{
 use crate::{
 	fs::vfs::{entry::block::VfsBlockEntry, RealInode},
 	process::task::Task,
-	sync::Locked,
+	sync::{LocalLocked, Locked},
 	syscall::errno::Errno,
 };
 
@@ -25,7 +25,7 @@ pub struct VfsDirEntry {
 	pub(super) inode: Arc<dyn DirInode>,
 	parent: Weak<VfsDirEntry>,
 	sub_tree: Locked<BTreeMap<Ident, VfsEntry>>,
-	sub_mount: Locked<BTreeMap<Ident, VfsEntry>>,
+	sub_mount: LocalLocked<BTreeMap<Ident, VfsEntry>>,
 	next_mount: Option<Arc<VfsDirEntry>>,
 	super_block: Arc<dyn SuperBlock>,
 	is_mount_point: bool,
@@ -44,7 +44,7 @@ impl VfsDirEntry {
 			inode,
 			parent,
 			sub_tree: Locked::default(),
-			sub_mount: Locked::default(),
+			sub_mount: LocalLocked::default(),
 			super_block,
 			next_mount: None,
 			is_mount_point,
@@ -235,7 +235,7 @@ impl VfsDirEntry {
 			inode,
 			parent: Weak::default(),
 			sub_tree: Locked::default(),
-			sub_mount: Locked::default(),
+			sub_mount: LocalLocked::default(),
 			next_mount: Some(self.clone()),
 			super_block,
 			is_mount_point: true,
@@ -249,15 +249,33 @@ impl VfsDirEntry {
 		Ok(())
 	}
 
-	fn do_absolute_root_unmount(successor: Arc<Self>) {
-		ROOT_DIR_ENTRY.lock().replace(successor);
+	fn do_absolute_root_unmount(successor: Arc<Self>) -> Result<(), Errno> {
+		let mut root = ROOT_DIR_ENTRY.lock();
+
+		if let Some(dir) = &*root {
+			let fs = dir.super_block.filesystem();
+			fs.unmount(&dir.super_block)?;
+		}
+
+		root.replace(successor);
+
+		Ok(())
 	}
 
-	fn do_sub_unmount(successor: Arc<Self>, parent: Arc<Self>) {
+	fn do_sub_unmount(successor: Arc<Self>, parent: Arc<Self>) -> Result<(), Errno> {
 		let mut sub_mount = parent.sub_mount.lock();
-		// TODO unmount cleanup
-		let _ = sub_mount.remove::<[u8]>(successor.get_name().borrow());
+
+		// why the type of sub_mount is Map<_, VfsEntry> rather than Map<_, VfsDirEntry>?
+		if let Some(dir) = sub_mount
+			.get::<[u8]>(successor.get_name().borrow())
+			.and_then(|e| e.clone().downcast_dir().ok())
+		{
+			let fs = dir.super_block.filesystem();
+			fs.unmount(&dir.super_block)?;
+		}
+
 		sub_mount.insert(successor.get_name(), VfsEntry::new_dir(successor.clone()));
+		Ok(())
 	}
 
 	pub fn unmount(self: Arc<Self>, task: &Arc<Task>) -> Result<(), Errno> {
@@ -275,9 +293,7 @@ impl VfsDirEntry {
 		match Arc::ptr_eq(&self, &parent) {
 			true => Self::do_absolute_root_unmount(successor),
 			false => Self::do_sub_unmount(successor, parent),
-		};
-
-		Ok(())
+		}
 	}
 
 	pub fn remove_child_force(&self, name: &[u8]) {

@@ -1,127 +1,179 @@
-mod bgd;
+mod block_pool;
+mod constant;
+mod staged;
+
 pub mod dir;
 pub mod file;
 pub mod inode;
 pub mod sb;
+pub mod symlink;
 
-use core::{mem::size_of, sync::atomic::Ordering};
+pub use block_pool::block::Block;
 
-use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
+use core::{
+	mem::{size_of, transmute, MaybeUninit},
+	ptr::copy_nonoverlapping,
+	sync::atomic::Ordering,
+};
+
+use alloc::{
+	collections::{BTreeMap, BTreeSet},
+	sync::Arc,
+	vec::Vec,
+};
 
 use crate::{
-	driver::{
-		dev_num::DevNum,
-		ide::{
-			block::{Block, BlockSize},
-			dma::wait_io::WaitIO,
-			get_ide_controller,
-			ide_id::IdeId,
-			IdeController,
-		},
-		partition::{
-			entry::{EntryIndex, PartitionEntry},
-			table::get_partition_entry,
-		},
-	},
-	fs::ext2::{
-		inode::Inum,
-		sb::{SuperBlock, SuperBlockInfo},
-	},
-	sync::{LockRW, Locked, LockedGuard},
+	driver::partition::{BlockId, Partition},
+	fs::ext2::sb::SuperBlock,
+	mm::util::next_align,
+	sync::{LocalLocked, LockRW, Locked},
 	syscall::errno::Errno,
-	RUN_TIME,
+	trace_feature, RUN_TIME,
 };
 
 use self::{
-	bgd::{BGD, BGDT},
-	inode::DirInode,
+	block_pool::BlockPool,
+	dir::dir_inode::DirInode,
+	inode::inum::Inum,
+	sb::{
+		bgd::{BGD, BGDT},
+		info::SuperBlockInfo,
+	},
 };
 
-use super::vfs;
+use super::{
+	devfs::partition::PartBorrow,
+	vfs::{self, FileSystem},
+};
 
 const MAGIC: u16 = 0xef53; // TODO check this..
+
+static SB_POOL: Locked<BTreeMap<Vec<u8>, Arc<SuperBlock>>> = Locked::new(BTreeMap::new());
 
 pub struct Ext2;
 
 impl Ext2 {
-	fn read_superblock<'a>(
-		ide: &LockedGuard<'a, IdeController>,
-		entry: &PartitionEntry,
-	) -> Result<SuperBlockInfo, Errno> {
-		let block_size = BlockSize::from_sector_count(1).unwrap();
-		let mut mem = Block::new(block_size).map_err(|_| Errno::ENOMEM)?.into();
-		let sector = unsafe { mem.as_slice_mut(1) };
+	fn read_superblock<'a>(block_dev: &Arc<Partition>) -> Result<SuperBlockInfo, Errno> {
+		let mut sb: MaybeUninit<[u8; size_of::<SuperBlockInfo>()]> = MaybeUninit::uninit();
 
-		// The superblock is always located at byte offset 1024 from the begining of the partition.
-		let lba = entry.begin() + 2;
-		ide.ata.read_sectors(lba, sector);
+		unsafe {
+			let bid = BlockId::new_unchecked(0);
+			let block = match RUN_TIME.load(Ordering::Relaxed) {
+				true => block_dev.load(bid)?.into(),
+				false => block_dev.load_pio(bid)?.into(),
+			};
 
-		Ok(unsafe { mem.into::<SuperBlockInfo>().as_one().clone() })
+			let slice: &[u8] = block.as_slice_ref(1024 + size_of::<SuperBlockInfo>());
+
+			// The superblock is always located at byte offset 1024 from the begining of the partition.
+			copy_nonoverlapping(
+				slice.as_ptr().offset(1024),
+				sb.as_mut_ptr().cast(),
+				size_of::<SuperBlockInfo>(),
+			);
+
+			Ok(transmute(sb))
+		}
 	}
 
-	fn read_bgd_table<'a>(
-		ide: &LockedGuard<'a, IdeController>,
-		entry: &PartitionEntry,
-		sb: &SuperBlockInfo,
-	) -> Result<BGDT, Errno> {
+	fn read_bgd_table<'a>(block_dev: &Arc<Partition>, sb: &SuperBlockInfo) -> Result<BGDT, Errno> {
 		let mut v = Vec::new();
-		let table_size = size_of::<BGD>() * sb.group_count(); // Max: 8MB
+		let block_size = block_dev.block_size().as_bytes();
+		let table_size = sb.bgdt_size();
+		let begin_bid = sb.bgdt_bid();
+		let count = next_align(table_size, block_size) / block_size;
 
-		for (idx, start) in (0..table_size).step_by(BlockSize::MAX_KB).enumerate() {
-			// alloc block
-			let block_size = match table_size - start > BlockSize::MAX_KB {
-				true => BlockSize::BIGGEST,
-				false => unsafe { BlockSize::new_unchecked(table_size - start) },
-			};
-			let mut mem = Block::new(block_size).map_err(|_| Errno::ENOMEM)?.into();
-
-			// read sectors
-			let buf = unsafe { mem.as_slice_mut(block_size.sector_count()) };
-			let lba = unsafe {
-				sb.bgdt_lba(entry.begin())
-					.block_size_add_unchecked(BlockSize::BIGGEST, idx)
+		for bid in (0..count).map(|i| unsafe { BlockId::new_unchecked(begin_bid.inner() + i) }) {
+			let block = match RUN_TIME.load(Ordering::Relaxed) {
+				true => block_dev.load(bid)?,
+				false => block_dev.load_pio(bid)?,
 			};
 
-			ide.ata.read_sectors(lba, buf);
-
-			// store result
-			let count = block_size.as_bytes() / size_of::<BGD>();
-			let bgd = unsafe { mem.into::<[BGD]>().into_box_slice(count) };
+			let count = block_size / size_of::<BGD>();
+			let bgd = unsafe { block.into::<[BGD]>().into_box_slice(count) };
 			v.push(bgd);
 		}
+
 		Ok(BGDT::new(v).expect("ext2 always has BGDT"))
 	}
 }
 
-impl vfs::PhysicalFileSystem<SuperBlock, DirInode> for Ext2 {
-	fn mount(info: DevNum) -> Result<(Arc<SuperBlock>, Arc<DirInode>), Errno> {
-		let id = IdeId::from_devnum(&info).ok_or(Errno::EINVAL)?;
-		let ei = EntryIndex::from_devnum(&info).ok_or(Errno::EINVAL)?;
-		let maybe_entry = get_partition_entry(id, ei);
-		let entry = maybe_entry.get().ok_or(Errno::EINVAL)?;
+impl FileSystem for Ext2 {
+	fn unmount(&self, sb: &Arc<dyn vfs::SuperBlock>) -> Result<(), Errno> {
+		sb.unmount()?;
 
-		let ide = get_ide_controller(id);
-		let sb_data = Ext2::read_superblock(&ide, entry)?;
-		let bgd_table = Ext2::read_bgd_table(&ide, entry, &sb_data)?;
-		drop(ide);
+		trace_feature!("ext2-unmount", "SuperBlock unmounted: {:x?}", sb.id());
+		SB_POOL.lock().remove(&sb.id());
+
+		Ok(())
+	}
+}
+
+impl vfs::PhysicalFileSystem<SuperBlock, DirInode> for Ext2 {
+	fn mount(block_dev: PartBorrow) -> Result<(Arc<SuperBlock>, Arc<DirInode>), Errno> {
+		let mut sb_info = Ext2::read_superblock(&block_dev)?;
+		trace_feature!("ext2-mount", "sb: {:?}", sb_info);
+
+		block_dev.init(sb_info.block_size());
+
+		let bgd_table = Ext2::read_bgd_table(&block_dev, &sb_info)?;
+		let block_pool = Arc::new(BlockPool::new(block_dev));
+
+		sb_info.edit_for_mount();
 
 		let sb = Arc::new(SuperBlock {
-			ide_id: id,
-			entry: maybe_entry,
-			info: LockRW::new(sb_data),
-			bgd_table: LockRW::new(bgd_table),
+			info: LockRW::new(sb_info),
+			bgd_table: LocalLocked::new(bgd_table),
 			inode_cache: Locked::new(BTreeMap::new()),
-			wait_io: WaitIO::new(),
+			block_pool,
+			dirty_icache: Locked::new(BTreeSet::new()),
 		});
 
+		// TEST: dump bgd table
+		// {
+		// 	let iter = sb.bgd_table.iter(sb.block_size());
+
+		// 	for slice in iter {
+		// 		pr_debug!("{:?}", slice);
+		// 	}
+		// }
+
 		let inum = unsafe { Inum::new_unchecked(2) };
-		let root = match RUN_TIME.load(Ordering::Relaxed) {
+
+		let ret = match RUN_TIME.load(Ordering::Relaxed) {
 			true => sb.read_inode_dma(inum),
 			false => sb.read_inode_pio(inum).map_err(|_| Errno::ENOMEM),
-		}?
+		}
+		.and_then(|inode| {
+			inode.load_bid()?;
+			Ok(inode)
+		})?
 		.downcast_dir()
-		.unwrap();
+		.map(|root| (sb, Arc::new(root)))
+		.map_err(|_| Errno::EINVAL);
 
-		Ok((sb, Arc::new(root)))
+		if let Ok((sb, _)) = ret.as_ref() {
+			let uuid = sb.info.read_lock().uuid().to_vec();
+			trace_feature!(
+				"ext2-mount",
+				"SuperBlock mounted: {:x?}",
+				vfs::SuperBlock::id(sb.as_ref())
+			);
+			SB_POOL.lock().insert(uuid, sb.clone());
+		}
+
+		ret
+	}
+}
+
+pub fn init() -> Result<(), Errno> {
+	Ok(())
+}
+
+pub fn oom_handler() {
+	let map = SB_POOL.lock();
+
+	for (_, sb) in map.iter() {
+		sb.block_pool.handle_overflow(0);
 	}
 }

@@ -10,5 +10,8 @@ rustflags = [
 	"-C", "panic=abort",
 	"-C", "relocation-model=static",
 	'--cfg', 'log_level="debug"', # ALL = debug > info > warn > error
+	'--cfg', 'trace_feature="block_pool"',
+	'--cfg', 'trace_feature="lru"',
+	'--cfg', 'trace_feature="ext2-mount"',
 	'--cfg', 'trace_feature="ext2-unmount"',
 ]

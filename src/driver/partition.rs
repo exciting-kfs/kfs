@@ -1,5 +1,5 @@
-pub mod entry;
-pub mod table;
+mod entry;
+mod table;
 
 pub use table::NR_PRIMARY;
 
@@ -8,11 +8,11 @@ use core::alloc::AllocError;
 use alloc::{boxed::Box, collections::BTreeMap, sync::Arc};
 
 use crate::{
-	pr_debug,
 	process::task::CURRENT,
 	scheduler::preempt::{preempt_disable, AtomicOps},
-	sync::{Locked, ReadLockGuard},
+	sync::{LocalLocked, Locked, ReadLockGuard},
 	syscall::errno::Errno,
+	trace_feature,
 };
 
 use self::entry::MaybeEntry;
@@ -40,6 +40,7 @@ impl BlockId {
 		BlockId(0)
 	}
 
+	#[inline]
 	pub fn dangle() -> Self {
 		BlockId(usize::MAX)
 	}
@@ -65,7 +66,7 @@ pub struct Partition {
 	ide_id: IdeId,
 	entry: ReadLockGuard<'static, MaybeEntry>,
 	wait_io: WaitIO,
-	block_size: Locked<BlockSize>,
+	block_size: LocalLocked<BlockSize>,
 }
 
 impl Partition {
@@ -76,7 +77,7 @@ impl Partition {
 			entry,
 			ide_id,
 			wait_io: WaitIO::new(),
-			block_size: Locked::new(Self::DEFAULT_BLOCK_SIZE),
+			block_size: LocalLocked::new(Self::DEFAULT_BLOCK_SIZE),
 		}
 	}
 
@@ -85,6 +86,7 @@ impl Partition {
 	}
 
 	pub fn clear(&self) {
+		trace_feature!("umount", "partition: clear");
 		*self.block_size.lock() = Self::DEFAULT_BLOCK_SIZE;
 	}
 
@@ -93,6 +95,7 @@ impl Partition {
 	}
 
 	pub fn load(self: &Arc<Self>, bid: BlockId) -> Result<Block, Errno> {
+		trace_feature!("partition-load", "{:?}", bid);
 		let atomic = preempt_disable();
 		let event = self.ready_load(bid);
 		dma_schedule(self.ide_id, event);
@@ -100,6 +103,7 @@ impl Partition {
 	}
 
 	pub fn load_atomic(self: &Arc<Self>, bid: BlockId, atomic: AtomicOps) -> Result<Block, Errno> {
+		trace_feature!("partition-load" | "partition-load_atomic", "{:?}", bid);
 		let event = self.ready_load(bid);
 		dma_schedule(self.ide_id, event);
 		self.wait_io.wait(atomic)
@@ -141,6 +145,7 @@ impl Partition {
 	}
 
 	pub fn load_async(&self, bid: BlockId, call_back: Cleanup) {
+		trace_feature!("partition-load" | "partition-load_async", "{:?}", bid);
 		let ev = self.ready_load_async(bid, call_back);
 		dma_schedule(self.ide_id, ev);
 	}
@@ -206,9 +211,9 @@ pub fn ide_init(devices: [Option<IdeId>; NR_IDE_DEV]) {
 		let ide_id = unsafe { IdeId::new_unchecked(i / NR_PRIMARY) };
 		let dev = Partition::new(ide_id, ent.read_lock());
 
-		unsafe {
-			pr_debug!("{:?} {:?}", ide_id, ent.read_lock().get_unchecked());
-		}
+		trace_feature!("partition", "DEVICE: {:?}\n{:?}", ide_id, unsafe {
+			ent.read_lock().get_unchecked()
+		});
 
 		BLOCK_DEVICES.lock().insert(i as u8, Arc::new(dev));
 	}

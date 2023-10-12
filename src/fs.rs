@@ -19,7 +19,7 @@ pub use devfs::init as init_devfs;
 pub use procfs::init as init_procfs;
 pub use procfs::{change_cwd, create_fd_node, create_task_node, delete_fd_node, delete_task_node};
 
-use self::vfs::FileSystem;
+use self::vfs::MemoryFileSystem;
 
 pub fn init() -> Result<(), Errno> {
 	let (sb, inode) = TmpFs::mount()?;

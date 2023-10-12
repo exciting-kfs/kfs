@@ -4,7 +4,8 @@
 #include "kfs/internal/prelude.h"
 #include "kfs/syscall.h"
 
-DEFINE_SYSCALL(mount, 21, int, const char *, path, const char *, fs_name);
+DEFINE_SYSCALL(mount, 21, int, const char *, dev_path, const char *, mount_point, const char *,
+	       fs_name);
 DEFINE_SYSCALL(umount, 22, int, const char *, path);
 
 #endif // _SYS_MOUNT_H
