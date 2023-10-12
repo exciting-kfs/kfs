@@ -10,7 +10,6 @@ use alloc::{string::String, vec::Vec};
 use crate::{
 	driver::ide::{dma::DmaOps, ide_id::IdeId, lba::LBA28},
 	io::pmio::Port,
-	pr_warn,
 	util::bitrange::{BitData, BitRange},
 };
 
@@ -124,7 +123,7 @@ impl AtaController {
 	///
 	/// - Don't use at nIEN == 0.
 	pub fn read_sectors(&self, lba: LBA28, buf: &mut [MaybeUninit<RawSector>]) {
-		pr_warn!("read_sectors");
+		// pr_warn!("read_sectors");
 		self.do_command(Command::ReadSectors, lba, buf.len() as u16);
 		self.wait(|status| Self::is_drq(status));
 

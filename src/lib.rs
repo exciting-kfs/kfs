@@ -254,7 +254,7 @@ mod test_threads {
 
 			basket.iter().enumerate().for_each(|(i, ptr)| unsafe {
 				if i % 2048 == 0 {
-					pr_debug!("dalloc: {} MB", i * 2048 / MB)
+					pr_debug!("dalloc: {} MB", i * 2048 / MB);
 				}
 				Normal.deallocate(ptr.cast(), layout)
 			});
