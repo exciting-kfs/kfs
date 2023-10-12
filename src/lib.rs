@@ -98,7 +98,7 @@ fn run_process() -> ! {
 	// let stat = Task::new_kernel(show_page_stat as usize, 0).expect("OOM");
 	// schedule_last(stat);
 
-	// let stat = Task::new_kernel(oom_test as usize, 0).expect("OOM");
+	// let stat = Task::new_kernel(hello_ko as usize, 0).expect("OOM");
 	// schedule_last(stat);
 
 	let init = process::get_init_task();
@@ -266,5 +266,6 @@ mod test_threads {
 }
 
 pub fn do_something() {
-	pr_warn!("123");
+	pr_warn!("hello, world!!!");
+	// pr_warn!("123");
 }
