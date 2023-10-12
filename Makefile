@@ -210,6 +210,8 @@ $(TARGET_ROOT)/%.ko : $(TARGET_ROOT)/lib%.a $(KERNEL_BIN)
 		-r					\
 		-o $@				\
 		$<
+	@echo OBJCOPY $(notdir $@)
+	@$(OBJCOPY) --strip-debug $@
 
 .PHONY : $(LIB_KERNEL)
 $(LIB_KERNEL) : userspace

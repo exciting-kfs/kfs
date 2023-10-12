@@ -1,4 +1,7 @@
-use crate::{elf::Elf, syscall::errno::Errno};
+use crate::{
+	elf::{Elf, ElfError},
+	syscall::errno::Errno,
+};
 
 macro_rules! include_user_bin {
 	($name:literal) => {{
@@ -41,8 +44,8 @@ define_user_bin![
 	(TEST_ARGV, "test_argv.bin"),
 ];
 
-pub fn get_user_elf(name: &str) -> Result<Elf<'static>, Errno> {
-	get_user_bin(name)
-		.ok_or(Errno::ENOENT)
-		.and_then(|x| Elf::new(x))
+pub fn get_user_elf(name: &str) -> Result<Elf<'_>, Errno> {
+	let user_bin = get_user_bin(name).ok_or(Errno::ENOENT)?;
+
+	Elf::new(user_bin).map_err(|x| <ElfError as Into<Errno>>::into(x))
 }

@@ -1,23 +1,30 @@
-#include "kfs/libft.h"
 #include <unistd.h>
 
+#include "kfs/kernel.h"
+#include "kfs/libft.h"
+
 int main(void) {	
-	char *argv[] = {
-		"v1",
-		"v2",
-		"v3",
-		NULL,
-	};
+	int ret = init_module("/e2/hello.ko");
 
-	char *envp[] = {
-		"e1",
-		"e2",
-		"e3",
-		NULL,
-	};
+	ft_printf("x = %d\n", ret);
 
-	int ret = execve("test_argv.bin", argv, envp);
-	ft_printf("error: %d\n", ret);
+	// char *argv[] = {
+	// 	"v1",
+	// 	"v2",
+	// 	"v3",
+	// 	NULL,
+	// };
 
-	return 1;
+	// char *envp[] = {
+	// 	"e1",
+	// 	"e2",
+	// 	"e3",
+	// 	NULL,
+	// };
+
+
+	// int ret = execve("test_argv.bin", argv, envp);
+	// ft_printf("error: %d\n", ret);
+
+	return 0;
 }

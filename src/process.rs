@@ -17,7 +17,7 @@ use self::{
 	task::{Task, CURRENT},
 };
 
-use crate::{elf::Elf, user_bin, util::backtrace::kernel_stack_top};
+use crate::{user_bin::get_user_elf, util::backtrace::kernel_stack_top};
 use alloc::sync::Arc;
 
 static mut INIT_TASK: MaybeUninit<Arc<Task>> = MaybeUninit::uninit();
@@ -29,7 +29,7 @@ pub fn init() {
 	CURRENT.init(idle_task.clone());
 	unsafe { IDLE_TASK.write(idle_task) };
 
-	let init = Elf::new(user_bin::INIT).expect("invalid INIT elf file");
+	let init = get_user_elf("init.bin").expect("invalid INIT elf file");
 	let init_task = Task::new_init_task(Pid::allocate(), init).expect("OOM");
 	unsafe { INIT_TASK.write(init_task) };
 }

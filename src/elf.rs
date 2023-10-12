@@ -1,128 +1,143 @@
-use core::{mem::size_of, slice::from_raw_parts};
+pub mod kobject;
+pub mod syscall;
+
+mod file;
+mod relocation;
+mod section;
+mod segment;
+mod strtab;
+mod symtab;
+
+pub use file::{ElfHdr, ElfType};
+pub use relocation::Relocation;
+pub use section::{SectionFlag, SectionHdr, SectionType};
+pub use segment::{ProgramHdr, SegmentFlag, SegmentType};
+pub use strtab::StringTable;
+pub use symtab::{SectionHdrNdx, Symbol};
 
 use crate::{mm::user::vma::AreaFlag, syscall::errno::Errno};
+use core::{mem::size_of, slice::from_raw_parts};
 
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct FileHdr {
-	pub e_ident: [u8; 16],
-	pub e_type: u16,
-	pub e_machine: u16,
-	pub e_version: u32,
-	pub e_entry: usize,
-	pub e_phoff: usize,
-	pub e_shoff: usize,
-	pub e_flags: u32,
-	pub e_ehsize: u16,
-	pub e_phentsize: u16,
-	pub e_phnum: u16,
-	pub e_shentsize: u16,
-	pub e_shnum: u16,
-	pub e_shstrndx: u16,
-}
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-pub struct ProgramHdr {
-	pub p_type: u32,
-	pub p_offset: usize,
-	pub p_vaddr: usize,
-	pub p_paddr: usize,
-	pub p_filesz: usize,
-	pub p_memsz: usize,
-	pub p_flags: u32,
-	pub p_align: u32,
-}
-
-#[derive(Clone)]
 pub struct Elf<'a> {
-	pub contents: &'a [u8],
-	pub file_hdr: &'a FileHdr,
+	pub raw: &'a [u8],
+	pub elf_hdr: &'a ElfHdr,
 	pub program_hdrs: &'a [ProgramHdr],
+	pub section_hdrs: &'a [SectionHdr],
+	pub symbol_table: &'a [Symbol],
+	pub string_table: StringTable<'a>,
+}
+
+#[derive(Debug)]
+pub enum ElfError {
+	OutOfMemory,
+	OutOfBound,
+	InvalidElfType,
+	InvalidSectionType,
+	InvalidSegmentType,
+	InvalidRelatedSection,
+	SectionNotFound,
+	SymbolNotFound,
+	StringNotFound,
+}
+
+impl Into<Errno> for ElfError {
+	fn into(self) -> Errno {
+		match self {
+			ElfError::OutOfMemory => Errno::ENOMEM,
+			_ => Errno::ENOEXEC,
+		}
+	}
 }
 
 /// .ELF
 const ELF_SIGNATURE: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
 
-pub mod elf_type {
-	pub const NONE: u16 = 0;
-	pub const REL: u16 = 0x01;
-	pub const EXEC: u16 = 0x02;
-	pub const DYN: u16 = 0x03;
-	pub const CORE: u16 = 0x04;
-	pub const LOOS: u16 = 0xFE00;
-	pub const HIOS: u16 = 0xFEFF;
-	pub const LOPROC: u16 = 0xFF00;
-	pub const HIPROC: u16 = 0xFFFF;
+// pub struct ElfType(u16);
+
+fn check_size_and_deref_array<T>(
+	raw: &[u8],
+	base_offset: usize,
+	count: usize,
+) -> Result<&'_ [T], ElfError> {
+	if raw.len() < base_offset + size_of::<T>() * count {
+		return Err(ElfError::OutOfBound);
+	}
+
+	Ok(unsafe { from_raw_parts(((&raw[base_offset]) as *const u8).cast::<T>(), count) })
 }
 
-pub mod p_type {
-	pub const NULL: u32 = 0x00000000;
-	pub const LOAD: u32 = 0x00000001;
-	pub const DYNAMIC: u32 = 0x00000002;
-	pub const INTERP: u32 = 0x00000003;
-	pub const NOTE: u32 = 0x00000004;
-	pub const SHLIB: u32 = 0x00000005;
-	pub const PHDR: u32 = 0x00000006;
-	pub const TLS: u32 = 0x00000007;
-	pub const LOOS: u32 = 0x60000000;
-	pub const HIOS: u32 = 0x6FFFFFFF;
-	pub const LOPROC: u32 = 0x70000000;
-	pub const HIPROC: u32 = 0x7FFFFFFF;
-}
+fn check_size_and_deref<T>(raw: &[u8], base_offset: usize) -> Result<&'_ T, ElfError> {
+	if raw.len() < base_offset + size_of::<T>() {
+		return Err(ElfError::OutOfBound);
+	}
 
-pub mod p_flags {
-	pub const EXECUTE: u32 = 0x1;
-	pub const WRITE: u32 = 0x2;
-	pub const READ: u32 = 0x4;
-	pub const RW: u32 = WRITE | READ;
+	Ok(unsafe { &*((&raw[base_offset]) as *const u8).cast::<T>() })
 }
 
 impl<'a> Elf<'a> {
-	pub fn new(raw: &'a [u8]) -> Result<Self, Errno> {
-		if raw.len() < size_of::<FileHdr>() {
-			return Err(Errno::ENOEXEC);
+	pub fn new(raw: &'a [u8]) -> Result<Self, ElfError> {
+		let elf_hdr = check_size_and_deref::<ElfHdr>(raw, 0)?;
+
+		if &elf_hdr.e_ident[0..4] != &ELF_SIGNATURE {
+			return Err(ElfError::OutOfBound);
 		}
 
-		let file_hdr = unsafe { &*raw.as_ptr().cast::<FileHdr>() };
+		let program_hdrs = check_size_and_deref_array::<ProgramHdr>(
+			raw,
+			elf_hdr.e_phoff,
+			elf_hdr.e_phnum as usize,
+		)?;
 
-		if &file_hdr.e_ident[0..4] != &ELF_SIGNATURE {
-			return Err(Errno::ENOEXEC);
-		}
+		let section_hdrs = check_size_and_deref_array::<SectionHdr>(
+			raw,
+			elf_hdr.e_shoff,
+			elf_hdr.e_shnum as usize,
+		)?;
 
-		if raw.len() < file_hdr.e_phoff + (file_hdr.e_phnum as usize) * size_of::<ProgramHdr>() {
-			return Err(Errno::ENOEXEC);
-		}
+		let string_table = StringTable::new(
+			section_hdrs
+				.iter()
+				.find(|hdr| matches!(hdr.get_type(), Ok(SectionType::Strtab)))
+				.ok_or(ElfError::SectionNotFound)
+				.and_then(|hdr| {
+					check_size_and_deref_array::<u8>(raw, hdr.sh_offset, hdr.sh_size as usize)
+				})
+				.unwrap_or(&[]),
+		);
 
-		let program_hdrs = unsafe {
-			from_raw_parts(
-				((&raw[file_hdr.e_phoff]) as *const u8).cast::<ProgramHdr>(),
-				file_hdr.e_phnum as usize,
-			)
-		};
-
-		for hdr in program_hdrs {
-			if raw.len() < hdr.p_offset + hdr.p_filesz {
-				return Err(Errno::ENOEXEC);
-			}
-		}
+		let symbol_table = section_hdrs
+			.iter()
+			.find(|hdr| matches!(hdr.get_type(), Ok(SectionType::Symtab)))
+			.ok_or(ElfError::SectionNotFound)
+			.and_then(|hdr| {
+				check_size_and_deref_array::<Symbol>(
+					raw,
+					hdr.sh_offset,
+					hdr.sh_size as usize / size_of::<Symbol>(),
+				)
+			})
+			.unwrap_or(&[]);
 
 		Ok(Self {
-			contents: raw,
-			file_hdr,
+			raw,
+			elf_hdr,
 			program_hdrs,
+			section_hdrs,
+			symbol_table,
+			string_table,
 		})
 	}
 
-	pub fn loadable_sections(&self) -> LoadSectionIter<'a> {
+	pub fn loadable_sections(&'a self) -> LoadSectionIter<'a> {
 		LoadSectionIter {
-			elf: self.clone(),
+			raw: self.raw,
+			program_hdrs: self.program_hdrs,
 			idx: 0,
 		}
 	}
 
 	pub fn get_entry_point(&self) -> usize {
-		self.file_hdr.e_entry
+		self.elf_hdr.e_entry
 	}
 }
 
@@ -134,24 +149,16 @@ pub struct LoadSection<'a> {
 }
 
 pub struct LoadSectionIter<'a> {
-	elf: Elf<'a>,
+	raw: &'a [u8],
+	program_hdrs: &'a [ProgramHdr],
 	idx: usize,
-}
-
-fn p_flags_to_area_flag(p_flags: u32) -> AreaFlag {
-	match p_flags & (p_flags::READ | p_flags::WRITE) {
-		p_flags::READ => AreaFlag::Readable,
-		p_flags::WRITE => AreaFlag::Writable,
-		p_flags::RW => AreaFlag::Readable | AreaFlag::Writable,
-		_ => AreaFlag::empty(),
-	}
 }
 
 impl<'a> Iterator for LoadSectionIter<'a> {
 	type Item = LoadSection<'a>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		let program_hdrs = self.elf.program_hdrs;
+		let program_hdrs = self.program_hdrs;
 
 		if program_hdrs.len() <= self.idx {
 			return None;
@@ -161,7 +168,7 @@ impl<'a> Iterator for LoadSectionIter<'a> {
 
 		let load_hdr_idx = remain_hdrs
 			.iter()
-			.position(|x| x.p_type == p_type::LOAD)
+			.position(|x| matches!(SegmentType::new(x.p_type), Ok(SegmentType::Load)))
 			.unwrap_or(remain_hdrs.len());
 
 		self.idx += load_hdr_idx + 1;
@@ -172,10 +179,10 @@ impl<'a> Iterator for LoadSectionIter<'a> {
 
 		let phdr = &remain_hdrs[load_hdr_idx];
 
-		let data = &self.elf.contents[phdr.p_offset..phdr.p_offset + phdr.p_filesz];
+		let data = &self.raw[phdr.p_offset..phdr.p_offset + phdr.p_filesz];
 		let vaddr = phdr.p_vaddr;
 		let mem_size = phdr.p_memsz;
-		let flags = p_flags_to_area_flag(phdr.p_flags);
+		let flags = SegmentFlag::from_bits_truncate(phdr.p_flags).into();
 
 		Some(LoadSection {
 			data,
