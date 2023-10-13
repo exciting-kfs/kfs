@@ -1,0 +1,186 @@
+use core::{cmp::max, mem::size_of};
+
+use alloc::{
+	sync::Arc,
+	vec::{self, Vec},
+};
+
+use crate::{
+	driver::partition::BlockId, fs::ext2::block_pool::BlockPool, sync::WriteLockGuard,
+	syscall::errno::Errno, trace_feature,
+};
+
+use super::{Chunk, Command, Depth, IdSpaceAdjust, Indexes, Inode, StackHelper};
+
+pub struct IdSapceWrite<'a> {
+	inode: WriteLockGuard<'a, Inode>,
+}
+
+impl<'a> IdSapceWrite<'a> {
+	pub fn from_adjust(adjust: IdSpaceAdjust<'a>) -> Self {
+		let IdSpaceAdjust { inode } = adjust;
+		Self { inode }
+	}
+
+	pub fn sync_with_data(&mut self) -> Result<(), Errno> {
+		let data_len = self.inode.chunks.len();
+		let prev_len = self.inode.synced_len;
+
+		trace_feature!(
+			"ext2-idspace",
+			"sync_wit_data: array: {:?}",
+			self.inode.info.block
+		);
+
+		if prev_len < data_len {
+			let mut bids = self.blockids();
+			bids.push(unsafe { BlockId::new_unchecked(0) });
+
+			for i in prev_len..12 {
+				self.inode.info.block[i] = bids[i].as_u32();
+			}
+
+			let stream: Vec<BlockId> = bids.drain(max(prev_len, 12)..).collect();
+			let stack = self.prepare_stack(prev_len)?;
+			let pool = self.inode.block_pool();
+
+			IdWriter::new(pool, stream, stack).write()?;
+		} else if prev_len > data_len {
+			for i in data_len..15 {
+				self.inode.info.block[i] = 0;
+			}
+
+			let mut stack = self.prepare_stack(data_len)?;
+			if let Some(mut depth) = stack.pop() {
+				depth.chunk().slice()[0] = 0;
+			}
+		}
+
+		self.inode.synced_len = data_len;
+		Ok(())
+	}
+
+	fn blockids(&self) -> Vec<BlockId> {
+		self.inode.chunks.clone()
+	}
+
+	#[inline]
+	fn nr_id_in_block(&self) -> usize {
+		self.inode.block_size() / size_of::<u32>()
+	}
+
+	fn stack_helper(&self) -> StackHelper<'_> {
+		StackHelper::new(&self.inode)
+	}
+
+	fn prepare_stack(&self, index: usize) -> Result<Vec<Depth>, Errno> {
+		let id_count = self.nr_id_in_block();
+		let indexes = Indexes::split(index, id_count);
+		let mut helper = self.stack_helper();
+
+		match indexes {
+			Indexes::Depth3 { mut blk_i } => {
+				blk_i[2] -= 1;
+
+				helper.push_block_slice_recursive(14, &blk_i)?;
+				Ok(helper.into_stack())
+			}
+			Indexes::Depth2 { mut blk_i } => {
+				blk_i[1] -= 1;
+
+				helper.push_block_one(14, 2)?;
+				helper.push_block_slice_recursive(13, &blk_i)?;
+
+				Ok(helper.into_stack())
+			}
+			Indexes::Depth1 { mut blk_i } => {
+				blk_i[0] -= 1;
+
+				helper.push_block_one(14, 2)?;
+				helper.push_block_one(13, 1)?;
+				helper.push_block_slice_recursive(12, &blk_i)?;
+
+				Ok(helper.into_stack())
+			}
+			Indexes::Depth0 => {
+				helper.push_block_one(14, 2)?;
+				helper.push_block_one(13, 1)?;
+				helper.push_block_one(12, 0)?;
+
+				Ok(helper.into_stack())
+			}
+		}
+	}
+}
+
+struct IdWriter {
+	block_pool: Arc<BlockPool>,
+	stack: Vec<Depth>,
+	stream: vec::IntoIter<BlockId>,
+}
+
+impl IdWriter {
+	fn new(block_pool: &Arc<BlockPool>, bids: Vec<BlockId>, stack: Vec<Depth>) -> Self {
+		Self {
+			block_pool: block_pool.clone(),
+			stack,
+			stream: bids.into_iter(),
+		}
+	}
+
+	pub fn write(&mut self) -> Result<(), Errno> {
+		let stack = &mut self.stack;
+		let stream = &mut self.stream;
+
+		loop {
+			let top = match stack.last_mut() {
+				None => break Ok(()),
+				Some(top) => top,
+			};
+
+			let command = Self::__run(&self.block_pool, top, stream)?;
+
+			match command {
+				Command::End => break Ok(()),
+				Command::Push(lv) => stack.push(lv),
+				Command::Pop => {
+					stack.pop();
+				}
+			}
+		}
+	}
+
+	fn __run(
+		block_pool: &Arc<BlockPool>,
+		top: &mut Depth,
+		stream: &mut vec::IntoIter<BlockId>,
+	) -> Result<Command, Errno> {
+		match top {
+			Depth::Zero(chunk) => {
+				for s in chunk.slice().iter_mut() {
+					let bid = match stream.next() {
+						Some(id) => id,
+						None => return Ok(Command::End),
+					};
+					*s = bid.as_u32();
+				}
+				Ok(Command::Pop)
+			}
+			Depth::NonZero(level, chunk) => {
+				let s = match chunk.split_first() {
+					Some(s) => s,
+					None => return Ok(Command::Pop),
+				};
+
+				let bid = unsafe { BlockId::new_unchecked(s[0] as usize) };
+				let block = block_pool.get_or_load(bid)?;
+
+				let len = block.read_lock().size() / size_of::<u32>();
+				let chunk = Chunk::new(&block, 0..len);
+				let level = Depth::new(*level - 1, chunk);
+
+				Ok(Command::Push(level))
+			}
+		}
+	}
+}

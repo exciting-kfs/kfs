@@ -1,323 +1,255 @@
-use core::mem::size_of;
-
-use alloc::{collections::VecDeque, sync::Arc, vec::Vec};
-
-use crate::{
-	driver::partition::BlockId,
-	fs::ext2::{sb::SuperBlock, Block},
-	sync::{LockRW, ReadLockGuard, WriteLockGuard},
-	syscall::errno::Errno,
-	trace_feature,
-};
+mod id_adjust;
+mod id_read;
+mod id_write;
 
 use super::Inode;
 
-pub struct IdSpaceRead<'a> {
-	inode: ReadLockGuard<'a, Inode>,
+pub use self::id_adjust::IdSpaceAdjust;
+pub use self::id_read::IdSpaceRead;
+pub use self::id_write::IdSapceWrite;
+
+use core::{
+	mem::size_of,
+	ops::{Deref, DerefMut, Range},
+};
+
+use alloc::{sync::Arc, vec::Vec};
+
+use crate::{
+	driver::partition::BlockId,
+	fs::ext2::Block,
+	sync::{LockRW, WriteLockGuard},
+	syscall::errno::Errno,
+};
+
+enum Command {
+	Push(Depth),
+	Pop,
+	End,
 }
 
-impl<'a> IdSpaceRead<'a> {
-	pub fn new(inode: ReadLockGuard<'a, Inode>) -> Self {
-		Self { inode }
-	}
-
-	pub fn read_bid(&self) -> Result<Vec<BlockId>, Errno> {
-		let sb = &self.inode.super_block();
-		let block_info = &self.inode.info.block;
-		let mut v = Vec::new();
-
-		if self.__read_bid(sb, &mut v, &block_info[0..12], 0)? {
-			return Ok(v);
-		}
-
-		if self.__read_bid(sb, &mut v, &block_info[12..13], 1)? {
-			return Ok(v);
-		}
-
-		if self.__read_bid(sb, &mut v, &block_info[13..14], 2)? {
-			return Ok(v);
-		}
-
-		if self.__read_bid(sb, &mut v, &block_info[14..15], 3)? {
-			return Ok(v);
-		}
-		Ok(v)
-	}
-
-	fn __read_bid(
-		&self,
-		sb: &Arc<SuperBlock>,
-		bid_vec: &mut Vec<BlockId>,
-		slice: &[u32],
-		depth: usize,
-	) -> Result<bool, Errno> {
-		if depth == 0 {
-			for bid in slice {
-				if *bid == 0 {
-					return Ok(true);
-				}
-				let bid = unsafe { BlockId::new_unchecked(*bid as usize) };
-				bid_vec.push(bid);
-			}
-			return Ok(false);
-		}
-
-		for bid in slice {
-			let bid = unsafe { BlockId::new_unchecked(*bid as usize) };
-			trace_feature!(
-				"inode-load-bid",
-				"read_bid: depth, bid: {}, {:?}",
-				depth,
-				bid
-			);
-			let block = sb.block_pool.get_or_load(bid)?;
-			let block_read = block.read_lock();
-			let slice = block_read.as_slice_ref_u32();
-
-			if self.__read_bid(sb, bid_vec, slice, depth - 1)? {
-				return Ok(true);
-			}
-		}
-		Ok(false)
-	}
-
-	fn nr_id_space(&self, index: usize) -> usize {
-		let nr_bid = self.nr_id_in_block();
-
-		index
-			.checked_sub(13)
-			.map(|n| n / nr_bid)
-			.map(|n| if n == 0 { 1 } else { n + 2 })
-			.unwrap_or_default()
-	}
-
-	fn nr_id_in_block(&self) -> usize {
-		self.inode.block_size() / size_of::<u32>()
-	}
+enum Indexes {
+	Depth0,
+	Depth1 { blk_i: [isize; 1] },
+	Depth2 { blk_i: [isize; 2] },
+	Depth3 { blk_i: [isize; 3] },
 }
 
-pub struct IdSpaceAdjust<'a> {
-	inode: WriteLockGuard<'a, Inode>,
-}
-
-impl<'a> IdSpaceAdjust<'a> {
-	pub fn new(inode: WriteLockGuard<'a, Inode>) -> Self {
-		Self { inode }
-	}
-
-	pub fn adjust(&mut self) -> Result<(), Errno> {
-		let sync_len = self.inode.synced_len;
-		let data_len = self.inode.chunks.len();
-
-		let old_count = self.nr_id_space(sync_len);
-		let new_count = self.nr_id_space(data_len);
-
-		if new_count > old_count {
-			self.expand(old_count, new_count)?;
-		} else if new_count < old_count {
-			self.shrink(old_count, new_count)?;
-		}
-
-		self.inode.dirty();
-		Ok(())
-	}
-
-	fn nr_id_in_block(&self) -> usize {
-		self.inode.block_size() / size_of::<u32>()
-	}
-
-	fn nr_id_space(&self, index: usize) -> usize {
-		let id_count = self.nr_id_in_block();
-
-		index
-			.checked_sub(13)
-			.map(|n| n / id_count)
-			.map(|n| if n == 0 { 1 } else { n + 2 })
-			.unwrap_or_default()
-	}
-
-	fn shrink(&mut self, old_count: usize, new_count: usize) -> Result<(), Errno> {
-		let sb = self.inode.super_block().clone();
-		let bids = {
-			let mut bids = self.read_id_space(old_count)?;
-			bids.truncate(new_count);
-			bids
-		};
-
-		let mut staged = Vec::new();
-		for bid in bids {
-			let s = sb.dealloc_block_staged(bid)?;
-			staged.push(s);
-		}
-
-		if new_count <= 1 {
-			self.inode.info.block[14] = 0;
-		}
-		if new_count == 0 {
-			self.inode.info.block[13] = 0;
-		}
-
-		staged.iter_mut().for_each(|e| e.commit(()));
-
-		Ok(())
-	}
-
-	fn read_id_space(&self, old_count: usize) -> Result<VecDeque<BlockId>, Errno> {
-		let mut v = VecDeque::new();
-
-		let sb = self.inode.super_block();
-		let info = &self.inode.info;
-		let b_13 = info.bid_array(13).unwrap();
-		let b_14 = info.bid_array(14).unwrap();
-
-		if b_13.inner() > 0 {
-			v.push_front(b_13);
-		}
-
-		if b_14.inner() > 0 {
-			v.push_front(b_14);
-
-			let id_space = sb.block_pool.get_or_load(b_14)?;
-			let id_space = id_space.read_lock();
-			let bids = id_space.as_slice_ref_u32();
-
-			(0..(old_count - 2))
-				.zip(bids)
-				.for_each(|(_, b)| v.push_front(unsafe { BlockId::new_unchecked(*b as usize) }))
-		}
-		Ok(v)
-	}
-
-	fn expand(&mut self, old_count: usize, new_count: usize) -> Result<(), Errno> {
-		let sb = self.inode.super_block().clone();
-		let block_pool = &sb.block_pool;
-
-		let depth2 = self.inode.info.bid_array(14).unwrap();
-		let depth2_need = new_count >= 3;
-		let depth2_alloced = depth2.inner() > 0;
-
-		let (id_array, id_space) = self.ready_id_space(depth2, depth2_need, depth2_alloced)?;
-		let bids = sb.reserve_blocks(new_count - old_count)?;
-
-		if let Some(id_space) = id_space {
-			{
-				let mut w_space = id_space.write_lock();
-				let space = id_array.iter_mut().chain(w_space.as_slice_mut_u32());
-				let space = space.skip(old_count);
-
-				bids.iter().zip(space).for_each(|(s, d)| *d = s.as_u32());
+impl Indexes {
+	fn split(index: usize, id_count: usize) -> Self {
+		let c = id_count;
+		if index >= c * c + c + 12 {
+			let d1 = (index - 12 - c) / (c * c) - 1;
+			let d2 = ((index - 12) / c - 1) % c;
+			let d3 = (index - 12) % c;
+			Indexes::Depth3 {
+				blk_i: [d1 as isize, d2 as isize, d3 as isize],
 			}
+		} else if index >= c + 12 {
+			let d1 = (index - 12) / c - 1;
+			let d2 = (index - 12) % c;
 
-			if !depth2_alloced {
-				unsafe {
-					let depth2 = self.inode.info.bid_array(14).unwrap();
-					block_pool.register(depth2, id_space.clone());
-				}
+			Indexes::Depth2 {
+				blk_i: [d1 as isize, d2 as isize],
+			}
+		} else if index >= 12 {
+			Indexes::Depth1 {
+				blk_i: [index as isize - 12],
 			}
 		} else {
-			bids.iter()
-				.zip(id_array.iter_mut())
-				.for_each(|(s, d)| *d = s.as_u32());
+			Indexes::Depth0
 		}
+	}
+
+	fn array_index(&self) -> usize {
+		match self {
+			Self::Depth0 => 12,
+			Self::Depth1 { blk_i: _ } => 12,
+			Self::Depth2 { blk_i: _ } => 13,
+			Self::Depth3 { blk_i: _ } => 14,
+		}
+	}
+}
+
+pub enum Depth {
+	Zero(Chunk),
+	NonZero(usize, Chunk),
+}
+
+impl Depth {
+	pub fn new(depth: usize, chunk: Chunk) -> Self {
+		match depth {
+			0 => Self::Zero(chunk),
+			x => Self::NonZero(x, chunk),
+		}
+	}
+
+	fn chunk(&mut self) -> &mut Chunk {
+		match self {
+			Self::NonZero(_, chunk) => chunk,
+			Self::Zero(chunk) => chunk,
+		}
+	}
+}
+
+impl core::fmt::Debug for Depth {
+	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+		match self {
+			Self::Zero(c) => write!(f, "lv: 0, rng: {:?}", c.range()),
+			Self::NonZero(lv, c) => write!(f, "lv: {}, rng: {:?}", lv, c.range()),
+		}
+	}
+}
+
+#[derive(Debug)]
+pub struct Chunk {
+	block: Arc<LockRW<Block>>,
+	range: Range<usize>,
+}
+
+impl Chunk {
+	pub fn new(block: &Arc<LockRW<Block>>, range: Range<usize>) -> Self {
+		Self {
+			block: block.clone(),
+			range,
+		}
+	}
+
+	fn slice(&mut self) -> Slice<'_> {
+		Slice::new(&mut self.block, self.range.clone())
+	}
+
+	fn len(&self) -> usize {
+		self.range.len()
+	}
+
+	fn split_first(&mut self) -> Option<Slice<'_>> {
+		if self.len() == 0 {
+			return None;
+		}
+
+		let block = &mut self.block;
+		let rng = &mut self.range;
+		let start = rng.start;
+
+		*rng = rng.start + 1..rng.end;
+		Some(Slice::new(block, start..start + 1))
+	}
+
+	fn range(&self) -> &Range<usize> {
+		&self.range
+	}
+}
+
+struct Slice<'a> {
+	block: WriteLockGuard<'a, Block>,
+	range: Range<usize>,
+}
+
+impl<'a> Slice<'a> {
+	fn new(block: &'a mut Arc<LockRW<Block>>, rng: Range<usize>) -> Self {
+		Self {
+			block: block.write_lock(),
+			range: rng,
+		}
+	}
+}
+
+impl<'a> Deref for Slice<'a> {
+	type Target = [u32];
+	fn deref(&self) -> &Self::Target {
+		&self.block.as_slice_ref_u32()[self.range.start..self.range.end]
+	}
+}
+
+impl<'a> DerefMut for Slice<'a> {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		&mut self.block.as_slice_mut_u32()[self.range.start..self.range.end]
+	}
+}
+
+struct StackHelper<'a> {
+	inode: &'a Inode,
+	stack: Vec<Depth>,
+	id_count: usize,
+}
+
+impl<'a> StackHelper<'a> {
+	fn new(inode: &'a Inode) -> Self {
+		let id_count = inode.block_size() / size_of::<u32>();
+		Self {
+			inode,
+			stack: Vec::new(),
+			id_count,
+		}
+	}
+
+	fn into_stack(self) -> Vec<Depth> {
+		let Self {
+			inode: _,
+			stack,
+			id_count: _,
+		} = self;
+
+		stack
+	}
+
+	fn push_block_one(&mut self, index: usize, depth: usize) -> Result<(), Errno> {
+		let block_pool = self.inode.block_pool();
+
+		if self.inode.info.block[index] > 0 {
+			let bid = self.inode.info.bid_array(index).unwrap();
+			let block = block_pool.get_or_load(bid)?;
+
+			let chunk = Chunk::new(&block, 0..self.id_count);
+			let depth = Depth::new(depth, chunk);
+
+			self.stack.push(depth);
+		}
+
 		Ok(())
 	}
 
-	fn ready_id_space(
+	fn push_block_slice_recursive(&mut self, arr_i: usize, blk_i: &[isize]) -> Result<(), Errno> {
+		let block_pool = self.inode.block_pool();
+		let bid = self.inode.info.bid_array(arr_i).unwrap();
+		let idspace = block_pool.get_or_load(bid)?;
+		let depth = blk_i.len() - 1;
+
+		self.__push_block_slice_recursive(&idspace, &blk_i, depth)?;
+
+		let start = (blk_i[0] + 1) as usize;
+		let chunk = Chunk::new(&idspace, start..self.id_count);
+		let depth = Depth::new(depth, chunk);
+		self.stack.push(depth);
+		Ok(())
+	}
+
+	fn __push_block_slice_recursive(
 		&mut self,
-		depth2: BlockId,
-		need: bool,
-		alloced: bool,
-	) -> Result<(&mut [u32], Option<Arc<LockRW<Block>>>), Errno> {
-		let sb = self.inode.super_block().clone();
-		let block_pool = &sb.block_pool;
-		let array = &mut self.inode.info.block;
-
-		Ok(match (need, alloced) {
-			(false, _) => (&mut array[13..14], None),
-			(true, true) => (&mut array[13..15], Some(block_pool.get_or_load(depth2)?)),
-			(true, false) => unsafe {
-				(&mut array[13..15], Some(block_pool.unregistered_block()?))
-			},
-		})
-	}
-}
-
-pub struct IdSapceWrite<'a> {
-	inode: WriteLockGuard<'a, Inode>,
-}
-
-impl<'a> IdSapceWrite<'a> {
-	pub fn from_adjust(adjust: IdSpaceAdjust<'a>) -> Self {
-		let IdSpaceAdjust { inode } = adjust;
-		Self { inode }
-	}
-
-	pub fn sync_with_data(&mut self) -> Result<(), Errno> {
-		let data_len = self.inode.chunks.len();
-		let prev_len = self.inode.synced_len;
-
-		if prev_len < data_len {
-			let bids = self.blockids();
-			let iter = &bids[prev_len..];
-			for (index, bid) in (prev_len..data_len).zip(iter) {
-				self.write_bid(index, *bid)?;
-			}
-		} else if prev_len > data_len {
-			self.write_bid(data_len, BlockId::zero())?;
+		idspace: &Arc<LockRW<Block>>,
+		blk_i: &[isize],
+		depth: usize,
+	) -> Result<(), Errno> {
+		if depth == 0 {
+			return Ok(());
 		}
 
-		self.inode.synced_len = data_len;
-		Ok(())
-	}
+		let (first, blk_i) = blk_i.split_first().expect("check slice length");
+		let block_pool = self.inode.block_pool();
+		let bid = idspace.read_lock().as_slice_ref_u32()[*first as usize];
+		let bid = unsafe { BlockId::new_unchecked(bid as usize) };
 
-	fn blockids(&self) -> Vec<BlockId> {
-		self.inode.chunks.clone()
-	}
+		let block = block_pool.get_or_load(bid)?;
 
-	fn nr_id_in_block(&self) -> usize {
-		self.inode.block_size() / size_of::<u32>()
-	}
+		self.__push_block_slice_recursive(&block, blk_i, depth - 1)?;
 
-	fn load_id_space(&self, id_space_index: usize) -> Result<Arc<LockRW<Block>>, Errno> {
-		let block_pool = &self.inode.super_block().block_pool;
-		let info = &self.inode.info;
+		let start = (blk_i[0] + 1) as usize;
+		let chunk = Chunk::new(&block, start..self.id_count);
+		let depth = Depth::new(depth - 1, chunk);
 
-		if id_space_index == 0 {
-			let bid = info.bid_array(13).unwrap();
-			block_pool.get_or_load(bid)
-		} else {
-			let bid = info.bid_array(14).unwrap();
-			let id_space = block_pool.get_or_load(bid)?;
-			let bid = id_space.read_lock().as_slice_ref_u32()[id_space_index - 1];
-
-			if bid > 0 {
-				let bid = unsafe { BlockId::new_unchecked(bid as usize) };
-				block_pool.get_or_load(bid)
-			} else {
-				Err(Errno::EINVAL)
-			}
-		}
-	}
-
-	fn write_bid(&mut self, index: usize, bid: BlockId) -> Result<(), Errno> {
-		let (id_space_index, local_index) = self.split_index(index);
-
-		if let Some(id_space_index) = id_space_index {
-			let block = self.load_id_space(id_space_index)?;
-			block.write_lock().as_slice_mut_u32()[local_index] = bid.as_u32();
-		} else {
-			self.inode.info.block[local_index] = bid.as_u32();
-		}
+		self.stack.push(depth);
 
 		Ok(())
-	}
-
-	fn split_index(&self, index: usize) -> (Option<usize>, usize) {
-		let id_count = self.nr_id_in_block();
-
-		match index.checked_sub(13) {
-			None => (None, index),
-			Some(i) => (Some(i / id_count), i % id_count),
-		}
 	}
 }
