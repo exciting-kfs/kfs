@@ -64,8 +64,11 @@ pub struct BitMap {
 }
 
 impl BitMap {
-	pub fn new(block: Arc<LockRW<Block>>, len: usize) -> Self {
-		BitMap { block, len }
+	pub fn new(block: &Arc<LockRW<Block>>, len: usize) -> Self {
+		BitMap {
+			block: block.clone(),
+			len,
+		}
 	}
 
 	pub fn find_free_space(&mut self) -> Option<usize> {

@@ -6,10 +6,17 @@ use core::{
 use crate::{
 	driver::{hpet::get_timestamp_second, ide::block::BlockSize, partition::BlockId},
 	fs::ext2::inode::inum::Inum,
+	process::task::CURRENT,
 	write_field,
 };
 
 use super::bgd::BGD;
+
+#[repr(u16)]
+enum FsState {
+	Valid = 1,
+	Error = 2,
+}
 
 #[derive(Clone)]
 #[repr(C)]
@@ -17,28 +24,28 @@ pub struct SuperBlockInfo {
 	inodes_count: u32,
 	blocks_count: u32,
 	r_blocks_count: u32,
-	free_blocks_count: u32, // ?
-	free_inodes_count: u32, // ?
+	free_blocks_count: u32,
+	free_inodes_count: u32,
 	first_data_block: u32,
 	log_block_size: u32,
 	log_frag_size: u32,
 	blocks_per_group: u32,
 	frags_per_group: u32,
 	inodes_per_group: u32,
-	pub(super) mtime: u32, // ?
-	pub(super) wtime: u32, // ?
-	mnt_count: u16,        // ?
-	max_mnt_count: u16,    // ?
+	mtime: u32,
+	pub(super) wtime: u32,
+	mnt_count: u16,
+	max_mnt_count: u16,
 	magic: u16,
-	state: u16,  // ?
+	state: u16,
 	errors: u16, // ?
 	minor_rev_level: u16,
 	lastcheck: u32,     // ?
 	checkinterval: u32, // ?
 	creator_os: u32,
 	rev_level: u32,
-	def_resuid: u16, // ?
-	def_resgid: u16, // ?
+	def_resuid: u16,
+	def_resgid: u16,
 	first_ino: u32,
 	inode_size: u16,
 	block_group_nr: u16,
@@ -48,7 +55,7 @@ pub struct SuperBlockInfo {
 	uuid: [u8; 16],
 	volume_name: [u8; 16],
 	last_mounted: [u8; 64],
-	algo_bitmap: u32, // ?
+	algo_bitmap: u32,
 	prealloc_blocks: u8,
 	prealloc_dir_blocks: u8,
 	_pad: u16,
@@ -123,7 +130,12 @@ impl SuperBlockInfo {
 	}
 
 	pub fn bitmap_index_to_block_id(&self, bgid: usize, index: usize) -> BlockId {
-		unsafe { BlockId::new_unchecked(bgid * self.blocks_per_group as usize + index) }
+		unsafe {
+			BlockId::new_unchecked(
+				bgid * self.blocks_per_group as usize
+					+ index + (1024 / self.block_size().as_bytes()),
+			)
+		}
 	}
 
 	pub fn sb_backup_bid(&self, buf: &mut [usize; 5]) {
@@ -141,15 +153,58 @@ impl SuperBlockInfo {
 		}
 	}
 
+	#[inline]
 	pub fn uuid(&self) -> &[u8] {
 		&self.uuid
 	}
 
 	pub fn edit_for_mount(&mut self) {
 		let sec = get_timestamp_second() as u32;
+		self.state = FsState::Error as u16;
 		self.wtime = sec;
 		self.mtime = sec;
 		self.mnt_count += 1;
+	}
+
+	pub fn edit_for_unmount(&mut self) {
+		let sec = get_timestamp_second() as u32;
+		self.state = FsState::Valid as u16;
+		self.wtime = sec;
+	}
+
+	#[inline]
+	pub fn dec_free_inodes_count(&mut self, count: usize) {
+		self.free_inodes_count -= count as u32;
+	}
+
+	#[inline]
+	pub fn inc_free_inodes_count(&mut self, count: usize) {
+		self.free_inodes_count += count as u32;
+	}
+
+	#[inline]
+	pub fn dec_free_blocks_count(&mut self, count: usize) {
+		self.free_blocks_count -= count as u32;
+	}
+
+	#[inline]
+	pub fn inc_free_blocks_count(&mut self, count: usize) {
+		self.free_blocks_count += count as u32;
+	}
+
+	#[inline]
+	pub fn free_inodes_count(&self) -> usize {
+		self.free_inodes_count as usize
+	}
+
+	pub fn free_blocks_count(&self) -> usize {
+		let current = unsafe { CURRENT.get_ref() };
+
+		if current.is_privileged() {
+			self.free_blocks_count as usize
+		} else {
+			(self.free_blocks_count - self.r_blocks_count) as usize
+		}
 	}
 }
 

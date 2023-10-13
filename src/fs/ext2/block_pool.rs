@@ -115,9 +115,9 @@ impl BlockPool {
 	}
 
 	pub unsafe fn register(self: &Arc<Self>, bid: BlockId, block: Arc<LockRW<Block>>) {
-		trace_feature!("block_pool", "block {:?} registered", bid);
-
 		if block.read_lock().is_unregistered() {
+			trace_feature!("block_pool", "block {:?} registered", bid);
+
 			block.write_lock().register(bid, self);
 
 			let mut pool = self.pool.lock();

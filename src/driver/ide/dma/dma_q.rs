@@ -4,7 +4,7 @@ use alloc::collections::LinkedList;
 
 use crate::{
 	driver::ide::{ide_id::IdeId, IdeController},
-	scheduler::work::schedule_slow_work,
+	scheduler::{context::yield_now, work::schedule_slow_work},
 	sync::{Locked, LockedGuard},
 	trace_feature,
 };
@@ -121,6 +121,12 @@ impl DmaQ {
 /// - lock order: ide - dma_q
 pub fn get_dma_q<'a>(id: IdeId) -> LockedGuard<'a, DmaQ> {
 	DMA_Q[id.channel()].lock()
+}
+
+pub fn wait_idle() {
+	while !(DMA_Q[0].lock().is_idle() && DMA_Q[1].lock().is_idle()) {
+		yield_now();
+	}
 }
 
 pub mod work {

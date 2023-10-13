@@ -80,6 +80,38 @@ impl BGD {
 	}
 }
 
+pub struct FreeBGD<'a> {
+	bgd: &'a mut BGD,
+	gid: usize,
+	count: usize,
+}
+
+impl<'a> FreeBGD<'a> {
+	fn new(bgd: &'a mut BGD, gid: usize, count: usize) -> Self {
+		Self { bgd, gid, count }
+	}
+
+	#[inline]
+	pub fn block_bitmap(&self) -> BlockId {
+		self.bgd.block_bitmap()
+	}
+
+	#[inline]
+	pub fn gid(&self) -> usize {
+		self.gid
+	}
+
+	#[inline]
+	pub fn free_count(&self) -> usize {
+		self.count
+	}
+
+	#[inline]
+	pub fn dec_free_blocks_count(&mut self, count: usize) {
+		self.bgd.free_blocks_count -= count as u16;
+	}
+}
+
 pub struct BGDT(Vec<Box<[BGD]>>);
 
 impl BGDT {
@@ -130,7 +162,7 @@ impl BGDT {
 		Some((chunk_index, local_index))
 	}
 
-	pub fn find_groups(&mut self, mut count: usize) -> Option<Vec<(usize, &mut BGD, usize)>> {
+	pub fn find_groups(&mut self, mut count: usize) -> Option<Vec<FreeBGD>> {
 		let mut v = Vec::new();
 		let mut bgid = 0;
 
@@ -139,12 +171,12 @@ impl BGDT {
 				let free = bgd.free_blocks_count as usize;
 				match free.checked_sub(count) {
 					Some(_) => {
-						v.push((bgid, bgd, count));
+						v.push(FreeBGD::new(bgd, bgid, count));
 						count = 0;
 						break;
 					}
 					None => {
-						v.push((bgid, bgd, free));
+						v.push(FreeBGD::new(bgd, bgid, free));
 						count -= free;
 					}
 				}
