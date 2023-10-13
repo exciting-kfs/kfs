@@ -38,6 +38,9 @@ DEFINE_SYSCALL(rmdir, 40, int, const char *, path);
 DEFINE_SYSCALL(unlink, 10, int, const char *, path);
 DEFINE_SYSCALL(symlink, 83, int, const char *, target, const char *, linkpath);
 
+
+DEFINE_SYSCALL(reboot, 80, int, int, cmd);
+
 #define SEEK_SET 0
 #define SEEK_CUR 1
 #define SEEK_END 2

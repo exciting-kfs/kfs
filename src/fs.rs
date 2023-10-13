@@ -31,3 +31,8 @@ pub fn init() -> Result<(), Errno> {
 
 	Ok(())
 }
+
+pub fn clean_up() -> Result<(), Errno> {
+	ext2::clean_up()?;
+	Ok(())
+}
