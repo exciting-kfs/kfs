@@ -178,6 +178,8 @@ impl LockRW<Inode> {
 		w_inode.synced_len = v.len();
 		w_inode.chunks = v;
 
+		trace_feature!("inode-load-bid", "chunks_len: {}", w_inode.chunks.len());
+
 		Ok(())
 	}
 

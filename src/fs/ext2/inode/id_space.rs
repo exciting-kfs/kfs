@@ -7,6 +7,7 @@ use crate::{
 	fs::ext2::{sb::SuperBlock, Block},
 	sync::{LockRW, ReadLockGuard, WriteLockGuard},
 	syscall::errno::Errno,
+	trace_feature,
 };
 
 use super::Inode;
@@ -25,15 +26,21 @@ impl<'a> IdSpaceRead<'a> {
 		let block_info = &self.inode.info.block;
 		let mut v = Vec::new();
 
-		if self.__read_bid(sb, &mut v, &block_info[0..13], 0)? {
+		if self.__read_bid(sb, &mut v, &block_info[0..12], 0)? {
 			return Ok(v);
 		}
 
-		if self.__read_bid(sb, &mut v, &block_info[13..14], 1)? {
+		if self.__read_bid(sb, &mut v, &block_info[12..13], 1)? {
 			return Ok(v);
 		}
 
-		self.__read_bid(sb, &mut v, &block_info[14..15], 2)?;
+		if self.__read_bid(sb, &mut v, &block_info[13..14], 2)? {
+			return Ok(v);
+		}
+
+		if self.__read_bid(sb, &mut v, &block_info[14..15], 3)? {
+			return Ok(v);
+		}
 		Ok(v)
 	}
 
@@ -57,6 +64,12 @@ impl<'a> IdSpaceRead<'a> {
 
 		for bid in slice {
 			let bid = unsafe { BlockId::new_unchecked(*bid as usize) };
+			trace_feature!(
+				"inode-load-bid",
+				"read_bid: depth, bid: {}, {:?}",
+				depth,
+				bid
+			);
 			let block = sb.block_pool.get_or_load(bid)?;
 			let block_read = block.read_lock();
 			let slice = block_read.as_slice_ref_u32();

@@ -63,6 +63,7 @@ impl SuperBlock {
 		F: Fn(&Arc<BlockPool>, BlockId) -> Result<Arc<LockRW<Block>>, E>,
 	{
 		if let Some(inode) = self.inode_cache.lock().get(&inum) {
+			trace_feature!("sb-read-inode", "info: {:?}", &*inode.info());
 			pr_debug!("read_inode: from cache: {:?}", inum);
 			return Ok(inode.clone());
 		}
@@ -71,6 +72,7 @@ impl SuperBlock {
 		let block = f(&self.block_pool, bid)?;
 		let inode = self.parse_to_inode(inum, block);
 
+		trace_feature!("sb-read-inode", "info: {:?}", &*inode.info());
 		pr_debug!("read_inode: from drive: {:?}", inum);
 		self.inode_cache.lock().insert(inum, inode.clone());
 
