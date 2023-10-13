@@ -1,4 +1,4 @@
-use crate::{driver::ps2, fs, test::exit_qemu_with};
+use crate::{driver::ps2, fs, process::task::CURRENT, test::exit_qemu_with};
 
 use super::errno::Errno;
 
@@ -24,6 +24,12 @@ impl Cmd {
 }
 
 pub fn sys_reboot(cmd: usize) -> Result<usize, Errno> {
+	let current = unsafe { CURRENT.get_ref() };
+
+	if !current.is_privileged() {
+		return Err(Errno::EPERM);
+	}
+
 	let cmd = Cmd::from_usize(cmd)?;
 
 	fs::clean_up()?;
