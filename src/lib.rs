@@ -50,7 +50,6 @@ use scheduler::context::yield_now;
 use scheduler::schedule_last;
 use scheduler::work::slow_worker;
 use test::{exit_qemu_with, TEST_ARRAY};
-use test_threads::{oom_test, show_page_stat};
 
 use crate::driver::apic::apic_timer::jiffies;
 use crate::driver::ide::dma::test::TEST_SECTOR_COUNT;
@@ -96,11 +95,11 @@ fn run_test() -> ! {
 }
 
 fn run_process() -> ! {
-	let stat = Task::new_kernel(show_page_stat as usize, 0).expect("OOM");
-	schedule_last(stat);
+	// let stat = Task::new_kernel(show_page_stat as usize, 0).expect("OOM");
+	// schedule_last(stat);
 
-	let stat = Task::new_kernel(oom_test as usize, 0).expect("OOM");
-	schedule_last(stat);
+	// let stat = Task::new_kernel(oom_test as usize, 0).expect("OOM");
+	// schedule_last(stat);
 
 	let init = process::get_init_task();
 	schedule_last(init);

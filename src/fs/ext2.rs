@@ -26,6 +26,7 @@ use crate::{
 	driver::partition::{BlockId, Partition},
 	fs::ext2::sb::SuperBlock,
 	mm::util::next_align,
+	pr_debug,
 	sync::{LocalLocked, LockRW, Locked},
 	syscall::errno::Errno,
 	trace_feature, RUN_TIME,
@@ -176,4 +177,17 @@ pub fn oom_handler() {
 	for (_, sb) in map.iter() {
 		sb.block_pool.handle_overflow(0);
 	}
+}
+
+pub fn clean_up() -> Result<(), Errno> {
+	pr_debug!("ext2: cleanup called");
+	let mut pool = SB_POOL.lock();
+	while let Some((_, sb)) = pool.pop_first() {
+		drop(pool);
+		let sb: Arc<dyn vfs::SuperBlock> = sb;
+		sb.unmount()?;
+		pool = SB_POOL.lock();
+	}
+
+	Ok(())
 }

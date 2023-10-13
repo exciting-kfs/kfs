@@ -28,3 +28,7 @@ pub fn test_status(status: u8, mask: Status) -> bool {
 pub fn test_status_now(mask: Status) -> bool {
 	test_status(get_raw_status(), mask)
 }
+
+pub fn reset_cpu() {
+	CONTROL_PORT.write_byte(0xfe)
+}

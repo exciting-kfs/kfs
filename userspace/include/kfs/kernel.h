@@ -16,4 +16,7 @@ struct kfs_dirent {
 
 DEFINE_SYSCALL(getdents, 141, ssize_t, int, fd, void *, dirp, size_t, len);
 
+#define	KFS_POWER_OFF 0x4321fedc
+#define	KFS_RESTART 0x1234567
+
 #endif // _KFS_KERNEL_H

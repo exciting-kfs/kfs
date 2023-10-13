@@ -218,6 +218,15 @@ void builtin_ntouch(int idx) {
 	}
 }
 
+
+void builtin_power_off() {
+	reboot(KFS_POWER_OFF);
+}
+
+void builtin_reboot() {
+	reboot(KFS_RESTART);
+}
+
 void builtin_wf(int idx) {
 	char buf[4096];
 
@@ -483,6 +492,10 @@ int main(void) {
 			builtin_lc(ignore_ws(2));
 		} else if (STREQ("tc", line_buf, line_len)) {
 			builtin_tc(ignore_ws(2));
+		} else if (STREQ("poweroff", line_buf, line_len)) {
+			builtin_power_off();
+		} else if (STREQ("reboot", line_buf, line_len)) {
+			builtin_reboot();
 		} else if (STREQ("ntouch", line_buf, line_len)) {
 			builtin_ntouch(ignore_ws(6));
 		} else if (STREQ("rmdir", line_buf, line_len)) {

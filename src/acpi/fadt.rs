@@ -20,6 +20,7 @@ pub unsafe fn init(acpi_tables: &AcpiTables<AcpiH>) {
 
 	let fadt = mapping.virtual_start().as_mut();
 
-	let value: IaPcBootArchFlags = ptr::read_unaligned(addr_of!(fadt.iapc_boot_arch));
-	IAPC_BOOT_ARCH.write(value);
+	let iapc_boot_arch: IaPcBootArchFlags = ptr::read_unaligned(addr_of!(fadt.iapc_boot_arch));
+
+	IAPC_BOOT_ARCH.write(iapc_boot_arch);
 }

@@ -395,6 +395,8 @@ impl vfs::SuperBlock for SuperBlock {
 	}
 
 	fn unmount(&self) -> Result<(), Errno> {
+		trace_feature!("ext2-unmount", "sb: unmount: uuid: {:x?}", self.id());
+
 		// TODO edit somthing
 		self.sync()?;
 

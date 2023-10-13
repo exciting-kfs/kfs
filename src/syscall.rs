@@ -6,6 +6,8 @@ pub mod relation;
 pub mod signal;
 pub mod wait;
 
+mod reboot;
+
 use core::mem::transmute;
 
 use crate::driver::pipe::sys_pipe;
@@ -25,6 +27,7 @@ use self::errno::Errno;
 use self::exec::*;
 use self::fork::sys_fork;
 use self::kill::sys_kill;
+use self::reboot::sys_reboot;
 use self::relation::{
 	sys_getpgid, sys_getpgrp, sys_getpid, sys_getppid, sys_getsid, sys_setpgid, sys_setsid,
 };
@@ -117,6 +120,7 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 				frame.edx as *mut SigAction,
 			)
 		}
+		80 => sys_reboot(frame.ebx),
 		83 => sys_symlink(frame.ebx, frame.ecx),
 		90 => sys_mmap(
 			frame.ebx,
