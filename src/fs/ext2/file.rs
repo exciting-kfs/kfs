@@ -7,17 +7,16 @@ use crate::{
 		ext2::inode::info::InodeInfoMut,
 		vfs::{self, IOFlag, Permission},
 	},
-	handle_iter_error,
+	handle_r_iter_error, handle_w_iter_error,
 	mm::util::next_align,
-	pr_debug,
-	process::signal::poll_signal_queue,
 	scheduler::sleep::Sleep,
 	sync::{LockRW, Locked},
 	syscall::errno::Errno,
+	trace_feature,
 };
 
 use super::{
-	inode::{self, inum::Inum, Inode, IterError},
+	inode::{self, inum::Inum, Inode},
 	sb::SuperBlock,
 };
 
@@ -74,7 +73,7 @@ impl vfs::FileHandle for File {
 			if let Ok(chunk) = chunk {
 				sum += write_to_user(buf, &chunk.slice(), sum);
 			} else {
-				handle_iter_error!(chunk.unwrap_err(), non_block)
+				handle_r_iter_error!(chunk.unwrap_err(), non_block)
 			}
 		}
 
@@ -106,7 +105,7 @@ impl vfs::FileHandle for File {
 					inode.sync()?;
 				}
 			} else {
-				handle_iter_error!(chunk.unwrap_err(), non_block)
+				handle_w_iter_error!(chunk.unwrap_err(), non_block)
 			}
 		}
 
@@ -169,13 +168,16 @@ impl FileInode {
 		let mut iter = inode::Iter::new(self.inner().clone(), old_idx);
 		let mut total = new_idx - old_idx;
 		while total > 0 {
-			let chunk = iter.next_mut_block(total).map_err(|e| e.errno().unwrap())?;
+			let chunk = iter.next_mut_block(total)?;
 			let mut slice = chunk.slice_mut();
 
 			slice.fill(0);
 
 			total -= slice.len();
 		}
+
+		trace_feature!("ext2-truncate", "file: expand: {}", new_idx);
+
 		Ok(())
 	}
 
@@ -186,21 +188,20 @@ impl FileInode {
 		let new_len = next_align(new_idx, block_size) / block_size;
 
 		let mut data = self.inner().data_write();
-		let bids = data.block_id_mut();
-		let to_dealloc = &mut bids[new_len..];
+		let to_dealloc = data.chunks_range(new_len..);
 
 		let mut staged = Vec::new();
 
-		for bid in to_dealloc {
-			staged.push(sb.dealloc_block_staged(*bid)?);
+		for bid in to_dealloc.iter().map(|b| *b.lock().block_id()) {
+			staged.push(sb.dealloc_block_staged(bid)?);
 		}
 
 		staged.iter_mut().for_each(|s| s.commit(()));
-		bids.truncate(new_len);
+		data.truncate(new_len);
 
 		InodeInfoMut::from_data(data).set_size(new_idx);
 
-		pr_debug!("file: shrink: {}", new_idx);
+		trace_feature!("ext2-truncate", "file: shrink: {}", new_idx);
 
 		Ok(())
 	}

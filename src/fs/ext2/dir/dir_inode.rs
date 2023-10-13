@@ -18,21 +18,12 @@ use crate::{
 		},
 		vfs::{self, FileType, Permission},
 	},
-	pr_debug, pr_warn,
+	handle_iterblock_error, pr_debug, pr_warn,
 	sync::LockRW,
 	syscall::errno::Errno,
 };
 
 use super::{dir_file::DirFile, record::Record, Dirent, DirentMut};
-
-macro_rules! handle_iterblock_error {
-	($e: expr) => {
-		match $e {
-			IterBlockError::Errno(e) => return Err(e),
-			IterBlockError::End => break,
-		}
-	};
-}
 
 #[derive(Clone)]
 pub struct DirInode(Arc<LockRW<Inode>>);
@@ -123,7 +114,7 @@ impl DirInode {
 					let space = self.point_space(cursor, &record);
 					iter.rewind();
 
-					return Ok((iter.next_mut_block().unwrap(), space));
+					return unsafe { iter.next_mut_block_unchecked().map(|ent| (ent, space)) };
 				}
 			} else {
 				handle_iterblock_error!(chunk.unwrap_err());
@@ -133,9 +124,10 @@ impl DirInode {
 		iter.rewind();
 		let space = self.alloc_space(&mut iter)?;
 
-		iter.next_mut_block()
-			.map(|dirent| (dirent, space))
-			.map_err(|e| e.errno().unwrap())
+		unsafe {
+			iter.next_mut_block_unchecked()
+				.map(|dirent| (dirent, space))
+		}
 	}
 
 	fn point_space(&self, cursor: usize, record: &Record) -> inode::ChunkMut {
@@ -152,11 +144,9 @@ impl DirInode {
 
 		let mut inode_iter = inode::Iter::write_end(inode.clone());
 
-		let chunk = inode_iter
-			.next_mut_block(block_size)
-			.map_err(|e| e.errno().unwrap())?;
+		let chunk = inode_iter.next_mut_block(block_size)?;
 
-		let mut dirent = dir_iter.next_mut().unwrap();
+		let mut dirent = unsafe { dir_iter.next_mut_block_unchecked()? };
 		dirent.get_record().capacity_add(block_size);
 		dir_iter.rewind();
 
@@ -217,8 +207,8 @@ impl DirInode {
 
 		iter.rewind();
 
-		let prev = iter.next_mut_block().map_err(|e| e.errno().unwrap())?;
-		let curr = iter.next_block().map_err(|e| e.errno().unwrap())?;
+		let prev = unsafe { iter.next_mut_block_unchecked()? };
+		let curr = unsafe { iter.next_block_unchecked()? };
 
 		Ok((prev, curr))
 	}
@@ -282,11 +272,10 @@ impl DirInode {
 		let mut blocks = VecDeque::new();
 		{
 			let data = child.data_read();
-			let bids = data.block_id();
-			pr_debug!("remove_child {:?}, {:?}", inum, bids);
-			let mut iter = bids.iter();
-			while let Some(bid) = iter.next() {
-				let staged = sb.dealloc_block_staged(*bid)?;
+			let mut bids = data.block_id().into_iter();
+			// pr_debug!("remove_child {:?}, {:?}", inum, bids);
+			while let Some(bid) = bids.next() {
+				let staged = sb.dealloc_block_staged(bid)?;
 				blocks.push_back(staged);
 			}
 		}
@@ -338,7 +327,7 @@ impl vfs::DirInode for DirInode {
 
 	fn lookup(&self, name: &[u8]) -> Result<vfs::VfsInode, Errno> {
 		let mut dirent = self.find_dirent(name)?;
-		let chunk = dirent.next_block().map_err(|e| e.errno().unwrap())?;
+		let chunk = unsafe { dirent.next_block_unchecked()? };
 
 		let (ino, file_type) = {
 			let record = chunk.get_record();

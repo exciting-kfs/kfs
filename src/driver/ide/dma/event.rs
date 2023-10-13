@@ -158,7 +158,7 @@ impl DmaRun {
 	pub fn cleanup(self) {
 		match self {
 			Self::Read(req) | Self::Write(req) => Self::cleanup_own(req),
-			Self::WriteBack(req) => Self::cleanup_ref(req),
+			Self::WriteBack(req) => Self::cleanup_wb(req),
 		}
 	}
 
@@ -175,7 +175,7 @@ impl DmaRun {
 			.for_each(|(block, mut cb)| cb(Ok(block)))
 	}
 
-	fn cleanup_ref(req: ReqWBReady) {
+	fn cleanup_wb(req: ReqWBReady) {
 		let ReqWBReady {
 			range: _,
 			blocks,

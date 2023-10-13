@@ -21,32 +21,72 @@ use super::Inode;
 #[derive(Debug)]
 pub enum IterError {
 	None(AtomicOps),
+	Errno(Errno),
+}
+
+#[derive(Debug)]
+pub enum ReadIterError {
+	None(AtomicOps),
 	End,
 	Errno(Errno),
 }
 
-impl IterError {
-	pub fn downcast_errno(self) -> Option<Errno> {
-		match self {
-			IterError::Errno(e) => Some(e),
-			_ => None,
+impl From<IterError> for ReadIterError {
+	fn from(value: IterError) -> Self {
+		match value {
+			IterError::Errno(e) => ReadIterError::Errno(e),
+			IterError::None(a) => ReadIterError::None(a),
 		}
 	}
 }
 
 #[macro_export]
-macro_rules! handle_iter_error {
+macro_rules! handle_r_iter_error {
 	($error: expr, $non_block: expr) => {
 		match ($error, $non_block) {
-			(IterError::Errno(e), _) => return Err(e),
-			(IterError::End, _) => break,
-			(IterError::None(_), true) => break,
-			(IterError::None(a), false) => {
-				crate::scheduler::sleep::sleep_and_yield_atomic(Sleep::Light, a);
-				unsafe { poll_signal_queue() }?;
+			(crate::fs::ext2::inode::iter::ReadIterError::Errno(e), _) => return Err(e),
+			(crate::fs::ext2::inode::iter::ReadIterError::End, _) => break,
+			(crate::fs::ext2::inode::iter::ReadIterError::None(_), true) => break,
+			(crate::fs::ext2::inode::iter::ReadIterError::None(a), false) => {
+				crate::scheduler::sleep::sleep_and_yield_atomic(
+					crate::scheduler::sleep::Sleep::Light,
+					a,
+				);
+				unsafe { crate::process::signal::poll_signal_queue() }?;
 			}
 		}
 	};
+}
+
+#[derive(Debug)]
+pub enum WriteIterError {
+	None(AtomicOps),
+	Errno(Errno),
+	Retry,
+}
+
+#[macro_export]
+macro_rules! handle_w_iter_error {
+	($error: expr, $non_block: expr) => {
+		match ($error, $non_block) {
+			(crate::fs::ext2::inode::iter::WriteIterError::Errno(e), _) => return Err(e),
+			(crate::fs::ext2::inode::iter::WriteIterError::Retry, _) => {}
+			(crate::fs::ext2::inode::iter::WriteIterError::None(_), true) => break,
+			(crate::fs::ext2::inode::iter::WriteIterError::None(a), false) => {
+				crate::scheduler::sleep::sleep_and_yield_atomic(Sleep::Light, a);
+				unsafe { crate::process::signal::poll_signal_queue() }?;
+			}
+		}
+	};
+}
+
+impl From<IterError> for WriteIterError {
+	fn from(value: IterError) -> Self {
+		match value {
+			IterError::Errno(e) => WriteIterError::Errno(e),
+			IterError::None(a) => WriteIterError::None(a),
+		}
+	}
 }
 
 #[derive(Debug)]
@@ -62,14 +102,31 @@ impl IterBlockError {
 			_ => None,
 		}
 	}
+
+	pub unsafe fn errno_unchecked(self) -> Errno {
+		match self {
+			IterBlockError::Errno(e) => e,
+			_ => panic!("please check error state!"),
+		}
+	}
 }
 
-impl From<IterError> for IterBlockError {
-	fn from(value: IterError) -> Self {
+#[macro_export]
+macro_rules! handle_iterblock_error {
+	($e: expr) => {
+		match $e {
+			IterBlockError::Errno(e) => return Err(e),
+			IterBlockError::End => break,
+		}
+	};
+}
+
+impl From<ReadIterError> for IterBlockError {
+	fn from(value: ReadIterError) -> Self {
 		match value {
-			IterError::End => IterBlockError::End,
-			IterError::Errno(e) => IterBlockError::Errno(e),
-			IterError::None(_) => unreachable!(),
+			ReadIterError::End => IterBlockError::End,
+			ReadIterError::Errno(e) => IterBlockError::Errno(e),
+			ReadIterError::None(_) => unreachable!(),
 		}
 	}
 }
@@ -90,7 +147,7 @@ impl Iter {
 		Self { inode, cursor }
 	}
 
-	pub fn next(&mut self, length: usize) -> Result<Chunk, IterError> {
+	pub fn next(&mut self, length: usize) -> Result<Chunk, ReadIterError> {
 		let ret = Chunk::new(&self.inode, self.cursor, length)?;
 		self.cursor += ret.len;
 		Ok(ret)
@@ -102,7 +159,7 @@ impl Iter {
 		Ok(ret)
 	}
 
-	pub fn next_mut(&mut self, length: usize) -> Result<ChunkMut, IterError> {
+	pub fn next_mut(&mut self, length: usize) -> Result<ChunkMut, WriteIterError> {
 		let ret = ChunkMut::new(&self.inode, self.cursor, length)?;
 		self.cursor += ret.len;
 
@@ -115,7 +172,7 @@ impl Iter {
 		Ok(ret)
 	}
 
-	pub fn next_mut_block(&mut self, length: usize) -> Result<ChunkMut, IterBlockError> {
+	pub fn next_mut_block(&mut self, length: usize) -> Result<ChunkMut, Errno> {
 		let ret = ChunkMut::new_block(&self.inode, self.cursor, length)?;
 		self.cursor += ret.len;
 
@@ -124,7 +181,6 @@ impl Iter {
 			w_inode.info.set_size(self.cursor);
 			w_inode.dirty();
 		}
-
 		Ok(ret)
 	}
 
@@ -145,11 +201,15 @@ pub struct Chunk {
 }
 
 impl Chunk {
-	fn new(inode: &Arc<LockRW<Inode>>, cursor: usize, length: usize) -> Result<Self, IterError> {
+	fn new(
+		inode: &Arc<LockRW<Inode>>,
+		cursor: usize,
+		length: usize,
+	) -> Result<Self, ReadIterError> {
 		let r_inode = inode.read_lock();
 
 		if cursor >= r_inode.size() {
-			return Err(IterError::End);
+			return Err(ReadIterError::End);
 		}
 
 		let data = inode.data_read();
@@ -171,9 +231,9 @@ impl Chunk {
 		length: usize,
 	) -> Result<Self, IterBlockError> {
 		let mut chunk = Self::new(inode, cursor, length);
-		while let Err(IterError::None(atomic)) = chunk {
+		while let Err(ReadIterError::None(atomic)) = chunk {
 			sleep_and_yield_atomic(Sleep::Light, atomic);
-			unsafe { poll_signal_queue() }.map_err(|e| IterError::Errno(e))?;
+			unsafe { poll_signal_queue() }.map_err(|e| ReadIterError::Errno(e))?;
 			chunk = Self::new(inode, cursor, length);
 		}
 		chunk.map_err(|e| e.into())
@@ -196,12 +256,13 @@ pub struct ChunkMut {
 }
 
 impl ChunkMut {
-	fn new(inode: &Arc<LockRW<Inode>>, cursor: usize, length: usize) -> Result<Self, IterError> {
+	fn new(
+		inode: &Arc<LockRW<Inode>>,
+		cursor: usize,
+		length: usize,
+	) -> Result<Self, WriteIterError> {
 		let data = inode.data_write();
 		let end = data.slice_mut_end(cursor, length);
-
-		// use crate::pr_debug;
-		// pr_debug!("cursor: {}, length: {}, end: {}", cursor, length, end);
 
 		match data.common().get_chunk(cursor) {
 			Ok(chunk) => Ok(Self {
@@ -209,25 +270,25 @@ impl ChunkMut {
 				idx: cursor % chunk.read_lock().size(),
 				len: end - cursor,
 			}),
-			Err(e) => {
-				// pr_debug!("iter: handle_write : {:?}", e);
-				Err(e.handle_write(data, cursor, length))
-			}
+			Err(e) => Err(e.handle_write(data, cursor, length)),
 		}
 	}
 
-	fn new_block(
-		inode: &Arc<LockRW<Inode>>,
-		cursor: usize,
-		length: usize,
-	) -> Result<Self, IterBlockError> {
+	fn new_block(inode: &Arc<LockRW<Inode>>, cursor: usize, length: usize) -> Result<Self, Errno> {
 		let mut chunk = Self::new(inode, cursor, length);
-		while let Err(IterError::None(atomic)) = chunk {
-			sleep_and_yield_atomic(Sleep::Light, atomic);
-			unsafe { poll_signal_queue() }.map_err(|e| IterError::Errno(e))?;
+		while let Err(e) = chunk {
+			match e {
+				WriteIterError::Retry => Ok(()),
+				WriteIterError::Errno(e) => Err(e),
+				WriteIterError::None(atomic) => {
+					sleep_and_yield_atomic(Sleep::Light, atomic);
+					unsafe { poll_signal_queue() }
+				}
+			}?;
+
 			chunk = Self::new(inode, cursor, length);
 		}
-		chunk.map_err(|e| e.into())
+		Ok(chunk.expect("never WriteIterError occur"))
 	}
 
 	pub fn len(&self) -> usize {
