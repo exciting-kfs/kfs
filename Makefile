@@ -14,6 +14,8 @@ endif
 RELEASE_MODE := n
 DEBUG_WITH_VSCODE := y
 TEST_CASE := all
+FAST_HDD_BUILD := n
+
 # LOG_LEVEL := debug # ALL = debug > info > warn > error
 
 I386_GRUB2_PREFIX := $(I386_GRUB2_PREFIX)
@@ -77,7 +79,7 @@ RESUCE_SRC_ROOT := iso
 RESCUE_IMG_NAME := rescue.iso
 RESCUE_IMG := $(TARGET_ROOT)/$(RESCUE_IMG_NAME)
 
-HDD_IMG_NAME := disk.iso
+HDD_IMG_NAME := disk.qcow2
 HDD_IMG := $(TARGET_ROOT)/$(HDD_IMG_NAME)
 
 LINKER_SCRIPT := linker-script/kernel.ld
@@ -128,7 +130,7 @@ re : clean
 	@$(MAKE) all
 
 .PHONY : run
-run : all hello.txt
+run : all
 	@scripts/qemu.sh $(RESCUE_IMG) $(HDD_IMG) stdio -monitor pty
 
 .PHONY : debug debug-display
@@ -243,7 +245,10 @@ $(RESCUE_IMG) : $(KERNEL_BIN) $(shell find $(RESUCE_SRC_ROOT) -type f) $(KERNEL_
 
 $(HDD_IMG) : $(KERNEL_MODULES) scripts/hdd/make-hdd.sh
 	@echo BUILD $(notdir $@)
-	@scripts/hdd/make-hdd.sh $@
-
-hello.txt: 
-	@dd if=/dev/zero of=hello.txt bs=1024 count=1024
+	@mkdir -p $(TARGET_ROOT)/sysroot
+	@cp $(KERNEL_MODULES) $(TARGET_ROOT)/sysroot
+ifeq ($(FAST_HDD_BUILD),y)
+	@scripts/hdd/make-hdd-linux.sh $@ $(TARGET_ROOT)/sysroot
+else
+	@scripts/hdd/make-hdd.sh $@ $(TARGET_ROOT)/sysroot
+endif
