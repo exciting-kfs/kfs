@@ -82,14 +82,14 @@ impl<'a> IdSapceWrite<'a> {
 			Indexes::Depth3 { mut blk_i } => {
 				blk_i[2] -= 1;
 
-				helper.push_block_slice_recursive(14, &blk_i)?;
+				helper.push_block_slice(14, &blk_i)?;
 				Ok(helper.into_stack())
 			}
 			Indexes::Depth2 { mut blk_i } => {
 				blk_i[1] -= 1;
 
 				helper.push_block_one(14, 2)?;
-				helper.push_block_slice_recursive(13, &blk_i)?;
+				helper.push_block_slice(13, &blk_i)?;
 
 				Ok(helper.into_stack())
 			}
@@ -98,7 +98,7 @@ impl<'a> IdSapceWrite<'a> {
 
 				helper.push_block_one(14, 2)?;
 				helper.push_block_one(13, 1)?;
-				helper.push_block_slice_recursive(12, &blk_i)?;
+				helper.push_block_slice(12, &blk_i)?;
 
 				Ok(helper.into_stack())
 			}

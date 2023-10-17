@@ -210,45 +210,42 @@ impl<'a> StackHelper<'a> {
 		Ok(())
 	}
 
-	fn push_block_slice_recursive(&mut self, arr_i: usize, blk_i: &[isize]) -> Result<(), Errno> {
+	fn push_block_slice(&mut self, arr_i: usize, blk_i: &[isize]) -> Result<(), Errno> {
 		let block_pool = self.inode.block_pool();
 		let bid = self.inode.info.bid_array(arr_i).unwrap();
 		let idspace = block_pool.get_or_load(bid)?;
 		let depth = blk_i.len() - 1;
 
-		self.__push_block_slice_recursive(&idspace, &blk_i, depth)?;
-
 		let start = (blk_i[0] + 1) as usize;
 		let chunk = Chunk::new(&idspace, start..self.id_count);
-		let depth = Depth::new(depth, chunk);
-		self.stack.push(depth);
+		self.stack.push(Depth::new(depth, chunk));
+
+		self.__push_block_slice(&idspace, &blk_i, depth)?;
+
 		Ok(())
 	}
 
-	fn __push_block_slice_recursive(
+	fn __push_block_slice(
 		&mut self,
 		idspace: &Arc<LockRW<Block>>,
 		blk_i: &[isize],
 		depth: usize,
 	) -> Result<(), Errno> {
-		if depth == 0 {
-			return Ok(());
-		}
-
-		let (first, blk_i) = blk_i.split_first().expect("check slice length");
 		let block_pool = self.inode.block_pool();
-		let bid = idspace.read_lock().as_slice_ref_u32()[*first as usize];
-		let bid = unsafe { BlockId::new_unchecked(bid as usize) };
 
-		let block = block_pool.get_or_load(bid)?;
+		for dep in (1..=depth).rev() {
+			let (first, blk_i) = blk_i.split_first().expect("check slice length");
+			let bid = idspace.read_lock().as_slice_ref_u32()[*first as usize];
+			let bid = unsafe { BlockId::new_unchecked(bid as usize) };
 
-		self.__push_block_slice_recursive(&block, blk_i, depth - 1)?;
+			let block = block_pool.get_or_load(bid)?;
 
-		let start = (blk_i[0] + 1) as usize;
-		let chunk = Chunk::new(&block, start..self.id_count);
-		let depth = Depth::new(depth - 1, chunk);
+			let start = (blk_i[0] + 1) as usize;
+			let chunk = Chunk::new(&block, start..self.id_count);
+			let depth = Depth::new(dep - 1, chunk);
 
-		self.stack.push(depth);
+			self.stack.push(depth);
+		}
 
 		Ok(())
 	}

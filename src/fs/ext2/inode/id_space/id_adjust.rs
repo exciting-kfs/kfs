@@ -132,13 +132,13 @@ impl<'a> IdSpaceAdjust<'a> {
 
 		match indexes {
 			Indexes::Depth3 { blk_i } => {
-				helper.push_block_slice_recursive(14, &blk_i[..2])?;
+				helper.push_block_slice(14, &blk_i[..2])?;
 
 				Ok(helper.into_stack())
 			}
 			Indexes::Depth2 { blk_i } => {
 				helper.push_block_one(14, 1)?;
-				helper.push_block_slice_recursive(13, &blk_i[..1])?;
+				helper.push_block_slice(13, &blk_i[..1])?;
 
 				Ok(helper.into_stack())
 			}
@@ -153,11 +153,11 @@ impl<'a> IdSpaceAdjust<'a> {
 
 		match indexes {
 			Indexes::Depth3 { blk_i } => {
-				helper.push_block_slice_recursive(14, &blk_i[..2])?;
+				helper.push_block_slice(14, &blk_i[..2])?;
 				Ok(helper.into_stack())
 			}
 			Indexes::Depth2 { blk_i } => {
-				helper.push_block_slice_recursive(13, &blk_i[..1])?;
+				helper.push_block_slice(13, &blk_i[..1])?;
 				Ok(helper.into_stack())
 			}
 			_ => Ok(Vec::new()),

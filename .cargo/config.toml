@@ -14,9 +14,9 @@ rustflags = [
 	"-C",
 	"relocation-model=static",
 	'--cfg',
-	'log_level="debug"',          # ALL = debug > info > warn > error
-	# '--cfg',
-	# 'trace_feature="oom"',
+	'log_level="debug"',            # ALL = debug > info > warn > error
+	'--cfg',
+	'trace_feature="ext2-idspace"',
 	# '--cfg',
 	# 'trace_feature="inode_iter"',
 	# '--cfg',
