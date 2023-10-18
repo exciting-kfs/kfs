@@ -43,7 +43,7 @@ GRUB2_I386_LIB=$(I386_GRUB2_PREFIX)/lib/grub/i386-pc
 
 # === Targets ===
 
-ifeq ($(RELESE_MODE),y)
+ifeq ($(RELEASE_MODE),y)
 TARGET_ROOT := target/i686-unknown-none-elf/release
 CARGO_FLAG :=  --release
 else
