@@ -83,6 +83,6 @@ pub unsafe fn init_arbitrary_map() {
 
 pub unsafe fn init_kernel_pd() {
 	KERNEL_PD.init(NonNull::from(&mut GLOBAL_PD_VIRT));
-	invalidate_all_tlb();
 	KERNEL_PD.pick_up();
+	invalidate_all_tlb();
 }

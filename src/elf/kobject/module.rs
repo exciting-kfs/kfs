@@ -7,6 +7,7 @@ use crate::{ptr::VirtPageBox, sync::Locked, syscall::errno::Errno};
 macro_rules! kernel_module {
 	{$($fields:tt)*} => {
 		#[link_section = ".kfs"]
+		#[used]
 		pub static __MODULE: kernel::elf::kobject::KernelModuleInfo = kernel::elf::kobject::KernelModuleInfo {
 			$($fields)*
 		};

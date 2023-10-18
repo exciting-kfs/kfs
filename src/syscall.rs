@@ -64,7 +64,10 @@ pub extern "C" fn handle_syscall_impl(mut frame: InterruptFrame) {
 	// Because of signal system, This can be `return` from timer interrupt.
 	// To preserve previous `eax` value, We should check where this `return` go.
 	if frame.handler == handle_syscall_impl as usize {
-		frame.eax = syscall_return_to_isize(&ret) as usize;
+		unsafe {
+			((&mut frame.eax) as *mut _ as usize as *mut isize)
+				.write_volatile(syscall_return_to_isize(&ret))
+		};
 	}
 }
 
