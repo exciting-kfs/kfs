@@ -11,7 +11,7 @@ mod reboot;
 use core::mem::transmute;
 
 use crate::driver::pipe::sys_pipe;
-use crate::elf::syscall::sys_init_module;
+use crate::elf::syscall::*;
 use crate::fs::syscall::*;
 use crate::interrupt::InterruptFrame;
 use crate::mm::user::mmap::{sys_mmap, sys_munmap};
@@ -140,6 +140,7 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 			sys_sigreturn(frame, restart)
 		}
 		128 => sys_init_module(frame.ebx),
+		129 => sys_cleanup_module(frame.ebx),
 		132 => sys_getpgid(frame.ebx),
 		141 => sys_getdents(frame.ebx as isize, frame.ecx, frame.edx),
 		147 => sys_getsid(),

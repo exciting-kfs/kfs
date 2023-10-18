@@ -1,22 +1,23 @@
-use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
+use alloc::sync::Arc;
 
-use crate::elf::kobject::{KernelModule, KernelObject};
+use crate::elf::kobject::{load_kernel_module, KernelModule, KernelObject};
 use crate::elf::{Elf, ElfError};
 use crate::fs::path::Path;
 use crate::fs::vfs::{lookup_entry_follow, AccessFlag, IOFlag, RealEntry};
 use crate::mm::user::verify::verify_path;
 use crate::process::task::CURRENT;
 use crate::ptr::VirtPageBox;
-use crate::sync::Locked;
 use crate::syscall::errno::Errno;
-
-static LOADED_MODULES: Locked<BTreeMap<Vec<u8>, Arc<KernelModule>>> = Locked::new(BTreeMap::new());
 
 pub fn sys_init_module(path_ptr: usize) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_ref() };
 
+	if !current.is_privileged() {
+		return Err(Errno::EPERM);
+	}
+
 	let path = verify_path(path_ptr, current)?;
-	let mut path = Path::new(path);
+	let path = Path::new(path);
 
 	let entry = lookup_entry_follow(&path, current)?;
 
@@ -35,22 +36,16 @@ pub fn sys_init_module(path_ptr: usize) -> Result<usize, Errno> {
 		offset += x;
 	}
 
-	let module_name = path.pop_component().unwrap();
+	let module = parse_module_elf(&elf_buf).map_err(|x| <ElfError as Into<Errno>>::into(x))?;
 
-	do_sys_init_module(&elf_buf, module_name).map_err(|x| x.into())
+	load_kernel_module(module).map(|_| 0)
 }
 
-fn do_sys_init_module(elf_buf: &[u8], name: Vec<u8>) -> Result<usize, ElfError> {
+fn parse_module_elf(elf_buf: &[u8]) -> Result<Arc<KernelModule>, ElfError> {
 	let elf = Elf::new(elf_buf)?;
 
 	let kobject = KernelObject::new(&elf)?;
-	let module = Arc::new(kobject.load()?);
+	let module = kobject.load()?;
 
-	let ep = module.get_entry_point();
-
-	unsafe { (*(&ep as *const _ as usize as *const extern "C" fn()))() }
-
-	LOADED_MODULES.lock().insert(name, module);
-
-	Ok(0)
+	Ok(module)
 }

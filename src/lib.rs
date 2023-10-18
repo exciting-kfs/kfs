@@ -16,31 +16,30 @@
 #![feature(trait_upcasting)]
 
 extern crate alloc;
-extern crate time;
 
-mod acpi;
-mod boot;
-mod collection;
-mod config;
-mod driver;
-mod elf;
-mod fs;
-mod input;
-mod interrupt;
-mod io;
-mod mm;
-mod net;
-mod printk;
-mod process;
-mod ptr;
-mod scheduler;
-mod smp;
-mod sync;
-mod syscall;
-mod test;
-mod user_bin;
-mod util;
-mod x86;
+pub mod acpi;
+pub mod boot;
+pub mod collection;
+pub mod config;
+pub mod driver;
+pub mod elf;
+pub mod fs;
+pub mod input;
+pub mod interrupt;
+pub mod io;
+pub mod mm;
+pub mod net;
+pub mod printk;
+pub mod process;
+pub mod ptr;
+pub mod scheduler;
+pub mod smp;
+pub mod sync;
+pub mod syscall;
+pub mod test;
+pub mod user_bin;
+pub mod util;
+pub mod x86;
 
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::{arch::asm, panic::PanicInfo};
@@ -267,5 +266,4 @@ mod test_threads {
 
 pub fn do_something() {
 	pr_warn!("hello, world!!!");
-	// pr_warn!("123");
 }
