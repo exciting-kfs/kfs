@@ -218,7 +218,6 @@ void builtin_ntouch(int idx) {
 	}
 }
 
-
 void builtin_power_off() {
 	reboot(KFS_POWER_OFF);
 }
@@ -469,6 +468,26 @@ void builtin_test(void) {
 	execve("test.bin", NULL, NULL);
 }
 
+void builtin_insmod(int idx) {
+	char buf[4096];
+
+	idx = extract(idx, buf);
+	int ret = init_module(buf);
+	if (ret != 0) {
+		show_error("insmod: init_module", ret);
+	}
+}
+
+void builtin_rmmod(int idx) {
+	char buf[4096];
+
+	idx = extract(idx, buf);
+	int ret = cleanup_module(buf);
+	if (ret != 0) {
+		show_error("rmmod: cleanup_module", ret);
+	}
+}
+
 int main(void) {
 	for (;;) {
 		ft_putstr("sh==> ");
@@ -476,6 +495,10 @@ int main(void) {
 
 		if (STREQ("ls", line_buf, line_len)) {
 			builtin_ls(ignore_ws(2));
+		} else if (STREQ("insmod", line_buf, line_len)) {
+			builtin_insmod(ignore_ws(6));
+		} else if (STREQ("rmmod", line_buf, line_len)) {
+			builtin_rmmod(ignore_ws(5));
 		} else if (STREQ("cd", line_buf, line_len)) {
 			builtin_cd(ignore_ws(2));
 		} else if (STREQ("cat", line_buf, line_len)) {

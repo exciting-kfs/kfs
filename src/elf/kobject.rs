@@ -2,11 +2,14 @@ mod load_section;
 mod module;
 mod rel_section;
 
-pub use module::KernelModule;
+use alloc::sync::Arc;
+pub use module::{cleanup_kernel_module, load_kernel_module, KernelModule, KernelModuleInfo};
 
 use alloc::collections::BTreeMap;
 
+use crate::elf::check_size_and_deref_array;
 use crate::elf::relocation::RelocationType;
+use crate::elf::StringTable;
 use crate::elf::{Relocation, SectionHdrNdx, SectionType};
 
 use crate::ptr::VirtPageBox;
@@ -86,6 +89,32 @@ impl<'a> KernelObject<'a> {
 		self.get_symbol_address(symbol)
 	}
 
+	fn get_section_offset_by_name(&self, name: &str) -> Result<usize, ElfError> {
+		let sh_strtab =
+			self.load_sections.elf.section_hdrs[self.load_sections.elf.elf_hdr.e_shstrndx as usize];
+
+		let raw = check_size_and_deref_array::<u8>(
+			self.load_sections.elf.raw,
+			sh_strtab.sh_offset,
+			sh_strtab.sh_size as usize,
+		)?;
+		let tab = StringTable::new(raw);
+
+		for (i, hdr) in self.load_sections.elf.section_hdrs.iter().enumerate() {
+			let section_name = tab.lookup_by_idx(hdr.sh_name as usize)?;
+			if section_name == name {
+				let modinfo_offset = self
+					.offset_map
+					.get(&SectionIdx(i))
+					.ok_or(ElfError::SectionNotFound)?;
+
+				return Ok(*modinfo_offset);
+			}
+		}
+
+		Err(ElfError::SectionNotFound)
+	}
+
 	fn get_symbol_address_by_name(&self, name: &str) -> Result<usize, ElfError> {
 		let strtab = &self.load_sections.elf.string_table;
 
@@ -107,7 +136,9 @@ impl<'a> KernelObject<'a> {
 	fn resolve_relocation(rel: &Relocation, sym_address: usize, dst: *mut usize) {
 		use RelocationType::*;
 		match rel.get_type() {
-			R_386_32 => unsafe { dst.write_unaligned(sym_address) },
+			R_386_32 => unsafe {
+				dst.write_unaligned(sym_address.wrapping_add(dst.read_unaligned()))
+			},
 			R_386_PC32 | R_386_PLT32 => unsafe {
 				dst.write_unaligned(
 					sym_address
@@ -119,7 +150,7 @@ impl<'a> KernelObject<'a> {
 		}
 	}
 
-	pub fn load(mut self) -> Result<KernelModule, ElfError> {
+	pub fn load(mut self) -> Result<Arc<KernelModule>, ElfError> {
 		self.copy_sections();
 		for rel_section in &self.load_sections.rel {
 			for rel in rel_section.rel {
@@ -132,8 +163,8 @@ impl<'a> KernelObject<'a> {
 			}
 		}
 
-		let init_address = self.get_symbol_address_by_name("init_module")?;
+		let modinfo_offset = self.get_section_offset_by_name(".kfs")?;
 
-		Ok(KernelModule::new(self.load_base, init_address))
+		Ok(KernelModule::new(self.load_base, modinfo_offset))
 	}
 }
