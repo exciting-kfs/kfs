@@ -2,6 +2,7 @@
 
 set -e
 
+SYSROOT=$2
 HDD=$1
 HDD_SIZE_MB=512
 
@@ -37,7 +38,7 @@ NBD_SERVER=$!
 trap "kill $NBD_SERVER" EXIT  
 
 echo DOCKER-RUN guestfish
-docker run -v$(pwd)/target:/target --rm -i --add-host=host.docker.internal:host-gateway bkahlert/libguestfs:edge guestfish << EOF
+docker run -v$(pwd)/$SYSROOT:/sysroot --rm -i --add-host=host.docker.internal:host-gateway bkahlert/libguestfs:edge guestfish << EOF
 add '' protocol:nbd server:host.docker.internal
 run
 part-init /dev/sda mbr
@@ -46,5 +47,7 @@ part-add /dev/sda p $PART2_START $PART2_END
 mkfs ext2 /dev/sda1 blocksize:1024
 mkfs ext2 /dev/sda2
 mount /dev/sda1 /
-upload /target/i686-unknown-none-elf/debug/hello.ko /hello.ko
+copy-in /sysroot /
+glob mv /sysroot/* /
+rmdir /sysroot
 EOF
