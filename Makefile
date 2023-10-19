@@ -109,8 +109,8 @@ userspace :
 	@$(MAKE) EXTRA_CFLAGS=$(CFLAGS) -s -C $(USERSPACE_SRC_ROOT)
 
 .PHONY : ci
-ci : CFLAGS := -Werror
-ci : RUSTC_FLAG += -D warnings
+ci : export CFLAGS := -Werror
+ci : export RUSTC_FLAG += -D warnings
 ci : test
 
 .PHONY: hdd
@@ -190,9 +190,16 @@ else
 	@$(ADDR2LINE) -e $(KERNEL_DEBUG_SYMBOL) $(ADDR) 
 endif
 
+.PHONY : tttt
+tttt : 
+	@echo $(RUSTC_FLAG)
+	@echo $(CFLAGS)
+
 .PHONY : test
-test : 
-	@RUSTC_FLAG='--cfg ktest --cfg ktest=\"$(TEST_CASE)\"' $(MAKE) run
+test : export RUSTC_FLAG += --cfg ktest
+test : export RUSTC_FLAG += --cfg ktest='"$(TEST_CASE)"'
+test : all
+	@scripts/qemu.sh $(RESCUE_IMG) $(HDD_IMG) stdio -display none
 
 # === Main recipes ===
 
