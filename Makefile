@@ -60,7 +60,6 @@ KERNEL_MODULE_LIBS := $(addsuffix .a,$(KERNEL_MODULE_LIBS))
 KERNEL_MODULE_LIBS := $(addprefix $(TARGET_ROOT)/,$(KERNEL_MODULE_LIBS))
 
 LIB_KERNEL_NAME := libkernel.a
-LIB_KERNEL_SRC_ROOT := src
 
 LIB_KERNEL := $(TARGET_ROOT)/$(LIB_KERNEL_NAME)
 
@@ -86,6 +85,8 @@ LINKER_SCRIPT := linker-script/kernel.ld
 
 DOC := $(shell dirname $(TARGET_ROOT))/doc/kernel/index.html
 
+CARGO_TARGETS := $(addprefix cargo-buildlib-,kfs $(KERNEL_MODULE_NAMES))
+
 # === user space targets
 
 USERSPACE_SRC_ROOT := userspace
@@ -108,8 +109,8 @@ userspace :
 	@$(MAKE) EXTRA_CFLAGS=$(CFLAGS) -s -C $(USERSPACE_SRC_ROOT)
 
 .PHONY : ci
-ci : CFLAGS := -Werror
-ci : RUSTC_FLAG += -D warnings
+ci : export CFLAGS := -Werror
+ci : export RUSTC_FLAG += -D warnings
 ci : test
 
 .PHONY: hdd
@@ -190,22 +191,25 @@ else
 endif
 
 .PHONY : test
-test : RUSTC_FLAG += --cfg ktest
-test : RUSTC_FLAG += --cfg ktest='"$(TEST_CASE)"'
-test : all 
+test : export RUSTC_FLAG += --cfg ktest
+test : export RUSTC_FLAG += --cfg ktest='"$(TEST_CASE)"'
+test : all
 	@scripts/qemu.sh $(RESCUE_IMG) $(HDD_IMG) stdio -display none
 
 # === Main recipes ===
 
+.PHONY : modules
 modules : $(KERNEL_MODULES)
 
-.PHONY : $(KERNEL_MODULE_LIBS)
-$(KERNEL_MODULE_LIBS) :
-	@echo CARGO $(notdir $@)
-	@cargo rustc -p $(patsubst lib%.a,%,$(notdir $@)) $(CARGO_FLAG) -- $(RUSTC_FLAG)
+.PHONY : $(CARGO_TARGETS)
+$(CARGO_TARGETS) :
+	@echo CARGO lib$(subst cargo-buildlib-,,$@).a
+	@cargo rustc -p $(subst cargo-buildlib-,,$@) $(CARGO_FLAG) -- $(RUSTC_FLAG)
 
-$(TARGET_ROOT)/%.ko : $(TARGET_ROOT)/lib%.a $(KERNEL_BIN)
-	@echo LD $(notdir $@)
+$(KERNEL_MODULE_LIBS) : $(TARGET_ROOT)/lib%.a : cargo-buildlib-%
+
+$(KERNEL_MODULES) : $(TARGET_ROOT)/%.ko : $(TARGET_ROOT)/lib%.a $(LIB_KERNEL)
+	@echo LD $(patsubst %.ko,lib%.a,$(notdir $@))
 	@$(LD) $(LDFLAG)		\
 		--whole-archive		\
 		-R $(KERNEL_BIN)	\
@@ -215,10 +219,8 @@ $(TARGET_ROOT)/%.ko : $(TARGET_ROOT)/lib%.a $(KERNEL_BIN)
 	@echo OBJCOPY $(notdir $@)
 	@$(OBJCOPY) --strip-debug $@
 
-.PHONY : $(LIB_KERNEL)
 $(LIB_KERNEL) : userspace
-	@echo CARGO $(notdir $@)
-	@cargo rustc $(CARGO_FLAG) -- $(RUSTC_FLAG)
+	@$(MAKE) cargo-buildlib-kfs
 
 $(KERNEL_ELF) : $(LIB_KERNEL) $(LINKER_SCRIPT)
 	@echo LD $(notdir $@)
@@ -243,10 +245,14 @@ $(RESCUE_IMG) : $(KERNEL_BIN) $(shell find $(RESUCE_SRC_ROOT) -type f) $(KERNEL_
 	@cp $(KERNEL_BIN) $(RESCUE_TARGET_ROOT)/boot
 	@$(GRUB2_MKRESCUE) -d $(GRUB2_I386_LIB) $(RESCUE_TARGET_ROOT) -o $@ 2>/dev/null >/dev/null
 
-$(HDD_IMG) : $(KERNEL_MODULES) scripts/hdd/make-hdd.sh
-	@echo BUILD $(notdir $@)
+$(TARGET_ROOT)/sysroot : $(KERNEL_MODULES)
+	@echo MAKE sysroot
+	@rm -rf $(TARGET_ROOT)/sysroot
 	@mkdir -p $(TARGET_ROOT)/sysroot
 	@cp $(KERNEL_MODULES) $(TARGET_ROOT)/sysroot
+
+$(HDD_IMG) : $(TARGET_ROOT)/sysroot scripts/hdd/make-hdd.sh scripts/hdd/make-hdd-linux.sh
+	@echo MAKE $(notdir $@)
 ifeq ($(FAST_HDD_BUILD),y)
 	@scripts/hdd/make-hdd-linux.sh $@ $(TARGET_ROOT)/sysroot
 else
