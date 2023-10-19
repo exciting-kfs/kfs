@@ -190,11 +190,6 @@ else
 	@$(ADDR2LINE) -e $(KERNEL_DEBUG_SYMBOL) $(ADDR) 
 endif
 
-.PHONY : tttt
-tttt : 
-	@echo $(RUSTC_FLAG)
-	@echo $(CFLAGS)
-
 .PHONY : test
 test : export RUSTC_FLAG += --cfg ktest
 test : export RUSTC_FLAG += --cfg ktest='"$(TEST_CASE)"'
