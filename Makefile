@@ -191,10 +191,8 @@ else
 endif
 
 .PHONY : test
-test : RUSTC_FLAG += --cfg ktest
-test : RUSTC_FLAG += --cfg ktest='"$(TEST_CASE)"'
-test : all 
-	@scripts/qemu.sh $(RESCUE_IMG) $(HDD_IMG) stdio -display none
+test : 
+	@RUSTC_FLAG='--cfg ktest --cfg ktest=\"$(TEST_CASE)\"' $(MAKE) run
 
 # === Main recipes ===
 
