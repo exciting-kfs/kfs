@@ -11,10 +11,10 @@ endif
 
 # === User settings / toolchain ===
 
-RELEASE_MODE := y
+RELEASE_MODE := n
 DEBUG_WITH_VSCODE := y
 TEST_CASE := all
-FAST_HDD_BUILD := y
+FAST_HDD_BUILD := n
 
 # LOG_LEVEL := debug # ALL = debug > info > warn > error
 
@@ -111,8 +111,6 @@ userspace :
 .PHONY : ci
 ci : export CFLAGS := -Werror
 ci : export RUSTC_FLAG += -D warnings
-ci : export FAST_HDD_BUILD := n
-ci : export RELEASE_MODE := n
 ci : test
 
 .PHONY: hdd
