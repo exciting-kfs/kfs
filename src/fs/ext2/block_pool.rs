@@ -228,6 +228,8 @@ impl BlockPool {
 	}
 
 	pub fn load_async<'a>(self: &Arc<Self>, bid: &[BlockId]) -> Result<AtomicOps, AllocError> {
+		trace_feature!("block_pool", "load_request: bid: {:?}", bid);
+
 		let atomic = preempt_disable();
 
 		let mut pool = self.pool.lock();

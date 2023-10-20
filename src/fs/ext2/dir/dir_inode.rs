@@ -205,10 +205,12 @@ impl DirInode {
 	fn get_dirent_with_prev(&self, name: &[u8]) -> Result<(DirentMut, Dirent), Errno> {
 		let mut iter = self.find_dirent(name)?;
 
+		let curr = unsafe { iter.next_block_unchecked()? };
+
+		iter.rewind();
 		iter.rewind();
 
 		let prev = unsafe { iter.next_mut_block_unchecked()? };
-		let curr = unsafe { iter.next_block_unchecked()? };
 
 		Ok((prev, curr))
 	}
@@ -264,7 +266,6 @@ impl DirInode {
 	}
 
 	fn remove_child(&self, child: &Arc<LockRW<Inode>>) -> Result<(), Errno> {
-		pr_warn!("remove child");
 		let sb = self.super_block();
 		let inum = child.read_lock().inum();
 		let mut inum_staged = sb.dealloc_inum_staged(inum)?;
@@ -273,7 +274,6 @@ impl DirInode {
 		{
 			let data = child.data_read();
 			let mut bids = data.block_id().into_iter();
-			// pr_debug!("remove_child {:?}, {:?}", inum, bids);
 			while let Some(bid) = bids.next() {
 				let staged = sb.dealloc_block_staged(bid)?;
 				blocks.push_back(staged);
