@@ -3,7 +3,7 @@ use core::{
 	ptr::copy_nonoverlapping,
 };
 
-use alloc::{boxed::Box, collections::VecDeque, string::String, sync::Arc};
+use alloc::{boxed::Box, collections::VecDeque, sync::Arc};
 
 use crate::{
 	fs::{
@@ -18,9 +18,10 @@ use crate::{
 		},
 		vfs::{self, FileType, Permission},
 	},
-	handle_iterblock_error, pr_debug, pr_warn,
+	handle_iterblock_error,
 	sync::LockRW,
 	syscall::errno::Errno,
+	trace_feature,
 };
 
 use super::{dir_file::DirFile, record::Record, Dirent, DirentMut};
@@ -433,7 +434,6 @@ impl vfs::DirInode for DirInode {
 	}
 
 	fn unlink(&self, name: &[u8]) -> Result<(), Errno> {
-		pr_warn!("unlink");
 		let (ino, mut record) = self.remove_dirent_staged(name, |file_type| match file_type {
 			FileType::Directory => Err(Errno::EISDIR),
 			_ => Ok(()),
@@ -454,8 +454,7 @@ impl vfs::DirInode for DirInode {
 }
 
 fn write_dirent(buf: &mut [u8], record: &Record, name: &[u8]) {
-	let s = String::from_utf8(name.to_vec());
-	pr_debug!("record: {:?}, name: {:?}", record, s);
+	trace_feature!("ext2-mkdir" | "ext2-create" "record: {:?}, name: {:?}", record, alloc::string::String::from_utf8(name.to_vec()));
 
 	let record: &[u8; size_of::<Record>()] = unsafe { transmute(record) };
 
