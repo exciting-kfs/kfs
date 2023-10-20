@@ -27,15 +27,8 @@ impl<'a> IdSapceWrite<'a> {
 		let prev_len = self.inode.synced_len;
 
 		if prev_len < data_len {
-			let mut bids = self.blockids();
-			let end = min(bids.len(), 12);
-
-			bids.push(unsafe { BlockId::new_unchecked(0) });
-
-			let mut stream = bids.into_iter();
-			for _ in 0..prev_len {
-				stream.next();
-			}
+			let mut stream = self.bid_to_write().into_iter();
+			let end = min(data_len, 12);
 
 			for i in prev_len..end {
 				if let Some(bid) = stream.next() {
@@ -75,12 +68,16 @@ impl<'a> IdSapceWrite<'a> {
 		Ok(())
 	}
 
-	fn blockids(&self) -> Vec<BlockId> {
-		self.inode
-			.chunks
+	fn bid_to_write(&self) -> Vec<BlockId> {
+		let prev_len = self.inode.synced_len;
+
+		let mut v = self.inode.chunks[prev_len..]
 			.iter()
 			.map(|b| *b.lock().block_id())
-			.collect::<Vec<_>>()
+			.collect::<Vec<_>>();
+
+		v.push(unsafe { BlockId::new_unchecked(0) });
+		v
 	}
 
 	#[inline]
