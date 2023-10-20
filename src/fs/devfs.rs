@@ -8,24 +8,16 @@ use core::mem::MaybeUninit;
 
 use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::Vec};
 
-use crate::{
-	config::NR_CONSOLES,
-	driver::{
-		ide::ide_id::NR_IDE_DEV,
-		partition::{get_block_device, NR_PRIMARY},
-		terminal::get_tty,
-	},
-	process::get_idle_task,
-	syscall::errno::Errno,
-};
+use crate::{config::NR_CONSOLES, driver::terminal::get_tty, syscall::errno::Errno};
 
-use self::{null::DevNull, partition::DevPart, tty::DevTTY, zero::DevZero};
+use self::{null::DevNull, tty::DevTTY, zero::DevZero};
 
 use super::{
+	ext2,
 	tmpfs::{TmpDir, TmpSb},
 	vfs::{
 		DirHandle, DirInode, FileInode, FileSystem, Ident, MemoryFileSystem, Permission, RawStat,
-		RealInode, SymLinkInode, TimeSpec, VfsInode, ROOT_DIR_ENTRY,
+		RealInode, SuperBlock, SymLinkInode, TimeSpec, VfsInode,
 	},
 };
 
@@ -33,22 +25,22 @@ pub struct DevFs;
 
 impl FileSystem for DevFs {}
 
-impl MemoryFileSystem<TmpSb, DevDirInode> for DevFs {
-	fn mount() -> Result<(Arc<TmpSb>, Arc<DevDirInode>), Errno> {
+impl MemoryFileSystem for DevFs {
+	fn mount() -> Result<(Arc<dyn SuperBlock>, Arc<dyn DirInode>), Errno> {
 		Ok((Arc::new(TmpSb), unsafe {
 			DEVFS_ROOT_DIR.assume_init_ref().clone()
 		}))
 	}
 }
 
-static mut DEVFS_ROOT_DIR: MaybeUninit<Arc<DevDirInode>> = MaybeUninit::uninit();
+pub static mut DEVFS_ROOT_DIR: MaybeUninit<Arc<DevDirInode>> = MaybeUninit::uninit();
 
-pub fn init() -> Result<(), Errno> {
+pub fn init() {
 	let mut dev_root_dir = DevDirInode::new();
 
 	let mut ttyname: [u8; 4] = *b"ttyx";
 	for i in 0..NR_CONSOLES {
-		ttyname[3] = b'0' + (i + 1) as u8;
+		ttyname[3] = b'1' + i as u8;
 		let ident = Ident::new(&ttyname);
 		dev_root_dir.devices.insert(
 			ident,
@@ -57,15 +49,15 @@ pub fn init() -> Result<(), Errno> {
 	}
 
 	let mut partname: [u8; 5] = *b"partx";
-	for i in 0..(NR_PRIMARY * NR_IDE_DEV) {
-		if let Some(dev) = get_block_device(i) {
-			partname[4] = b'0' + (i + 1) as u8;
-			let ident = Ident::new(&partname);
+	for (i, dev) in unsafe { &ext2::PARTITIONS }
+		.iter()
+		.enumerate()
+		.filter_map(|(i, dev)| dev.clone().map(|x| (i, x)))
+	{
+		partname[4] = b'1' + i as u8;
+		let ident = Ident::new(&partname);
 
-			dev_root_dir
-				.devices
-				.insert(ident, VfsInode::Block(Arc::new(DevPart::new(dev))));
-		}
+		dev_root_dir.devices.insert(ident, dev);
 	}
 
 	dev_root_dir
@@ -77,19 +69,6 @@ pub fn init() -> Result<(), Errno> {
 		.insert(Ident::new(b"zero"), VfsInode::File(Arc::new(DevZero)));
 
 	unsafe { DEVFS_ROOT_DIR.write(Arc::new(dev_root_dir)) };
-
-	let (sb, inode) = DevFs::mount()?;
-	let root = ROOT_DIR_ENTRY.lock().clone().ok_or(Errno::ESRCH)?;
-
-	let dev = root.mkdir(
-		b"dev",
-		Permission::from_bits_truncate(0o666),
-		&get_idle_task(),
-	)?;
-
-	dev.mount(inode, sb, &get_idle_task())?;
-
-	Ok(())
 }
 
 pub struct DevDirInode {

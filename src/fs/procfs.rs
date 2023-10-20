@@ -15,9 +15,9 @@ use crate::{
 };
 
 use super::path::{format_path, Path};
-use super::tmpfs::TmpSb;
 use super::vfs::{
-	lookup_entry_follow, Entry, FileSystem, RealInode, TimeSpec, VfsHandle, ROOT_DIR_ENTRY,
+	self, lookup_entry_at_follow, Entry, FileSystem, RealInode, SuperBlock, TimeSpec, VfsDirEntry,
+	VfsHandle,
 };
 use super::{
 	tmpfs::{TmpDir, TmpSymLink},
@@ -27,39 +27,49 @@ use super::{
 	},
 };
 
-pub fn init() -> Result<(), Errno> {
+pub fn init() {
 	unsafe { PROCFS_ROOT_DIR.write(Arc::new(Locked::new(ProcRootDirInode::new()))) };
-
-	let (sb, inode) = ProcFs::mount()?;
-	let root = ROOT_DIR_ENTRY.lock().clone().ok_or(Errno::ENOENT)?;
-
-	let proc = root.mkdir(
-		b"proc",
-		Permission::from_bits_truncate(0o666),
-		&get_idle_task(),
-	)?;
-
-	proc.mount(inode, sb, &get_idle_task())?;
 
 	create_task_node(&get_idle_task());
 	create_task_node(&get_init_task());
-
-	Ok(())
 }
 
 pub struct ProcFs;
 
 impl FileSystem for ProcFs {}
 
-impl MemoryFileSystem<TmpSb, Locked<ProcRootDirInode>> for ProcFs {
-	fn mount() -> Result<(Arc<TmpSb>, Arc<Locked<ProcRootDirInode>>), Errno> {
-		Ok((Arc::new(TmpSb), unsafe {
+impl MemoryFileSystem for ProcFs {
+	fn mount() -> Result<(Arc<dyn SuperBlock>, Arc<dyn DirInode>), Errno> {
+		if PROCFS_ROOT_DIR_ENTRY.lock().is_some() {
+			return Err(Errno::EBUSY);
+		}
+
+		Ok((Arc::new(ProcSb), unsafe {
 			PROCFS_ROOT_DIR.assume_init_ref().clone()
 		}))
+	}
+
+	fn finish_mount(entry: &Arc<VfsDirEntry>) {
+		PROCFS_ROOT_DIR_ENTRY.lock().replace(entry.clone());
+	}
+}
+
+pub struct ProcSb;
+
+impl vfs::SuperBlock for ProcSb {
+	fn filesystem(&self) -> Box<dyn FileSystem> {
+		Box::new(ProcFs)
+	}
+
+	fn unmount(&self) -> Result<(), Errno> {
+		PROCFS_ROOT_DIR_ENTRY.lock().take();
+
+		Ok(())
 	}
 }
 
 static mut PROCFS_ROOT_DIR: MaybeUninit<Arc<Locked<ProcRootDirInode>>> = MaybeUninit::uninit();
+static PROCFS_ROOT_DIR_ENTRY: Locked<Option<Arc<VfsDirEntry>>> = Locked::new(None);
 
 pub fn create_task_node(task: &Arc<Task>) {
 	let procfs = unsafe { PROCFS_ROOT_DIR.assume_init_ref() };
@@ -74,10 +84,9 @@ pub fn delete_task_node(pid: Pid) -> Result<(), Errno> {
 	let procfs = unsafe { PROCFS_ROOT_DIR.assume_init_ref() };
 	procfs.remove_inode(&pid);
 
-	let entry = lookup_entry_follow(&Path::new(b"/proc"), &get_idle_task())
-		.and_then(|ent| ent.downcast_dir())?;
-
-	entry.remove_child_force(format!("{}", pid.as_raw()).as_bytes());
+	if let Some(ent) = &*PROCFS_ROOT_DIR_ENTRY.lock() {
+		ent.remove_child_force(format!("{}", pid.as_raw()).as_bytes());
+	}
 
 	Ok(())
 }
@@ -105,10 +114,16 @@ pub fn delete_fd_node(pid: Pid, fd: Fd) -> Result<(), Errno> {
 
 	dir.lock().fds.lock().remove_fd(fd.index());
 
-	let entry = lookup_entry_follow(&format_path!("/proc/{}/fd", pid.as_raw()), &get_idle_task())
+	if let Some(ent) = &*PROCFS_ROOT_DIR_ENTRY.lock() {
+		let ent = lookup_entry_at_follow(
+			ent.clone(),
+			&format_path!("{}/fd", pid.as_raw()),
+			&get_idle_task(),
+		)
 		.and_then(|ent| ent.downcast_dir())?;
 
-	entry.remove_child_force(fd.index().to_string().as_bytes());
+		ent.remove_child_force(fd.index().to_string().as_bytes());
+	}
 
 	Ok(())
 }
@@ -126,13 +141,15 @@ pub fn change_cwd(task: &Arc<Task>) -> Result<(), Errno> {
 
 	dir.lock().cwd = Arc::new(TmpSymLink::new(cwd));
 
-	let entry = lookup_entry_follow(
-		&format_path!("/proc/{}", task.get_pid().as_raw()),
-		&get_idle_task(),
-	)
-	.and_then(|ent| ent.downcast_dir())?;
-
-	entry.remove_child_force(b"cwd");
+	if let Some(ent) = &*PROCFS_ROOT_DIR_ENTRY.lock() {
+		let ent = lookup_entry_at_follow(
+			ent.clone(),
+			&format_path!("{}", task.get_pid().as_raw()),
+			task,
+		)
+		.and_then(|ent| ent.downcast_dir())?;
+		ent.remove_child_force(b"cwd");
+	}
 
 	Ok(())
 }

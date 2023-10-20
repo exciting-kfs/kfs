@@ -24,8 +24,11 @@ use alloc::{
 };
 
 use crate::{
-	driver::partition::{BlockId, Partition},
-	fs::ext2::sb::SuperBlock,
+	driver::{
+		ide::ide_id::NR_IDE_DEV,
+		partition::{get_block_device, BlockId, Partition, NR_PRIMARY},
+	},
+	fs::{devfs::partition::DevPart, ext2::sb::SuperBlock},
 	mm::util::next_align,
 	pr_debug,
 	sync::{LocalLocked, LockRW, Locked},
@@ -35,7 +38,6 @@ use crate::{
 
 use self::{
 	block_pool::BlockPool,
-	dir::dir_inode::DirInode,
 	inode::inum::Inum,
 	sb::{
 		bgd::{BGD, BGDT},
@@ -45,7 +47,7 @@ use self::{
 
 use super::{
 	devfs::partition::PartBorrow,
-	vfs::{self, FileSystem},
+	vfs::{self, FileSystem, VfsInode},
 };
 
 const MAGIC: u16 = 0xef53; // TODO check this..
@@ -111,8 +113,10 @@ impl FileSystem for Ext2 {
 	}
 }
 
-impl vfs::PhysicalFileSystem<SuperBlock, DirInode> for Ext2 {
-	fn mount(block_dev: PartBorrow) -> Result<(Arc<SuperBlock>, Arc<DirInode>), Errno> {
+impl vfs::PhysicalFileSystem for Ext2 {
+	fn mount(
+		block_dev: PartBorrow,
+	) -> Result<(Arc<dyn vfs::SuperBlock>, Arc<dyn vfs::DirInode>), Errno> {
 		let mut sb_info = Ext2::read_superblock(&block_dev)?;
 		trace_feature!("ext2-mount", "sb: {:?}", sb_info);
 
@@ -164,12 +168,22 @@ impl vfs::PhysicalFileSystem<SuperBlock, DirInode> for Ext2 {
 			SB_POOL.lock().insert(uuid, sb.clone());
 		}
 
-		ret
+		let (sb, inode) = ret?;
+
+		Ok((sb, inode))
 	}
 }
 
-pub fn init() -> Result<(), Errno> {
-	Ok(())
+const __PARTITION_NONE: Option<VfsInode> = None;
+pub static mut PARTITIONS: [Option<VfsInode>; NR_PRIMARY * NR_IDE_DEV] =
+	[__PARTITION_NONE; NR_PRIMARY * NR_IDE_DEV];
+
+pub fn init() {
+	for i in 0..(NR_PRIMARY * NR_IDE_DEV) {
+		if let Some(dev) = get_block_device(i) {
+			unsafe { PARTITIONS[i] = Some(VfsInode::Block(Arc::new(DevPart::new(dev)))) };
+		}
+	}
 }
 
 pub fn oom_handler() {

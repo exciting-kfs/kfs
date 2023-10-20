@@ -197,17 +197,19 @@ impl VfsDirEntry {
 		self.is_mount_point
 	}
 
-	fn do_absolute_root_mount(mut self) {
+	fn do_absolute_root_mount(mut self) -> Arc<VfsDirEntry> {
 		let new_dentry = Arc::new_cyclic(|parent| {
 			self.parent = parent.clone();
 
 			self
 		});
 
-		ROOT_DIR_ENTRY.lock().replace(new_dentry);
+		ROOT_DIR_ENTRY.lock().replace(new_dentry.clone());
+
+		new_dentry
 	}
 
-	fn do_sub_mount(mut self, parent: Arc<Self>) {
+	fn do_sub_mount(mut self, parent: Arc<Self>) -> Arc<VfsDirEntry> {
 		let new_dentry = Arc::new({
 			self.parent = Arc::downgrade(&parent);
 
@@ -217,6 +219,8 @@ impl VfsDirEntry {
 		let mut sub_mount = parent.sub_mount.lock();
 		sub_mount.remove::<[u8]>(new_dentry.get_name().borrow());
 		sub_mount.insert(new_dentry.get_name(), VfsEntry::new_dir(new_dentry.clone()));
+
+		new_dentry
 	}
 
 	pub fn mount(
@@ -224,7 +228,7 @@ impl VfsDirEntry {
 		inode: Arc<dyn DirInode>,
 		super_block: Arc<dyn SuperBlock>,
 		task: &Arc<Task>,
-	) -> Result<(), Errno> {
+	) -> Result<Arc<VfsDirEntry>, Errno> {
 		if !task.is_privileged() {
 			return Err(Errno::EPERM);
 		}
@@ -241,12 +245,12 @@ impl VfsDirEntry {
 			is_mount_point: true,
 		};
 
-		match Arc::ptr_eq(self, &parent) {
+		let new_dentry = match Arc::ptr_eq(self, &parent) {
 			true => new_dentry.do_absolute_root_mount(),
 			false => new_dentry.do_sub_mount(parent),
 		};
 
-		Ok(())
+		Ok(new_dentry)
 	}
 
 	fn do_absolute_root_unmount(successor: Arc<Self>) -> Result<(), Errno> {

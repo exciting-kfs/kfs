@@ -169,12 +169,14 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 
 	unsafe { x86::init() };
 
-	fs::init().expect("failed to mount /");
+	fs::init_rootfs().expect("failed to mount /");
 	process::init();
 
-	fs::init_devfs().expect("failed to mount /dev");
-	fs::init_procfs().expect("failed to mount /proc");
-	fs::ext2::init().expect("failed to mount /ext2");
+	fs::ext2::init();
+	fs::init_devfs();
+	fs::init_procfs();
+
+	fs::mount_root();
 
 	scheduler::work::init().expect("worker thread init");
 

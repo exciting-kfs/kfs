@@ -22,12 +22,13 @@ pub trait FileSystem {
 	}
 }
 
-pub trait MemoryFileSystem<S: SuperBlock, D: DirInode>: FileSystem {
-	fn mount() -> Result<(Arc<S>, Arc<D>), Errno>;
+pub trait MemoryFileSystem: FileSystem {
+	fn mount() -> Result<(Arc<dyn SuperBlock>, Arc<dyn DirInode>), Errno>;
+	fn finish_mount(_entry: &Arc<VfsDirEntry>) {}
 }
 
-pub trait PhysicalFileSystem<S: SuperBlock, D: DirInode>: FileSystem {
-	fn mount(dev: PartBorrow) -> Result<(Arc<S>, Arc<D>), Errno>;
+pub trait PhysicalFileSystem: FileSystem {
+	fn mount(dev: PartBorrow) -> Result<(Arc<dyn SuperBlock>, Arc<dyn DirInode>), Errno>;
 }
 
 pub trait SuperBlock {
