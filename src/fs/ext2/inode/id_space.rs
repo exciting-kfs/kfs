@@ -28,42 +28,42 @@ enum Command {
 	End,
 }
 
-enum Indexes {
+enum IdxInBlk {
 	Depth0,
 	Depth1 { blk_i: [isize; 1] },
 	Depth2 { blk_i: [isize; 2] },
 	Depth3 { blk_i: [isize; 3] },
 }
 
-impl Indexes {
+impl IdxInBlk {
 	fn split(index: usize, id_count: usize) -> Self {
 		let c = id_count;
 		if index >= c * c + c + 12 {
 			let d1 = (index - 12 - c) / (c * c) - 1;
 			let d2 = ((index - 12) / c - 1) % c;
 			let d3 = (index - 12) % c;
-			Indexes::Depth3 {
+			IdxInBlk::Depth3 {
 				blk_i: [d1 as isize, d2 as isize, d3 as isize],
 			}
 		} else if index >= c + 12 {
 			let d1 = (index - 12) / c - 1;
 			let d2 = (index - 12) % c;
 
-			Indexes::Depth2 {
+			IdxInBlk::Depth2 {
 				blk_i: [d1 as isize, d2 as isize],
 			}
 		} else if index >= 12 {
-			Indexes::Depth1 {
+			IdxInBlk::Depth1 {
 				blk_i: [index as isize - 12],
 			}
 		} else {
-			Indexes::Depth0
+			IdxInBlk::Depth0
 		}
 	}
 
 	fn array_index(&self) -> usize {
 		match self {
-			Self::Depth0 => 12,
+			Self::Depth0 => 0,
 			Self::Depth1 { blk_i: _ } => 12,
 			Self::Depth2 { blk_i: _ } => 13,
 			Self::Depth3 { blk_i: _ } => 14,
@@ -194,11 +194,11 @@ impl<'a> StackHelper<'a> {
 		stack
 	}
 
-	fn push_block_one(&mut self, index: usize, depth: usize) -> Result<(), Errno> {
+	fn push_block_one(&mut self, arr_i: usize, depth: usize) -> Result<(), Errno> {
 		let block_pool = self.inode.block_pool();
 
-		if self.inode.info.block[index] > 0 {
-			let bid = self.inode.info.bid_array(index).unwrap();
+		if self.inode.info.block[arr_i] > 0 {
+			let bid = self.inode.info.bid_array(arr_i).unwrap();
 			let block = block_pool.get_or_load(bid)?;
 
 			let chunk = Chunk::new(&block, 0..self.id_count);

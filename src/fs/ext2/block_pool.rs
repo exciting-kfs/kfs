@@ -18,10 +18,7 @@ use crate::{
 	driver::ide::block::Block as IdeBlock,
 	driver::{ide::dma::hook::Cleanup, partition::BlockId},
 	fs::devfs::partition::PartBorrow,
-	process::{
-		signal::poll_signal_queue,
-		task::{Task, CURRENT},
-	},
+	process::{signal::poll_signal_queue, task::Task},
 	scheduler::{
 		preempt::{preempt_disable, AtomicOps},
 		sleep::{sleep_and_yield_atomic, wake_up_deep_sleep, Sleep},
@@ -36,9 +33,11 @@ use self::{
 	list::List,
 };
 
+use super::wait_list::WaitList;
+
 #[derive(Debug)]
 enum MaybeBlock {
-	Wait(Vec<Weak<Task>>),
+	Wait(WaitList),
 	Block(Arc<LockRW<Block>>),
 }
 
@@ -54,6 +53,14 @@ impl MaybeBlock {
 		match self {
 			MaybeBlock::Block(b) => Some(b),
 			MaybeBlock::Wait(_) => None,
+		}
+	}
+
+	#[inline]
+	fn is_block(&self) -> bool {
+		match self {
+			MaybeBlock::Block(_) => true,
+			MaybeBlock::Wait(_) => false,
 		}
 	}
 }
@@ -208,47 +215,44 @@ impl BlockPool {
 				MaybeBlock::Block(b) => Ok(b.clone()),
 				MaybeBlock::Wait(w) => {
 					let atomic = preempt_disable();
-					let current = unsafe { CURRENT.get_ref() };
-					w.push(Arc::downgrade(current));
+					w.register();
 					Err(InErr::Wait(atomic))
 				}
 			},
 			Entry::Vacant(v) => {
 				let atomic = preempt_disable();
-				v.insert(MaybeBlock::Wait(Vec::new()));
+				v.insert(MaybeBlock::Wait(WaitList::new()));
 				Err(InErr::NotLoaded(atomic))
 			}
 		}
 	}
 
-	pub fn load_request(self: &Arc<Self>, bid: &[BlockId]) -> Result<AtomicOps, AllocError> {
+	pub fn load_async<'a>(self: &Arc<Self>, bid: &[BlockId]) -> Result<AtomicOps, AllocError> {
 		trace_feature!("block_pool", "load_request: bid: {:?}", bid);
 
-		let mut pool = self.pool.lock();
-		let current = unsafe { CURRENT.get_ref() };
-		let weak = Arc::downgrade(current);
-
 		let atomic = preempt_disable();
+
+		let mut pool = self.pool.lock();
 
 		let bid = bid.iter().filter_map(|bid| match pool.entry(*bid) {
 			Entry::Occupied(mut o) => match o.get_mut() {
 				MaybeBlock::Block(_) => None,
 				MaybeBlock::Wait(w) => {
-					w.push(weak.clone());
+					w.register();
 					None
 				}
 			},
 			Entry::Vacant(v) => {
-				let mut list = Vec::new();
-				list.push(weak.clone());
+				let mut list = WaitList::new();
+				list.register();
 				v.insert(MaybeBlock::Wait(list));
-				Some(*bid)
+				Some(bid)
 			}
 		});
 
 		for b in bid {
-			let cb = self.async_callback(b);
-			self.dev.load_async(b, cb);
+			let cb = self.async_callback(*b);
+			self.dev.load_async(*b, cb);
 		}
 
 		Ok(atomic)
@@ -285,7 +289,7 @@ impl BlockPool {
 				.is_some();
 
 			if is_inuse {
-				lru.push_back(node); // push_front?
+				lru.push_back(node);
 				break;
 			}
 
@@ -309,9 +313,8 @@ impl BlockPool {
 		match self.pool.lock().entry(bid) {
 			Entry::Occupied(mut o) => match o.get() {
 				MaybeBlock::Block(b) => b.clone(),
-				MaybeBlock::Wait(list) => {
+				MaybeBlock::Wait(_) => {
 					let block = Arc::new(LockRW::new(Block::new(bid, block.into(), self)));
-					Self::wake_up_in_list(list);
 
 					*o.get_mut() = MaybeBlock::Block(block.clone());
 					self.lru.lock().push_back(block.read_lock().node());
@@ -326,13 +329,8 @@ impl BlockPool {
 	fn request_retry(&self, bid: BlockId) {
 		let mut pool = self.pool.lock();
 
-		match pool.entry(bid) {
-			Entry::Occupied(o) => {
-				if let MaybeBlock::Wait(list) = o.get() {
-					Self::wake_up_in_list(list);
-				}
-			}
-			Entry::Vacant(_) => panic!("invalid request retry call"),
+		if let Some(maybe) = pool.remove(&bid).filter(|maybe| maybe.is_block()) {
+			pool.insert(bid, maybe);
 		}
 	}
 

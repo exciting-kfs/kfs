@@ -146,7 +146,11 @@ impl Block {
 #[cfg(log_level = "debug")]
 impl Drop for Block {
 	fn drop(&mut self) {
-		trace_feature!("ext2-unmount" | "lru", "block: drop: {:?}", self.id());
+		trace_feature!(
+			"ext2-unmount" | "lru" | "ext2-idspace",
+			"block: drop: {:?}",
+			self.id()
+		);
 	}
 }
 

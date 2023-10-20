@@ -6,6 +6,7 @@ use crate::{
 	driver::ide::{ide_id::IdeId, IdeController},
 	scheduler::work::schedule_slow_work,
 	sync::{Locked, LockedGuard},
+	trace_feature,
 };
 
 use super::{event::DmaRun, DmaInit};
@@ -45,18 +46,26 @@ impl DmaQ {
 		self.prev = dev.pair();
 		self.queue[dev.index_in_channel()].push_front(event);
 		schedule_slow_work(work::do_next_dma, dev);
-		// pr_debug!("dma_schedule: start_dma scheduled");
 	}
 
 	pub fn merge_insert(&mut self, dev: IdeId, mut event: DmaInit) {
 		let index = dev.index_in_channel();
 		let queue = &mut self.queue[index];
 
-		for in_q in queue.iter_mut() {
-			if let Ok(_) = in_q.try_merge(&mut event) {
-				return;
-			}
+		if let Some(_) = queue
+			.front_mut()
+			.and_then(|inq| inq.try_merge(&mut event).ok())
+		{
+			return;
 		}
+
+		if let Some(_) = queue
+			.back_mut()
+			.and_then(|inq| inq.try_merge(&mut event).ok())
+		{
+			return;
+		}
+
 		queue.push_back(event);
 	}
 
@@ -77,12 +86,23 @@ impl DmaQ {
 
 	fn cleanup_scheduled(&mut self) {
 		if let Some(ev) = take(&mut self.scheduled) {
+			trace_feature!(
+				"time-dma-verbose",
+				"end: {}",
+				get_timestamp_micro() % 1000000,
+			);
 			ev.cleanup()
 		}
 	}
 
-	fn scheduled(&mut self, running: Option<DmaRun>) {
-		let _ = replace(&mut self.scheduled, running);
+	fn scheduled(&mut self, running: DmaRun) {
+		trace_feature!(
+			"time-dma-verbose",
+			"start: {}",
+			get_timestamp_micro() % 1000000,
+		);
+
+		let _ = replace(&mut self.scheduled, Some(running));
 	}
 
 	fn retry(&mut self, ide: LockedGuard<'_, IdeController>) {
@@ -115,7 +135,6 @@ pub mod work {
 			ide_id::IdeId,
 			try_get_ide_controller,
 		},
-		pr_warn,
 		scheduler::work::{Error, Work},
 	};
 
@@ -153,22 +172,26 @@ pub mod work {
 		};
 
 		// last, hold lock of the `dma_q`
-		let running = ready.map(|ready| ready.perform(ide));
-		let mut dma_q = get_dma_q(*id);
-		dma_q.scheduled(running);
+		if let Some(running) = ready.map(|ready| ready.perform(ide)) {
+			let mut dma_q = get_dma_q(*id);
+			dma_q.scheduled(running);
+		}
 
 		Ok(())
 	}
 
 	pub fn do_next_dma_postponed(arg: &mut (IdeId, Option<DmaReady>)) -> Result<(), Error> {
-		pr_warn!("do next dma postponed");
+		// pr_warn!("do next dma postponed");
 		let id = &mut arg.0;
 		let ide = try_get_ide_controller(*id, LOCK_TRY).map_err(|_| Error::Retry)?;
 
 		let ready = take(&mut arg.1);
 		let running = ready.map(|ready| ready.perform(ide));
 		let mut dma_q = get_dma_q(*id);
-		dma_q.scheduled(running);
+
+		if let Some(running) = running {
+			dma_q.scheduled(running);
+		}
 
 		Ok(())
 	}

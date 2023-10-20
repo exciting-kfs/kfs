@@ -1,10 +1,12 @@
 use core::{
 	cell::UnsafeCell,
 	ptr::{addr_of_mut, NonNull},
+	sync::atomic::Ordering,
 };
 
 use crate::{
 	acpi::HPET_BASE, driver::rtc::get_timestamp_utc, mm::constant::HIGH_IO_OFFSET, pr_info,
+	RUN_TIME,
 };
 
 #[repr(packed)]
@@ -140,6 +142,18 @@ pub fn get_timestamp_nano() -> u64 {
 	let elapsed = HPET.get_counter() * (HPET.clock_speed() as u64 / 1_000_000);
 
 	unsafe { BOOT_TIMESTAMP + elapsed }
+}
+
+pub fn get_timestamp_mili() -> u64 {
+	get_timestamp_nano() / 1000 / 1000
+}
+
+pub fn get_timestamp_micro() -> u64 {
+	if RUN_TIME.load(Ordering::Relaxed) {
+		get_timestamp_nano() / 1000
+	} else {
+		0
+	}
 }
 
 pub fn get_timestamp_second() -> u64 {

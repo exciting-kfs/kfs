@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, ItemFn, ReturnType};
+use syn::{parse_macro_input, spanned::Spanned, ItemFn, ReturnType};
 
 #[proc_macro_attribute]
 pub fn ktest(attr: TokenStream, input: TokenStream) -> TokenStream {
@@ -59,6 +59,33 @@ pub fn interrupt_handler(_attr: TokenStream, input: TokenStream) -> TokenStream 
 			assert_eq!(crate::sync::get_lock_depth(), 0);
 			let __interrupt_guard = crate::interrupt::enter_interrupt_context();
 			#block;
+		}
+	}
+	.into()
+}
+
+#[proc_macro_attribute]
+pub fn log_time(attr: TokenStream, input: TokenStream) -> TokenStream {
+	let func_impl = parse_macro_input!(input as ItemFn);
+
+	let sig = func_impl.sig.clone();
+	let name = sig.ident.clone().to_string();
+
+	let vis = func_impl.vis.clone();
+	let block = func_impl.block.clone();
+
+	let feature_name = format!("time-{}", attr.to_string());
+	let feature_name = syn::LitStr::new(&feature_name, sig.span());
+
+	quote! {
+		#vis #sig {
+			let log_time_start = crate::driver::hpet::get_timestamp_micro();
+			let ret = #block;
+			let log_time_end = crate::driver::hpet::get_timestamp_micro();
+
+			crate::trace_feature!(#feature_name, "{}: {} us", #name, log_time_end - log_time_start);
+
+			ret
 		}
 	}
 	.into()

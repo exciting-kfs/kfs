@@ -3,7 +3,7 @@ use core::{
 	ptr::copy_nonoverlapping,
 };
 
-use alloc::{boxed::Box, collections::VecDeque, string::String, sync::Arc};
+use alloc::{boxed::Box, collections::VecDeque, sync::Arc};
 
 use crate::{
 	fs::{
@@ -18,21 +18,13 @@ use crate::{
 		},
 		vfs::{self, FileType, Permission},
 	},
-	pr_debug, pr_warn,
+	handle_iterblock_error,
 	sync::LockRW,
 	syscall::errno::Errno,
+	trace_feature,
 };
 
 use super::{dir_file::DirFile, record::Record, Dirent, DirentMut};
-
-macro_rules! handle_iterblock_error {
-	($e: expr) => {
-		match $e {
-			IterBlockError::Errno(e) => return Err(e),
-			IterBlockError::End => break,
-		}
-	};
-}
 
 #[derive(Clone)]
 pub struct DirInode(Arc<LockRW<Inode>>);
@@ -123,7 +115,7 @@ impl DirInode {
 					let space = self.point_space(cursor, &record);
 					iter.rewind();
 
-					return Ok((iter.next_mut_block().unwrap(), space));
+					return unsafe { iter.next_mut_block_unchecked().map(|ent| (ent, space)) };
 				}
 			} else {
 				handle_iterblock_error!(chunk.unwrap_err());
@@ -133,9 +125,10 @@ impl DirInode {
 		iter.rewind();
 		let space = self.alloc_space(&mut iter)?;
 
-		iter.next_mut_block()
-			.map(|dirent| (dirent, space))
-			.map_err(|e| e.errno().unwrap())
+		unsafe {
+			iter.next_mut_block_unchecked()
+				.map(|dirent| (dirent, space))
+		}
 	}
 
 	fn point_space(&self, cursor: usize, record: &Record) -> inode::ChunkMut {
@@ -152,11 +145,9 @@ impl DirInode {
 
 		let mut inode_iter = inode::Iter::write_end(inode.clone());
 
-		let chunk = inode_iter
-			.next_mut_block(block_size)
-			.map_err(|e| e.errno().unwrap())?;
+		let chunk = inode_iter.next_mut_block(block_size)?;
 
-		let mut dirent = dir_iter.next_mut().unwrap();
+		let mut dirent = unsafe { dir_iter.next_mut_block_unchecked()? };
 		dirent.get_record().capacity_add(block_size);
 		dir_iter.rewind();
 
@@ -215,10 +206,12 @@ impl DirInode {
 	fn get_dirent_with_prev(&self, name: &[u8]) -> Result<(DirentMut, Dirent), Errno> {
 		let mut iter = self.find_dirent(name)?;
 
+		let curr = unsafe { iter.next_block_unchecked()? };
+
+		iter.rewind();
 		iter.rewind();
 
-		let prev = iter.next_mut_block().map_err(|e| e.errno().unwrap())?;
-		let curr = iter.next_block().map_err(|e| e.errno().unwrap())?;
+		let prev = unsafe { iter.next_mut_block_unchecked()? };
 
 		Ok((prev, curr))
 	}
@@ -274,7 +267,6 @@ impl DirInode {
 	}
 
 	fn remove_child(&self, child: &Arc<LockRW<Inode>>) -> Result<(), Errno> {
-		pr_warn!("remove child");
 		let sb = self.super_block();
 		let inum = child.read_lock().inum();
 		let mut inum_staged = sb.dealloc_inum_staged(inum)?;
@@ -282,11 +274,9 @@ impl DirInode {
 		let mut blocks = VecDeque::new();
 		{
 			let data = child.data_read();
-			let bids = data.block_id();
-			pr_debug!("remove_child {:?}, {:?}", inum, bids);
-			let mut iter = bids.iter();
-			while let Some(bid) = iter.next() {
-				let staged = sb.dealloc_block_staged(*bid)?;
+			let mut bids = data.block_id().into_iter();
+			while let Some(bid) = bids.next() {
+				let staged = sb.dealloc_block_staged(bid)?;
 				blocks.push_back(staged);
 			}
 		}
@@ -338,7 +328,7 @@ impl vfs::DirInode for DirInode {
 
 	fn lookup(&self, name: &[u8]) -> Result<vfs::VfsInode, Errno> {
 		let mut dirent = self.find_dirent(name)?;
-		let chunk = dirent.next_block().map_err(|e| e.errno().unwrap())?;
+		let chunk = unsafe { dirent.next_block_unchecked()? };
 
 		let (ino, file_type) = {
 			let record = chunk.get_record();
@@ -444,7 +434,6 @@ impl vfs::DirInode for DirInode {
 	}
 
 	fn unlink(&self, name: &[u8]) -> Result<(), Errno> {
-		pr_warn!("unlink");
 		let (ino, mut record) = self.remove_dirent_staged(name, |file_type| match file_type {
 			FileType::Directory => Err(Errno::EISDIR),
 			_ => Ok(()),
@@ -465,8 +454,7 @@ impl vfs::DirInode for DirInode {
 }
 
 fn write_dirent(buf: &mut [u8], record: &Record, name: &[u8]) {
-	let s = String::from_utf8(name.to_vec());
-	pr_debug!("record: {:?}, name: {:?}", record, s);
+	trace_feature!("ext2-mkdir" | "ext2-create" "record: {:?}, name: {:?}", record, alloc::string::String::from_utf8(name.to_vec()));
 
 	let record: &[u8; size_of::<Record>()] = unsafe { transmute(record) };
 

@@ -6,11 +6,11 @@ use core::{
 
 use alloc::collections::LinkedList;
 
-use crate::mm::util::next_align;
+use crate::{mm::util::next_align, syscall::errno::Errno};
 
 use self::{dir_inode::DirInode, record::Record};
 
-use super::inode::{self, IterBlockError, IterError};
+use super::inode::{self, IterBlockError, ReadIterError};
 
 pub mod dir_file;
 pub mod dir_inode;
@@ -29,7 +29,7 @@ impl Iter {
 		}
 	}
 
-	fn dirent_size(&mut self) -> Result<usize, IterError> {
+	fn dirent_size(&mut self) -> Result<usize, ReadIterError> {
 		let prev = self.iter.cursor();
 
 		let record_chunk = self.iter.next(size_of::<Record>())?;
@@ -59,7 +59,7 @@ impl Iter {
 		Ok(total)
 	}
 
-	fn next(&mut self) -> Result<Dirent, IterError> {
+	fn next(&mut self) -> Result<Dirent, ReadIterError> {
 		let prev = self.iter.cursor();
 		let total = self.dirent_size()?;
 		let chunk = self.iter.next(total)?;
@@ -77,18 +77,33 @@ impl Iter {
 		Ok(Dirent { chunk })
 	}
 
-	fn next_mut(&mut self) -> Result<DirentMut, IterError> {
+	unsafe fn next_block_unchecked(&mut self) -> Result<Dirent, Errno> {
 		let prev = self.iter.cursor();
-		let total = self.dirent_size()?;
-		let chunk = self.iter.next_mut(total)?;
+		let total = self.dirent_size_block().map_err(|e| e.errno_unchecked())?;
+		let chunk = self
+			.iter
+			.next_block(total)
+			.map_err(|e| e.errno_unchecked())?;
 
 		self.prev.push_front(prev);
-		Ok(DirentMut { chunk })
+		Ok(Dirent { chunk })
 	}
 
 	fn next_mut_block(&mut self) -> Result<DirentMut, IterBlockError> {
 		let prev = self.iter.cursor();
 		let total = self.dirent_size_block()?;
+		let chunk = self
+			.iter
+			.next_mut_block(total)
+			.map_err(|e| IterBlockError::Errno(e))?;
+
+		self.prev.push_front(prev);
+		Ok(DirentMut { chunk })
+	}
+
+	unsafe fn next_mut_block_unchecked(&mut self) -> Result<DirentMut, Errno> {
+		let prev = self.iter.cursor();
+		let total = self.dirent_size_block().map_err(|e| e.errno_unchecked())?;
 		let chunk = self.iter.next_mut_block(total)?;
 
 		self.prev.push_front(prev);

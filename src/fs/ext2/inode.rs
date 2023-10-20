@@ -12,13 +12,13 @@ use alloc::{sync::Arc, vec::Vec};
 use crate::{
 	driver::partition::BlockId,
 	fs::vfs::{self, FileType, Permission},
-	sync::LockRW,
+	sync::{LocalLocked, LockRW},
 	syscall::errno::Errno,
 	trace_feature,
 };
 
 use self::{
-	data::{DataRead, DataWrite},
+	data::{DataRead, DataWrite, MaybeChunk},
 	id_space::{IdSapceWrite, IdSpaceAdjust, IdSpaceRead},
 	info::{InodeInfo, InodeInfoMut, InodeInfoRef},
 	inum::Inum,
@@ -38,7 +38,7 @@ pub struct Inode {
 	info: InodeInfo,
 	inum: Inum,
 	sb: Arc<SuperBlock>,
-	chunks: Vec<BlockId>,
+	chunks: Vec<LocalLocked<MaybeChunk>>,
 	synced_len: usize,
 }
 
@@ -74,7 +74,7 @@ impl Inode {
 	fn with_block(inum: Inum, info: InodeInfo, sb: &Arc<SuperBlock>, bid: BlockId) -> Self {
 		let mut chunks = Vec::new();
 
-		chunks.push(bid);
+		chunks.push(LocalLocked::new(MaybeChunk::Id(bid)));
 
 		Self {
 			info,
@@ -176,7 +176,10 @@ impl LockRW<Inode> {
 
 		let mut w_inode = self.write_lock();
 		w_inode.synced_len = v.len();
-		w_inode.chunks = v;
+		w_inode.chunks = v
+			.into_iter()
+			.map(|id| LocalLocked::new(MaybeChunk::Id(id)))
+			.collect::<Vec<_>>();
 
 		trace_feature!("inode-load-bid", "chunks_len: {}", w_inode.chunks.len());
 

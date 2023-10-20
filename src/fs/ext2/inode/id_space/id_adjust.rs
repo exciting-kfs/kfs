@@ -14,7 +14,7 @@ use crate::{
 	trace_feature,
 };
 
-use super::Indexes;
+use super::IdxInBlk;
 
 pub struct IdSpaceAdjust<'a> {
 	pub inode: WriteLockGuard<'a, Inode>,
@@ -34,7 +34,9 @@ impl<'a> IdSpaceAdjust<'a> {
 
 		trace_feature!(
 			"ext2-idspace",
-			"adjust: old_count: {}, new_count: {}",
+			"adjust: sync_len: {}, data_len: {}, old_count: {}, new_count: {}",
+			sync_len,
+			data_len,
 			old_count,
 			new_count
 		);
@@ -45,6 +47,8 @@ impl<'a> IdSpaceAdjust<'a> {
 			self.shrink(old_count, new_count)?;
 		}
 
+		trace_feature!("ext2-idspace", "adjust: array: {:?}", self.inode.info.block);
+
 		self.inode.dirty();
 		Ok(())
 	}
@@ -54,45 +58,55 @@ impl<'a> IdSpaceAdjust<'a> {
 		self.inode.block_size() / size_of::<u32>()
 	}
 
-	fn nr_id_space(&self, index: usize) -> usize {
+	fn nr_id_space(&self, count: usize) -> usize {
 		let c = self.nr_id_in_block();
 		let mut sum = 0;
 
-		sum += index.checked_sub(12).map(|_| 1).unwrap_or_default();
-		sum += index
-			.checked_sub(c + 12)
-			.map(|x| x / c + 2)
+		sum += count.checked_sub(13).map(|x| x / c + 1).unwrap_or_default();
+		sum += count
+			.checked_sub(c + 13)
+			.map(|x| x / (c * c) + 1)
 			.unwrap_or_default();
-
-		sum += index
-			.checked_sub(c * c + c + 12)
-			.map(|x| x / (c * c) + x / c + 3)
+		sum += count
+			.checked_sub(c * c + c + 13)
+			.map(|_| 1)
 			.unwrap_or_default();
-
 		sum
 	}
 
 	fn shrink(&mut self, old_count: usize, new_count: usize) -> Result<(), Errno> {
-		let sb = self.inode.super_block();
-
 		let stack = self.prepare_stack_shrink()?;
-		let pool = self.inode.block_pool();
-		let bids = SpaceReader::new(pool, stack, old_count - new_count).read()?;
 
+		trace_feature!("ext2-idspace", "shrink: stack: {:?}", stack,);
+
+		let id_count = self.nr_id_in_block();
+		let mut bids = Vec::new();
+		let array = &mut self.inode.info.block;
+
+		if new_count <= id_count + 2 && array[14] > 0 {
+			bids.push(unsafe { BlockId::new_unchecked(array[14] as usize) });
+			array[14] = 0;
+		}
+		if new_count <= 1 && array[13] > 0 {
+			bids.push(unsafe { BlockId::new_unchecked(array[13] as usize) });
+			array[13] = 0;
+		}
+
+		if new_count == 0 && array[12] > 0 {
+			bids.push(unsafe { BlockId::new_unchecked(array[12] as usize) });
+			array[12] = 0;
+		}
+
+		let pool = self.inode.block_pool();
+		SpaceReader::new(pool, stack, old_count - new_count).read(&mut bids)?;
+
+		trace_feature!("ext2-idspace", "shrink: stream len: {}", bids.len());
+
+		let sb = self.inode.super_block();
 		let mut staged = Vec::new();
 		for bid in bids {
 			let s = sb.dealloc_block_staged(bid)?;
 			staged.push(s);
-		}
-
-		if new_count <= self.nr_id_in_block() + 2 {
-			self.inode.info.block[14] = 0;
-		}
-		if new_count <= 1 {
-			self.inode.info.block[13] = 0;
-		}
-		if new_count == 0 {
-			self.inode.info.block[12] = 0;
 		}
 
 		staged.iter_mut().for_each(|e| e.commit(()));
@@ -104,6 +118,7 @@ impl<'a> IdSpaceAdjust<'a> {
 		let sb = self.inode.super_block();
 
 		let mut stack = self.prepare_stack_expand()?;
+		trace_feature!("ext2-idspace", "expand: stack: {:?}", stack);
 
 		let blocks = sb.alloc_blocks(count)?;
 		let mut blocks = blocks.into_iter();
@@ -113,11 +128,14 @@ impl<'a> IdSpaceAdjust<'a> {
 			stack = v;
 		}
 
-		trace_feature!("ext2-idspace", "expand: stack: {:?}", stack);
+		trace_feature!(
+			"ext2-idspace",
+			"expand: stack: {:?}, stream len: {}",
+			stack,
+			blocks.len()
+		);
 
-		let mut expander = SpaceExpander::new(blocks, stack);
-		expander.expand();
-
+		SpaceExpander::new(blocks, stack).expand();
 		Ok(())
 	}
 
@@ -128,17 +146,22 @@ impl<'a> IdSpaceAdjust<'a> {
 	fn prepare_stack_shrink(&self) -> Result<Vec<Depth>, Errno> {
 		let mut helper = self.stack_helper();
 		let id_count = self.nr_id_in_block();
-		let indexes = Indexes::split(self.inode.chunks.len(), id_count);
+		let indexes = IdxInBlk::split(self.inode.chunks.len(), id_count);
 
 		match indexes {
-			Indexes::Depth3 { blk_i } => {
+			IdxInBlk::Depth3 { blk_i } => {
 				helper.push_block_slice(14, &blk_i[..2])?;
 
 				Ok(helper.into_stack())
 			}
-			Indexes::Depth2 { blk_i } => {
+			IdxInBlk::Depth2 { blk_i } => {
 				helper.push_block_one(14, 1)?;
 				helper.push_block_slice(13, &blk_i[..1])?;
+
+				Ok(helper.into_stack())
+			}
+			IdxInBlk::Depth1 { blk_i: _ } => {
+				helper.push_block_one(13, 0)?;
 
 				Ok(helper.into_stack())
 			}
@@ -148,15 +171,15 @@ impl<'a> IdSpaceAdjust<'a> {
 
 	fn prepare_stack_expand(&self) -> Result<Vec<Depth>, Errno> {
 		let id_count = self.nr_id_in_block();
-		let indexes = Indexes::split(self.inode.synced_len, id_count);
+		let indexes = IdxInBlk::split(self.inode.synced_len, id_count);
 		let mut helper = self.stack_helper();
 
 		match indexes {
-			Indexes::Depth3 { blk_i } => {
+			IdxInBlk::Depth3 { blk_i } => {
 				helper.push_block_slice(14, &blk_i[..2])?;
 				Ok(helper.into_stack())
 			}
-			Indexes::Depth2 { blk_i } => {
+			IdxInBlk::Depth2 { blk_i } => {
 				helper.push_block_slice(13, &blk_i[..1])?;
 				Ok(helper.into_stack())
 			}
@@ -169,7 +192,7 @@ impl<'a> IdSpaceAdjust<'a> {
 		iter: &mut vec::IntoIter<Arc<LockRW<Block>>>,
 	) -> Option<Vec<Depth>> {
 		let id_count = self.nr_id_in_block();
-		let indexes = Indexes::split(self.inode.chunks.len(), id_count);
+		let indexes = IdxInBlk::split(self.inode.chunks.len(), id_count);
 		let array = &mut self.inode.info.block;
 		let last = indexes.array_index();
 
@@ -182,15 +205,14 @@ impl<'a> IdSpaceAdjust<'a> {
 
 		for i in 13..=last {
 			if array[i] == 0 {
+				let depth = i - 13;
 				let block = iter.next()?;
 				array[i] = block.read_lock().id().as_u32();
 				let chunk = Chunk::new(&block, 0..id_count);
-				let depth = Depth::new(i - 13, chunk);
+				let depth = Depth::new(depth, chunk);
 				v.push(depth);
 			}
 		}
-
-		trace_feature!("ext2-idspace", "alloc_idspace: array: {:?}", array);
 
 		v.reverse();
 
@@ -273,20 +295,19 @@ impl SpaceReader {
 		}
 	}
 
-	pub fn read(&mut self) -> Result<Vec<BlockId>, Errno> {
+	pub fn read(&mut self, basket: &mut Vec<BlockId>) -> Result<(), Errno> {
 		let stack = &mut self.stack;
-		let mut v = Vec::new();
 
 		loop {
 			let top = match stack.last_mut() {
-				None => break Ok(v),
+				None => break Ok(()),
 				Some(top) => top,
 			};
 
-			let command = Self::__run(&self.block_pool, top, &mut v, self.count)?;
+			let command = Self::__run(&self.block_pool, top, basket, self.count)?;
 
 			match command {
-				Command::End => break Ok(v),
+				Command::End => break Ok(()),
 				Command::Push(lv) => stack.push(lv),
 				Command::Pop => {
 					stack.pop();
@@ -320,6 +341,7 @@ impl SpaceReader {
 				let bid = unsafe { BlockId::new_unchecked(s[0] as usize) };
 				let block = block_pool.get_or_load(bid)?;
 				basket.push(bid);
+
 				debug_assert!(basket.len() < end);
 
 				let len = block.read_lock().size() / size_of::<u32>();

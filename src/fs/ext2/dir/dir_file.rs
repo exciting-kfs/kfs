@@ -3,19 +3,12 @@ use core::{
 	ptr::copy_nonoverlapping,
 };
 
-use alloc::{string::String, vec::Vec};
-
 use crate::{
-	fs::{
-		ext2::inode::IterError,
-		vfs::{self, IOFlag, KfsDirent},
-	},
-	handle_iter_error,
+	fs::vfs::{self, IOFlag, KfsDirent},
+	handle_r_iter_error,
 	mm::util::next_align,
-	pr_debug,
-	process::signal::poll_signal_queue,
-	scheduler::sleep::Sleep,
 	syscall::errno::Errno,
+	trace_feature,
 };
 
 use super::{dir_inode::DirInode, Dirent, Iter};
@@ -43,11 +36,9 @@ impl vfs::DirHandle for DirFile {
 			if let Ok(chunk) = chunk {
 				sum += write_to_buf(buf, chunk, sum)?;
 			} else {
-				handle_iter_error!(chunk.unwrap_err(), non_block);
+				handle_r_iter_error!(chunk.unwrap_err(), non_block);
 			}
 		}
-
-		pr_debug!("getdent: end");
 
 		Ok(sum)
 	}
@@ -62,9 +53,11 @@ fn write_to_buf(buf: &mut [u8], chunk: Dirent, sum: usize) -> Result<usize, Errn
 	let record = chunk.get_record();
 	let size = next_align(KfsDirent::total_len(&name), 4);
 
-	let s = name.iter().map(|e| *e).collect::<Vec<u8>>();
-	let str = String::from_utf8(s);
-	pr_debug!("name: {:?}, record: {:?}", str, *record);
+	trace_feature!("ext2-getdents"
+		"name: {:?}, record: {:?}",
+		String::from_utf8(name.iter().map(|e| *e).collect::<Vec<u8>>()),
+		*record
+	);
 
 	if sum + size > buf.len() {
 		return Err(Errno::EINVAL);

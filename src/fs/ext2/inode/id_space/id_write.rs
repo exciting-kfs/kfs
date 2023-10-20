@@ -1,4 +1,4 @@
-use core::{cmp::max, mem::size_of};
+use core::{cmp::min, mem::size_of};
 
 use alloc::{
 	sync::Arc,
@@ -10,7 +10,7 @@ use crate::{
 	syscall::errno::Errno, trace_feature,
 };
 
-use super::{Chunk, Command, Depth, IdSpaceAdjust, Indexes, Inode, StackHelper};
+use super::{Chunk, Command, Depth, IdSpaceAdjust, IdxInBlk, Inode, StackHelper};
 
 pub struct IdSapceWrite<'a> {
 	inode: WriteLockGuard<'a, Inode>,
@@ -26,27 +26,29 @@ impl<'a> IdSapceWrite<'a> {
 		let data_len = self.inode.chunks.len();
 		let prev_len = self.inode.synced_len;
 
-		trace_feature!(
-			"ext2-idspace",
-			"sync_wit_data: array: {:?}",
-			self.inode.info.block
-		);
-
 		if prev_len < data_len {
-			let mut bids = self.blockids();
-			bids.push(unsafe { BlockId::new_unchecked(0) });
+			let mut stream = self.bid_to_write().into_iter();
+			let end = min(data_len, 12);
 
-			for i in prev_len..12 {
-				self.inode.info.block[i] = bids[i].as_u32();
+			for i in prev_len..end {
+				if let Some(bid) = stream.next() {
+					self.inode.info.block[i] = bid.as_u32();
+				}
 			}
 
-			let stream: Vec<BlockId> = bids.drain(max(prev_len, 12)..).collect();
 			let stack = self.prepare_stack(prev_len)?;
 			let pool = self.inode.block_pool();
 
+			trace_feature!(
+				"ext2-idspace",
+				"sync_wit_data: stack: {:?}, stream_len {}",
+				stack,
+				stream.len()
+			);
+
 			IdWriter::new(pool, stream, stack).write()?;
 		} else if prev_len > data_len {
-			for i in data_len..15 {
+			for i in data_len..12 {
 				self.inode.info.block[i] = 0;
 			}
 
@@ -56,12 +58,26 @@ impl<'a> IdSapceWrite<'a> {
 			}
 		}
 
+		trace_feature!(
+			"ext2-idspace",
+			"sync_wit_data: array: {:?}",
+			self.inode.info.block
+		);
+
 		self.inode.synced_len = data_len;
 		Ok(())
 	}
 
-	fn blockids(&self) -> Vec<BlockId> {
-		self.inode.chunks.clone()
+	fn bid_to_write(&self) -> Vec<BlockId> {
+		let prev_len = self.inode.synced_len;
+
+		let mut v = self.inode.chunks[prev_len..]
+			.iter()
+			.map(|b| *b.lock().block_id())
+			.collect::<Vec<_>>();
+
+		v.push(unsafe { BlockId::new_unchecked(0) });
+		v
 	}
 
 	#[inline]
@@ -75,17 +91,18 @@ impl<'a> IdSapceWrite<'a> {
 
 	fn prepare_stack(&self, index: usize) -> Result<Vec<Depth>, Errno> {
 		let id_count = self.nr_id_in_block();
-		let indexes = Indexes::split(index, id_count);
+
+		let indexes = IdxInBlk::split(index, id_count);
 		let mut helper = self.stack_helper();
 
 		match indexes {
-			Indexes::Depth3 { mut blk_i } => {
+			IdxInBlk::Depth3 { mut blk_i } => {
 				blk_i[2] -= 1;
 
 				helper.push_block_slice(14, &blk_i)?;
 				Ok(helper.into_stack())
 			}
-			Indexes::Depth2 { mut blk_i } => {
+			IdxInBlk::Depth2 { mut blk_i } => {
 				blk_i[1] -= 1;
 
 				helper.push_block_one(14, 2)?;
@@ -93,7 +110,7 @@ impl<'a> IdSapceWrite<'a> {
 
 				Ok(helper.into_stack())
 			}
-			Indexes::Depth1 { mut blk_i } => {
+			IdxInBlk::Depth1 { mut blk_i } => {
 				blk_i[0] -= 1;
 
 				helper.push_block_one(14, 2)?;
@@ -102,7 +119,7 @@ impl<'a> IdSapceWrite<'a> {
 
 				Ok(helper.into_stack())
 			}
-			Indexes::Depth0 => {
+			IdxInBlk::Depth0 => {
 				helper.push_block_one(14, 2)?;
 				helper.push_block_one(13, 1)?;
 				helper.push_block_one(12, 0)?;
@@ -120,11 +137,11 @@ struct IdWriter {
 }
 
 impl IdWriter {
-	fn new(block_pool: &Arc<BlockPool>, bids: Vec<BlockId>, stack: Vec<Depth>) -> Self {
+	fn new(block_pool: &Arc<BlockPool>, stream: vec::IntoIter<BlockId>, stack: Vec<Depth>) -> Self {
 		Self {
 			block_pool: block_pool.clone(),
 			stack,
-			stream: bids.into_iter(),
+			stream,
 		}
 	}
 
@@ -132,22 +149,24 @@ impl IdWriter {
 		let stack = &mut self.stack;
 		let stream = &mut self.stream;
 
-		loop {
+		while !stream.is_empty() {
+			// pr_debug!("write: stack: {:?}", stack);
 			let top = match stack.last_mut() {
-				None => break Ok(()),
+				None => break,
 				Some(top) => top,
 			};
 
 			let command = Self::__run(&self.block_pool, top, stream)?;
 
 			match command {
-				Command::End => break Ok(()),
+				Command::End => break,
 				Command::Push(lv) => stack.push(lv),
 				Command::Pop => {
 					stack.pop();
 				}
 			}
 		}
+		Ok(())
 	}
 
 	fn __run(

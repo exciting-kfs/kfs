@@ -21,12 +21,16 @@ impl OwnHook {
 	}
 
 	pub(super) fn prepare(self) -> Result<(Vec<Block>, Vec<Cleanup>), Vec<Cleanup>> {
-		let callbacks = self.0;
+		let hooks = self.0;
+		let len = hooks.len();
 
 		let mut cleanup = Vec::new();
 		let mut blocks = Vec::new();
 
-		for (_, (p, c)) in callbacks {
+		cleanup.reserve(len);
+		blocks.reserve(len);
+
+		for (_, (p, c)) in hooks {
 			cleanup.push(c);
 			match p() {
 				Ok(block) => blocks.push(block),

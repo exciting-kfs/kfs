@@ -14,6 +14,8 @@
 #![feature(iter_intersperse)]
 #![feature(get_mut_unchecked)]
 #![feature(trait_upcasting)]
+#![feature(slice_range)]
+#![feature(exact_size_is_empty)]
 
 extern crate alloc;
 
