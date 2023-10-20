@@ -1,4 +1,4 @@
-use crate::io::pmio::Port;
+use kernel::io::pmio::Port;
 
 pub(super) static CONTROL_PORT: Port = Port::new(0x64);
 

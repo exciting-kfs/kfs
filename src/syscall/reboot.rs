@@ -1,4 +1,4 @@
-use crate::{driver::ps2, fs, process::task::CURRENT, test::exit_qemu_with};
+use crate::{fs, input::keyboard::KEYBOARD, process::task::CURRENT, test::exit_qemu_with};
 
 use super::errno::Errno;
 
@@ -48,5 +48,5 @@ fn power_off() {
 }
 
 fn restart() {
-	ps2::control::reset_cpu();
+	unsafe { KEYBOARD.reset_cpu() };
 }

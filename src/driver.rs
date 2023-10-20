@@ -5,7 +5,6 @@ pub mod hpet;
 pub mod ide;
 pub mod partition;
 pub mod pipe;
-pub mod ps2;
 pub mod rtc;
 pub mod serial;
 pub mod terminal;

@@ -48,7 +48,7 @@ pub fn init() -> Result<(), IOAPICError> {
 	let mut ide_primary = apic.read_redir(IDE_PRIMARY_IRQ)?;
 	let mut ide_secondary = apic.read_redir(IDE_SECONDARY_IRQ)?;
 
-	keyboard_redir.set_default(0x21);
+	keyboard_redir.set_default(0x21).set_mask(true);
 	serial_com1.set_default(0x23);
 	ide_primary.set_default(0x24).set_mask(true);
 	ide_secondary.set_default(0x25).set_mask(true);

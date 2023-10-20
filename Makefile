@@ -11,10 +11,10 @@ endif
 
 # === User settings / toolchain ===
 
-RELEASE_MODE := n
+RELEASE_MODE := y
 DEBUG_WITH_VSCODE := y
 TEST_CASE := all
-FAST_HDD_BUILD := n
+FAST_HDD_BUILD := y
 
 # LOG_LEVEL := debug # ALL = debug > info > warn > error
 
@@ -50,7 +50,7 @@ else
 TARGET_ROOT := target/i686-unknown-none-elf/debug
 endif
 
-KERNEL_MODULE_NAMES := hello
+KERNEL_MODULE_NAMES := kbd
 
 KERNEL_MODULES := $(addprefix $(TARGET_ROOT)/,$(KERNEL_MODULE_NAMES))
 KERNEL_MODULES := $(addsuffix .ko,$(KERNEL_MODULES))
@@ -94,7 +94,7 @@ USERSPACE_SRC_ROOT := userspace
 # === Phony recipes ===
 
 .PHONY : all
-all : rescue hdd
+all : rescue hdd modules
 	@mkdir -p log
 
 .PHONY : build
@@ -111,6 +111,8 @@ userspace :
 .PHONY : ci
 ci : export CFLAGS := -Werror
 ci : export RUSTC_FLAG += -D warnings
+ci : export FAST_HDD_BUILD := n
+ci : export RELEASE_MODE := n
 ci : test
 
 .PHONY: hdd

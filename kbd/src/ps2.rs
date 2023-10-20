@@ -1,20 +1,19 @@
 pub mod control;
 pub mod keyboard;
 
-use kfs_macro::interrupt_handler;
+use kernel::pr_err;
 
-use crate::driver::apic::local::LOCAL_APIC;
-use crate::driver::ps2::keyboard::{get_raw_scancode, into_key_event};
-use crate::driver::terminal::{console_screen_draw, get_foreground_tty, set_foreground_tty};
-use crate::input::{
+use kernel::driver::apic::local::LOCAL_APIC;
+use kernel::driver::terminal::{console_screen_draw, get_foreground_tty, set_foreground_tty};
+use kernel::input::{
 	self,
 	key_event::{Code, KeyKind},
 };
-use crate::interrupt::InterruptFrame;
-use crate::io::ChWrite;
-use crate::pr_err;
-use crate::scheduler::work::schedule_fast_work;
-use crate::{acpi::IAPC_BOOT_ARCH, io::pmio::Port};
+use kernel::interrupt::InterruptFrame;
+use kernel::io::ChWrite;
+use kernel::scheduler::work::schedule_fast_work;
+use kernel::{acpi::IAPC_BOOT_ARCH, io::pmio::Port};
+use keyboard::{get_raw_scancode, into_key_event};
 
 fn wait_then_write_byte(port: &Port, byte: u8) {
 	while control::test_status_now(control::Status::IBF) {}
@@ -96,8 +95,11 @@ fn check_ps2_existence() -> Result<(), ()> {
 	}
 }
 
-#[interrupt_handler]
+#[no_mangle]
 pub extern "C" fn handle_keyboard_impl(_frame: InterruptFrame) {
+	assert_eq!(kernel::sync::get_lock_depth(), 0);
+	let __interrupt_guard = kernel::interrupt::enter_interrupt_context();
+
 	let code = get_raw_scancode();
 
 	into_key_event(code as u8).map(|ev| {

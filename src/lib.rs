@@ -163,7 +163,6 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	driver::hpet::init().expect("failed to init HPET");
 	driver::apic::local::init_timer();
 	driver::apic::io::init().expect("IO APIC init.");
-	driver::ps2::init().expect("PS/2 controller init.");
 	driver::ide::init().expect("IDE controller init.");
 
 	unsafe { x86::init() };

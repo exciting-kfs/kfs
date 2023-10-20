@@ -66,7 +66,6 @@ extern "C" {
 	fn handle_ide_ch0();
 	fn handle_ide_ch1();
 	fn handle_syscall();
-	fn handle_keyboard();
 	fn handle_divide_error();
 	fn handle_invalid_opcode();
 	fn handle_general_protection();
@@ -97,7 +96,6 @@ pub fn init() {
 	let ss = SystemDesc::new_interrupt(handle_stack_fault as usize, GDT::KERNEL_CODE, DPL_USER);
 	let ts = SystemDesc::new_interrupt(handle_tss_fault as usize, GDT::KERNEL_CODE, DPL_USER);
 
-	let keyboard = SystemDesc::new_interrupt(handle_keyboard as usize, GDT::KERNEL_CODE, DPL_USER);
 	let lapic_timer = SystemDesc::new_interrupt(handle_timer as usize, GDT::KERNEL_CODE, DPL_USER);
 	let serial_com1 = SystemDesc::new_interrupt(handle_serial as usize, GDT::KERNEL_CODE, DPL_USER);
 	let ide_ch0 = SystemDesc::new_interrupt(handle_ide_ch0 as usize, GDT::KERNEL_CODE, DPL_USER);
@@ -115,7 +113,6 @@ pub fn init() {
 	idt.write_exception(CpuException::PF, pf);
 	idt.write_exception(CpuException::CP, cp);
 
-	idt.write_interrupt(0x21, keyboard);
 	idt.write_interrupt(0x22, lapic_timer);
 	idt.write_interrupt(0x23, serial_com1);
 	idt.write_interrupt(0x24, ide_ch0);
@@ -123,4 +120,8 @@ pub fn init() {
 	idt.write_interrupt(0x80, syscall);
 
 	idt.load();
+}
+
+pub fn register_irq(num: usize, fp: SystemDesc) {
+	IDT.lock().write_interrupt(num, fp);
 }
