@@ -33,7 +33,6 @@ INTERRUPT_HANDLER handle_stack_fault,           handle_stack_fault_impl,        
 INTERRUPT_HANDLER handle_double_fault,          handle_double_fault_impl,       TRUE
 
 INTERRUPT_HANDLER handle_timer,                 handle_timer_impl,              FALSE
-INTERRUPT_HANDLER handle_keyboard,              handle_keyboard_impl,           FALSE
 INTERRUPT_HANDLER handle_serial,                handle_serial_impl,             FALSE
 INTERRUPT_HANDLER handle_ide_ch0,               handle_ide_ch0_impl,            FALSE
 INTERRUPT_HANDLER handle_ide_ch1,               handle_ide_ch1_impl,            FALSE

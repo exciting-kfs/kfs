@@ -7,6 +7,8 @@
 #include <sys/wait.h>
 
 #include "kfs/ft.h"
+#include "kfs/libft.h"
+#include "kfs/kernel.h"
 
 int main(void) {
 	open("/dev/tty1", O_RDWR);
@@ -15,6 +17,8 @@ int main(void) {
 
 	mkdir("/e2", 0777);
 	mount("/dev/part1", "/e2", "ext2");
+	int ret = init_module("/e2/kbd.ko");
+	ft_printf("insmod kbd.ko: %d\n", ret);
 
 	int pid = fork();
 	if (pid == 0) {

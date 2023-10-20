@@ -1,7 +1,7 @@
 use super::control::{test_status_now, Status};
-use crate::input::key_event::{Code, KeyEvent, KeyState};
-use crate::io::pmio::Port;
-use crate::sync::Locked;
+use kernel::input::key_event::{Code, KeyEvent, KeyState};
+use kernel::io::pmio::Port;
+use kernel::sync::Locked;
 
 pub(super) static KEYBOARD_PORT: Port = Port::new(0x60);
 

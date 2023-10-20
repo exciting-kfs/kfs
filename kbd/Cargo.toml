@@ -1,5 +1,5 @@
 [package]
-name = "hello"
+name = "kbd"
 version = "0.1.0"
 edition = "2021"
 
@@ -12,3 +12,4 @@ bench = false
 
 [dependencies]
 kfs = { path = ".." }
+kfs_macro = { path = "../kfs_macro" }

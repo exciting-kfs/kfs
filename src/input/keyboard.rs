@@ -4,21 +4,50 @@
 //!  - save pressed key state
 //!  - key repeat rate / threshold
 
+use alloc::sync::Arc;
+
 use super::key_event::{Code, KeyEvent, KeyKind};
-use crate::driver::ps2::keyboard::get_key_event;
+use crate::syscall::errno::Errno;
 
 pub static mut KEYBOARD: Keyboard = Keyboard::new();
 
+pub trait KbdDriver {
+	fn get_key_event(&self) -> Option<KeyEvent>;
+	fn reset_cpu(&self);
+}
+
 #[derive(Default)]
 pub struct Keyboard {
+	driver: Option<Arc<dyn KbdDriver>>,
 	pressed_key: [u32; 8], // 256bit (at least bigger then u8::MAX)
 }
 
 impl Keyboard {
 	pub const fn new() -> Self {
 		Keyboard {
+			driver: None,
 			pressed_key: [0; 8],
 		} // false, false, false ...
+	}
+
+	pub fn attach(&mut self, driver: Arc<dyn KbdDriver>) -> Result<(), Errno> {
+		if let Some(_) = self.driver {
+			return Err(Errno::EBUSY);
+		}
+
+		self.driver = Some(driver);
+
+		Ok(())
+	}
+
+	pub fn detach(&mut self) {
+		self.driver = None;
+	}
+
+	pub fn reset_cpu(&self) {
+		if let Some(ref driver) = self.driver {
+			driver.reset_cpu();
+		}
 	}
 
 	/// 키보드에서 키 하나를 입력받고, 상태를 저장한 후, 받은 키를 반환한다.
@@ -27,7 +56,9 @@ impl Keyboard {
 	///  - `None` -> 현재 키보드 버퍼에서 읽을 키가 존재하지 않음.
 	///  - `Some(x)` -> 읽은 키에 대한 정보
 	pub fn get_keyboard_event(&mut self) -> Option<KeyEvent> {
-		let event = get_key_event()?;
+		let driver = self.driver.as_ref()?;
+
+		let event = driver.get_key_event()?;
 
 		self.change_state(event);
 		Some(event)
