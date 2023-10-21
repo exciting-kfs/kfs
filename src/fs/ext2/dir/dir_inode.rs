@@ -244,8 +244,8 @@ impl DirInode {
 	) -> Result<(Inum, Arc<LockRW<Block>>), Errno> {
 		let sb = self.super_block();
 
-		let mut child_inum = sb.alloc_inum_staged()?;
-		let mut dirent = self.write_dirent_staged(name, file_type)?;
+		let child_inum = sb.alloc_inum_staged()?;
+		let dirent = self.write_dirent_staged(name, file_type)?;
 
 		let block = sb.alloc_blocks(1)?[0].clone();
 
@@ -258,8 +258,8 @@ impl DirInode {
 	fn new_child(&self, name: &[u8], file_type: FileType) -> Result<Inum, Errno> {
 		let sb = self.super_block();
 
-		let mut child_inum = sb.alloc_inum_staged()?;
-		let mut dirent = self.write_dirent_staged(name, file_type)?;
+		let child_inum = sb.alloc_inum_staged()?;
+		let dirent = self.write_dirent_staged(name, file_type)?;
 
 		let child_inum = child_inum.commit(());
 		dirent.commit(child_inum);
@@ -269,7 +269,7 @@ impl DirInode {
 	fn remove_child(&self, child: &Arc<LockRW<Inode>>) -> Result<(), Errno> {
 		let sb = self.super_block();
 		let inum = child.read_lock().inum();
-		let mut inum_staged = sb.dealloc_inum_staged(inum)?;
+		let inum_staged = sb.dealloc_inum_staged(inum)?;
 
 		let mut blocks = VecDeque::new();
 		{
@@ -287,7 +287,7 @@ impl DirInode {
 		child.info_mut().write(&info);
 
 		inum_staged.commit(());
-		blocks.into_iter().for_each(|mut b| b.commit(()));
+		blocks.into_iter().for_each(|b| b.commit(()));
 
 		Ok(())
 	}

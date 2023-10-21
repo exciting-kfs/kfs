@@ -7,6 +7,7 @@ mod devfs;
 mod procfs;
 mod tmpfs;
 
+use crate::driver::ide::dma::dma_q;
 use crate::syscall::errno::Errno;
 
 use alloc::rc::Rc;
@@ -34,5 +35,6 @@ pub fn init() -> Result<(), Errno> {
 
 pub fn clean_up() -> Result<(), Errno> {
 	ext2::clean_up()?;
+	dma_q::wait_idle();
 	Ok(())
 }

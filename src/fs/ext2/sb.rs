@@ -105,7 +105,7 @@ impl SuperBlock {
 		self.dirty_icache.lock().insert(inum);
 	}
 
-	pub fn try_sync_icache(&self) -> Result<(), Errno> {
+	pub fn sync_icache(&self) -> Result<(), Errno> {
 		let mut first = self.dirty_icache.lock().first().cloned();
 		while let Some(inum) = first {
 			let inode = self.inode_cache.lock().get(&inum).cloned();
@@ -150,28 +150,38 @@ impl SuperBlock {
 	}
 
 	pub fn alloc_inum_staged(self: &Arc<Self>) -> Result<Staged<(), Inum>, Errno> {
+		if self.info.read_lock().free_inodes_count() == 0 {
+			return Err(Errno::ENOSPC);
+		}
+
 		let count = self.info.read_lock().nr_inode_in_group();
-		let (bgid, bitmap_bid) = {
-			let mut bgdt = self.bgd_table.lock();
-			let (bgid, bgd) = bgdt
-				.find_bgd(|bgd| bgd.free_inodes_count > 0)
-				.ok_or(Errno::ENOSPC)?;
-			(bgid, bgd.inode_bitmap())
-		};
+		let mut bgdt = self.bgd_table.lock();
+		let (bgid, bgd) = bgdt
+			.find_bgd(|bgd| bgd.free_inodes_count > 0)
+			.ok_or(Errno::ENOSPC)?;
 
-		let block = self.block_pool.get_or_load(bitmap_bid)?;
-		let mut bitmap = BitMap::new(block.clone(), count);
+		let block = self.block_pool.get_or_load(bgd.inode_bitmap())?;
+
+		bgd.free_inodes_count -= 1;
+		self.info.write_lock().dec_free_inodes_count(1);
+
+		let mut bitmap = BitMap::new(&block, count);
 		let sb = self.clone();
-
-		Ok(Staged::func(move |_| {
+		let modify = move |_| {
 			let index = bitmap.find_free_space().unwrap();
 			bitmap.toggle_bitmap(index);
+			sb.info.read_lock().bitmap_index_to_inum(bgid, index)
+		};
+
+		let sb = self.clone();
+		let restore = move || {
 			let mut bgdt = sb.bgd_table.lock();
 			let bgd = bgdt.get_bgd_mut(bgid).unwrap();
-			bgd.free_inodes_count -= 1;
+			bgd.free_inodes_count += 1;
+			sb.info.write_lock().inc_free_inodes_count(1);
+		};
 
-			sb.info.read_lock().bitmap_index_to_inum(bgid, index)
-		}))
+		Ok(Staged::func_with_restore(modify, restore))
 	}
 
 	pub fn alloc_blocks(&self, count: usize) -> Result<Vec<Arc<LockRW<Block>>>, Errno> {
@@ -193,34 +203,40 @@ impl SuperBlock {
 	}
 
 	pub fn reserve_blocks(&self, count: usize) -> Result<Vec<BlockId>, Errno> {
+		if count >= self.info.read_lock().free_blocks_count() {
+			return Err(Errno::ENOSPC);
+		}
+
 		let count_in_group = self.info.read_lock().nr_block_in_group();
 
 		let mut bgdt = self.bgd_table.lock();
 		let mut groups = bgdt.find_groups(count).ok_or_else(|| Errno::ENOSPC)?;
 
 		let mut bitmaps = Vec::new();
-		for (_, grp, _) in groups.iter() {
-			let bitmap = self.block_pool.get_or_load(grp.block_bitmap())?;
-			let bitmap = BitMap::new(bitmap, count_in_group);
+		for bgd in groups.iter() {
+			let bitmap = self.block_pool.get_or_load(bgd.block_bitmap())?;
+			let bitmap = BitMap::new(&bitmap, count_in_group);
 			bitmaps.push(bitmap);
 		}
 
 		let mut bids = Vec::new();
-		for ((id, grp, cnt), bitmap) in groups.iter_mut().zip(bitmaps.iter_mut()) {
-			// pr_debug!("id {} grp {} cnt {}", id, grp, cnt);
-			let indexes = bitmap.find_free_space_multi(*cnt).unwrap();
+		for (bgd, bitmap) in groups.iter_mut().zip(bitmaps.iter_mut()) {
+			let free_count = bgd.free_count();
+			let indexes = bitmap.find_free_space_multi(free_count).unwrap();
 			indexes
 				.iter()
 				.for_each(|index| bitmap.toggle_bitmap(*index));
 
-			let info = self.info.read_lock();
-			let bid = indexes
-				.into_iter()
-				.map(|index| info.bitmap_index_to_block_id(*id, index));
+			let bid = indexes.into_iter().map(|index| {
+				self.info
+					.read_lock()
+					.bitmap_index_to_block_id(bgd.gid(), index)
+			});
 
 			bids.extend(bid);
 
-			grp.free_blocks_count -= *cnt as u16;
+			bgd.dec_free_blocks_count(free_count);
+			self.info.write_lock().dec_free_blocks_count(free_count);
 		}
 		Ok(bids)
 	}
@@ -236,16 +252,16 @@ impl SuperBlock {
 		};
 
 		let bitmap = self.block_pool.get_or_load(bitmap_bid)?;
-		let mut bitmap = BitMap::new(bitmap, inum_in_group.count());
+		let mut bitmap = BitMap::new(&bitmap, inum_in_group.count());
 		let sb = self.clone();
 
 		Ok(Staged::new(move |_| {
 			bitmap.toggle_bitmap(inum_in_group.index_in_group());
-			let info = sb.info.read_lock();
 			let mut bgdt = sb.bgd_table.lock();
-			let bgd = bgdt.bgd_of_inum_mut(inum, &info);
+			let bgd = bgdt.bgd_of_inum_mut(inum, &sb.info.read_lock());
 			bgd.free_inodes_count += 1;
 
+			sb.info.write_lock().inc_free_inodes_count(1);
 			sb.inode_cache.lock().remove(&inum);
 		}))
 	}
@@ -265,17 +281,18 @@ impl SuperBlock {
 		let bid_in_grp = InGroupBid::new(bid, &info);
 		let bitmap_bid = bgd.block_bitmap();
 		let bitmap = f(&self.block_pool, bitmap_bid)?;
-		let mut bitmap = BitMap::new(bitmap, bid_in_grp.count());
+		let mut bitmap = BitMap::new(&bitmap, bid_in_grp.count());
 		let sb = self.clone();
 
 		Ok(Staged::new(move |_| {
 			bitmap.toggle_bitmap(bid_in_grp.index_in_group());
-			let info = sb.info.read_lock();
+
 			let mut bgdt = sb.bgd_table.lock();
-			let bgd = bgdt.bgd_of_bid_mut(bid, &info);
+			let bgd = bgdt.bgd_of_bid_mut(bid, &sb.info.read_lock());
 			bgd.free_blocks_count += 1;
 
 			// pr_debug!("dealloc block staged: bid: {:?}", bid);
+			sb.info.write_lock().inc_free_blocks_count(1);
 			sb.block_pool.delete(bid);
 		}))
 	}
@@ -388,7 +405,7 @@ impl vfs::SuperBlock for SuperBlock {
 	fn sync(&self) -> Result<(), Errno> {
 		let block_size = self.block_size();
 
-		self.try_sync_icache()?;
+		self.sync_icache()?;
 		self.sync_self()?;
 		self.block_pool.sync();
 		self.block_pool
@@ -399,7 +416,8 @@ impl vfs::SuperBlock for SuperBlock {
 	fn unmount(&self) -> Result<(), Errno> {
 		trace_feature!("ext2-unmount", "sb: unmount: uuid: {:x?}", self.id());
 
-		// TODO edit somthing
+		self.info.write_lock().edit_for_unmount();
+
 		self.sync()?;
 
 		self.inode_cache.lock().clear();
