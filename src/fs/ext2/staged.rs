@@ -32,7 +32,7 @@ impl<T, U> Staged<T, U> {
 		}
 	}
 
-	pub fn commit(&mut self, param: T) -> U {
+	pub fn commit(mut self, param: T) -> U {
 		self.restore = None;
 
 		(self.modify)(param)

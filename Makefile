@@ -14,7 +14,7 @@ endif
 RELEASE_MODE := n
 DEBUG_WITH_VSCODE := y
 TEST_CASE := all
-FAST_HDD_BUILD := n
+FAST_HDD_BUILD := y
 
 # LOG_LEVEL := debug # ALL = debug > info > warn > error
 

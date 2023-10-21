@@ -196,7 +196,7 @@ impl FileInode {
 			staged.push(sb.dealloc_block_staged(bid)?);
 		}
 
-		staged.iter_mut().for_each(|s| s.commit(()));
+		staged.into_iter().for_each(|s| s.commit(()));
 		data.truncate(new_len);
 
 		InodeInfoMut::from_data(data).set_size(new_idx);

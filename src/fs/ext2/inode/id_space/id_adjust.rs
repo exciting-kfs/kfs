@@ -109,7 +109,7 @@ impl<'a> IdSpaceAdjust<'a> {
 			staged.push(s);
 		}
 
-		staged.iter_mut().for_each(|e| e.commit(()));
+		staged.into_iter().for_each(|e| e.commit(()));
 
 		Ok(())
 	}
