@@ -50,7 +50,7 @@ else
 TARGET_ROOT := target/i686-unknown-none-elf/debug
 endif
 
-KERNEL_MODULE_NAMES := kbd
+KERNEL_MODULE_NAMES := kbd timestamp
 
 KERNEL_MODULES := $(addprefix $(TARGET_ROOT)/,$(KERNEL_MODULE_NAMES))
 KERNEL_MODULES := $(addsuffix .ko,$(KERNEL_MODULES))

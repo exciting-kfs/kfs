@@ -28,4 +28,5 @@ kfs_macro = { path = "./kfs_macro" }
 members = [
     "kfs_macro", 
     "kbd",
+    "timestamp"
 ]

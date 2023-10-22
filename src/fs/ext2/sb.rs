@@ -123,7 +123,7 @@ impl SuperBlock {
 	}
 
 	fn sync_one_icache(&self, inode: &Arc<LockRW<Inode>>) -> Result<(), Errno> {
-		inode.sync_bid()?; // TODO NOSPC handle
+		inode.sync_bid()?;
 
 		let inum = inode.read_lock().inum();
 		let bid = self.inum_to_block_id(inum);

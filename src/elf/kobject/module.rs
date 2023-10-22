@@ -63,17 +63,14 @@ pub fn load_kernel_module<'a>(module: Arc<KernelModule>) -> Result<(), Errno> {
 pub fn cleanup_kernel_module(name: &[u8]) -> Result<(), Errno> {
 	let mut loaded_modules = LOADED_MODULES.lock();
 
-	let module = loaded_modules.get(name).ok_or(Errno::ENOENT)?;
+	let module = loaded_modules.remove(name).ok_or(Errno::ENOENT)?;
 
-	if Arc::strong_count(module) != 1 {
-		return Err(Errno::EBUSY);
+	match Arc::try_unwrap(module) {
+		Ok(_) => {}
+		Err(module) => {
+			loaded_modules.insert(module.get_info().name, module);
+		}
 	}
-
-	if Arc::weak_count(module) != 0 {
-		return Err(Errno::EBUSY);
-	}
-
-	loaded_modules.remove(name);
 
 	Ok(())
 }
