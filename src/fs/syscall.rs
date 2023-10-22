@@ -18,7 +18,7 @@ mod write;
 pub use chmod::sys_chmod;
 pub use chown::sys_chown;
 pub use close::sys_close;
-pub use cwd::sys_chdir;
+pub use cwd::*;
 pub use getcwd::sys_getcwd;
 pub use getdents::sys_getdents;
 pub use lseek::sys_lseek;

@@ -5,8 +5,11 @@ use core::{
 };
 
 use crate::{
-	driver::partition::Partition,
-	fs::vfs::{Permission, RawStat, RealInode, TimeSpec},
+	driver::{
+		ide::ide_id::NR_IDE_DEV,
+		partition::{get_block_device, Partition, NR_PRIMARY},
+	},
+	fs::vfs::{Permission, RawStat, RealInode, TimeSpec, VfsInode},
 	syscall::errno::Errno,
 };
 
@@ -77,5 +80,17 @@ impl Deref for PartBorrow {
 impl Drop for PartBorrow {
 	fn drop(&mut self) {
 		self.dev.release()
+	}
+}
+
+const __PARTITION_NONE: Option<VfsInode> = None;
+pub static mut PARTITIONS: [Option<VfsInode>; NR_PRIMARY * NR_IDE_DEV] =
+	[__PARTITION_NONE; NR_PRIMARY * NR_IDE_DEV];
+
+pub fn init() {
+	for i in 0..(NR_PRIMARY * NR_IDE_DEV) {
+		if let Some(dev) = get_block_device(i) {
+			unsafe { PARTITIONS[i] = Some(VfsInode::Block(Arc::new(DevPart::new(dev)))) };
+		}
 	}
 }

@@ -20,15 +20,14 @@ pub struct TmpFs;
 
 impl FileSystem for TmpFs {}
 
-impl MemoryFileSystem<TmpSb, Locked<TmpDirInode>> for TmpFs {
-	fn mount() -> Result<(Arc<TmpSb>, Arc<Locked<TmpDirInode>>), Errno> {
+impl MemoryFileSystem for TmpFs {
+	fn mount() -> Result<(Arc<dyn SuperBlock>, Arc<dyn DirInode>), Errno> {
 		Ok((
 			Arc::new(TmpSb),
 			TmpDirInode::new_shared(Permission::from_bits_truncate(0o777), 0, 0),
 		))
 	}
 }
-
 pub struct TmpSb;
 
 impl SuperBlock for TmpSb {

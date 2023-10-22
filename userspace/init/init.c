@@ -11,13 +11,17 @@
 #include "kfs/kernel.h"
 
 int main(void) {
+	mkdir("/dev", 0777);
+	mount("dev", "/dev", "devfs");
+
+	mkdir("/proc", 0777);
+	mount("proc", "/proc", "procfs");
+
 	open("/dev/tty1", O_RDWR);
 	open("/dev/tty1", O_RDWR);
 	open("/dev/tty1", O_RDWR);
 
-	mkdir("/e2", 0777);
-	mount("/dev/part1", "/e2", "ext2");
-	int ret = init_module("/e2/kbd.ko");
+	int ret = init_module("/lib/modules/kbd.ko");
 	ft_printf("insmod kbd.ko: %d\n", ret);
 
 	int pid = fork();

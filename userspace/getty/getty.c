@@ -10,12 +10,6 @@
 #include "kfs/ft.h"
 #include "kfs/libft.h"
 
-// clang-format off
-const char passwd_file[] =
-    "root::0:0::/root:shell.bin\n"
-    "cjeon:$6$xKfGiVIDU2eFHpz9$CIrn5g9ODPQM1VznJ941RjEeoPvaKNHak1o7rrUJR1jXg/kZL7bmQcv5xD3GFLCn39dhWRlsMmbNam59tDIgh0:1000:1000::/home/cjeon:test_file.bin\n";
-// clang-format on
-
 char *__crypt_sha512(const char *key, const char *setting, char *output);
 
 #define STRICT(expr)                                                                               \
@@ -364,6 +358,7 @@ void get_login_shell() {
 		signal(SIGQUIT, SIG_DFL);
 		setuid(ent->uid);
 		setgid(ent->gid);
+		chdir(ent->home);
 		execve(ent->shell, NULL, NULL);
 		_exit(128);
 	}
@@ -373,14 +368,6 @@ void get_login_shell() {
 }
 
 int main(void) {
-	int passwd;
-
-	mkdir("/etc", 0755);
-	passwd = open("/etc/passwd", O_CREAT | O_EXCL | O_WRONLY, 0644);
-	write(passwd, passwd_file, sizeof(passwd_file) - 1);
-
-	close(passwd);
-
 	for (;;)
 		get_login_shell();
 }

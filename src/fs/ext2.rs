@@ -35,7 +35,6 @@ use crate::{
 
 use self::{
 	block_pool::BlockPool,
-	dir::dir_inode::DirInode,
 	inode::inum::Inum,
 	sb::{
 		bgd::{BGD, BGDT},
@@ -111,8 +110,10 @@ impl FileSystem for Ext2 {
 	}
 }
 
-impl vfs::PhysicalFileSystem<SuperBlock, DirInode> for Ext2 {
-	fn mount(block_dev: PartBorrow) -> Result<(Arc<SuperBlock>, Arc<DirInode>), Errno> {
+impl vfs::PhysicalFileSystem for Ext2 {
+	fn mount(
+		block_dev: PartBorrow,
+	) -> Result<(Arc<dyn vfs::SuperBlock>, Arc<dyn vfs::DirInode>), Errno> {
 		let mut sb_info = Ext2::read_superblock(&block_dev)?;
 		trace_feature!("ext2-mount", "sb: {:?}", sb_info);
 
@@ -164,12 +165,10 @@ impl vfs::PhysicalFileSystem<SuperBlock, DirInode> for Ext2 {
 			SB_POOL.lock().insert(uuid, sb.clone());
 		}
 
-		ret
-	}
-}
+		let (sb, inode) = ret?;
 
-pub fn init() -> Result<(), Errno> {
-	Ok(())
+		Ok((sb, inode))
+	}
 }
 
 pub fn oom_handler() {
