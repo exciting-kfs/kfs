@@ -118,6 +118,11 @@ impl SuperBlockInfo {
 		self.inode_index_in_group(inum) % self.nr_inode_in_block()
 	}
 
+	#[inline]
+	pub fn magic(&self) -> u16 {
+		self.magic
+	}
+
 	pub fn bgdt_bid(&self) -> BlockId {
 		let base = 1024 / self.block_size().as_bytes();
 

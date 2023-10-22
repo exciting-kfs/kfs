@@ -47,7 +47,7 @@ use super::{
 	vfs::{self, FileSystem},
 };
 
-const MAGIC: u16 = 0xef53; // TODO check this..
+const MAGIC: u16 = 0xef53;
 
 static SB_POOL: Locked<BTreeMap<Vec<u8>, Arc<SuperBlock>>> = Locked::new(BTreeMap::new());
 
@@ -116,6 +116,10 @@ impl vfs::PhysicalFileSystem for Ext2 {
 	) -> Result<(Arc<dyn vfs::SuperBlock>, Arc<dyn vfs::DirInode>), Errno> {
 		let mut sb_info = Ext2::read_superblock(&block_dev)?;
 		trace_feature!("ext2-mount", "sb: {:?}", sb_info);
+
+		if sb_info.magic() != MAGIC {
+			return Err(Errno::EINVAL);
+		}
 
 		block_dev.init(sb_info.block_size());
 
