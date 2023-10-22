@@ -21,7 +21,7 @@ int main(void) {
 	open("/dev/tty1", O_RDWR);
 	open("/dev/tty1", O_RDWR);
 
-	int ret = init_module("/kbd.ko");
+	int ret = init_module("/lib/modules/kbd.ko");
 	ft_printf("insmod kbd.ko: %d\n", ret);
 
 	int pid = fork();

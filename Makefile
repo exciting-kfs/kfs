@@ -245,11 +245,12 @@ $(RESCUE_IMG) : $(KERNEL_BIN) $(shell find $(RESUCE_SRC_ROOT) -type f) $(KERNEL_
 	@cp $(KERNEL_BIN) $(RESCUE_TARGET_ROOT)/boot
 	@$(GRUB2_MKRESCUE) -d $(GRUB2_I386_LIB) $(RESCUE_TARGET_ROOT) -o $@ 2>/dev/null >/dev/null
 
-$(TARGET_ROOT)/sysroot : $(KERNEL_MODULES)
+$(TARGET_ROOT)/sysroot : $(KERNEL_MODULES) scripts/hdd/make-sysroot.sh
 	@echo MAKE sysroot
 	@rm -rf $(TARGET_ROOT)/sysroot
 	@mkdir -p $(TARGET_ROOT)/sysroot
-	@cp $(KERNEL_MODULES) $(TARGET_ROOT)/sysroot
+	@scripts/hdd/make-sysroot.sh $(TARGET_ROOT)/sysroot
+	@cp $(KERNEL_MODULES) $(TARGET_ROOT)/sysroot/lib/modules
 
 $(HDD_IMG) : $(TARGET_ROOT)/sysroot scripts/hdd/make-hdd.sh scripts/hdd/make-hdd-linux.sh
 	@echo MAKE $(notdir $@)
