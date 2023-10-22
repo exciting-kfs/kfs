@@ -172,7 +172,6 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	fs::init_rootfs().expect("failed to mount /");
 	process::init();
 
-	fs::ext2::init();
 	fs::init_devfs();
 	fs::init_procfs();
 

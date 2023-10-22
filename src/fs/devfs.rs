@@ -10,10 +10,9 @@ use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::Vec};
 
 use crate::{config::NR_CONSOLES, driver::terminal::get_tty, syscall::errno::Errno};
 
-use self::{null::DevNull, tty::DevTTY, zero::DevZero};
+use self::{null::DevNull, partition::PARTITIONS, tty::DevTTY, zero::DevZero};
 
 use super::{
-	ext2,
 	tmpfs::{TmpDir, TmpSb},
 	vfs::{
 		DirHandle, DirInode, FileInode, FileSystem, Ident, MemoryFileSystem, Permission, RawStat,
@@ -36,6 +35,8 @@ impl MemoryFileSystem for DevFs {
 pub static mut DEVFS_ROOT_DIR: MaybeUninit<Arc<DevDirInode>> = MaybeUninit::uninit();
 
 pub fn init() {
+	partition::init();
+
 	let mut dev_root_dir = DevDirInode::new();
 
 	let mut ttyname: [u8; 4] = *b"ttyx";
@@ -49,7 +50,7 @@ pub fn init() {
 	}
 
 	let mut partname: [u8; 5] = *b"partx";
-	for (i, dev) in unsafe { &ext2::PARTITIONS }
+	for (i, dev) in unsafe { &PARTITIONS }
 		.iter()
 		.enumerate()
 		.filter_map(|(i, dev)| dev.clone().map(|x| (i, x)))

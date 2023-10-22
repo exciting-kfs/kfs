@@ -8,6 +8,7 @@ mod procfs;
 mod tmpfs;
 
 use crate::driver::ide::dma::dma_q;
+use crate::fs::devfs::partition::PARTITIONS;
 use crate::fs::syscall::do_chdir;
 use crate::process::get_init_task;
 use crate::syscall::errno::Errno;
@@ -44,7 +45,7 @@ pub fn clean_up() -> Result<(), Errno> {
 
 pub fn mount_root() {
 	use vfs::VfsInode::*;
-	let first_partition = match unsafe { &ext2::PARTITIONS }.iter().find_map(|x| x.clone()) {
+	let first_partition = match unsafe { &PARTITIONS }.iter().find_map(|x| x.clone()) {
 		Some(Block(x)) => match x.get() {
 			Ok(x) => x,
 			Err(_) => return,
