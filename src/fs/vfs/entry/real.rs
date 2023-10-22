@@ -81,7 +81,7 @@ impl VfsRealEntry {
 			File(f) => Ok(VfsHandle::File(f.open(io_flags, access_flags)?)),
 			Dir(d) => Ok(VfsHandle::Dir(d.open(io_flags, access_flags)?)),
 			Socket(_) => Err(Errno::ENOENT),
-			Block(_) => Err(Errno::ENOENT), // TODO
+			Block(_) => Err(Errno::ENOENT),
 		}
 	}
 }
