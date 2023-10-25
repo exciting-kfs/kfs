@@ -42,19 +42,17 @@ export LDFLAGS
 
 # targets
 
-MODULES := init shell test_pipe test_sig test_setXid test_sig_stop_cont test_file test_socket getty test test_argv
-
 LIBSYSTEM := $(BUILDDIR)/libsystem.a
 LIBFT := $(BUILDDIR)/libft.a
 
 # recipes
 
 .PHONY : all
-all : $(MODULES)
+all : $(USER_MODULES)
 
-.PHONY : $(MODULES)
-$(MODULES) : $(LIBSYSTEM) $(LIBFT) | $(BUILDDIR)
-	@echo BUILD $@.bin
+.PHONY : $(USER_BIN_NAMES)
+$(USER_BIN_NAMES) : $(LIBSYSTEM) $(LIBFT) | $(BUILDDIR)
+	@echo BUILD $@
 	@$(MAKE) -s -C $@
 
 .PHONY : $(LIBSYSTEM)

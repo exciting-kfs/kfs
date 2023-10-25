@@ -31,17 +31,17 @@ macro_rules! define_user_bin {
 }
 
 define_user_bin![
-	(INIT, "init.bin"),
-	(SHELL, "shell.bin"),
-	(TEST_PIPE, "test_pipe.bin"),
-	(TEST_SIG, "test_sig.bin"),
-	(TEST_SETXID, "test_setXid.bin"),
-	(TEST_SIGSTOPCONT, "test_sig_stop_cont.bin"),
-	(TEST_FILE, "test_file.bin"),
-	(TEST_SOCKET, "test_socket.bin"),
-	(GETTY, "getty.bin"),
-	(TEST, "test.bin"),
-	(TEST_ARGV, "test_argv.bin"),
+	(INIT, "init"),
+	(SHELL, "shell"),
+	(TEST_PIPE, "test_pipe"),
+	(TEST_SIG, "test_sig"),
+	(TEST_SETXID, "test_setXid"),
+	(TEST_SIGSTOPCONT, "test_sig_stop_cont"),
+	(TEST_FILE, "test_file"),
+	(TEST_SOCKET, "test_socket"),
+	(GETTY, "getty"),
+	(TEST, "test"),
+	(TEST_ARGV, "test_argv"),
 ];
 
 pub fn get_user_elf(name: &str) -> Result<Elf<'_>, Errno> {

@@ -1,4 +1,5 @@
 MODULE_NAME := $(shell basename $(CURDIR)) 
+NAME := $(MODULE_NAME)
 
 OBJS_PREFIX := $(join $(BUILDDIR)/$(MODULE_NAME),_)
 OBJS := $(addprefix $(OBJS_PREFIX),$(SRCS:.c=.o))

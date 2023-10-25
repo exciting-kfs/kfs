@@ -479,7 +479,7 @@ void builtin_pwd(void) {
 }
 
 void builtin_test(void) {
-	execve("test.bin", NULL, NULL);
+	execve("/bin/test", NULL, NULL);
 }
 
 void builtin_insmod(int idx) {
