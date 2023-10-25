@@ -488,13 +488,24 @@ void builtin_rmmod(int idx) {
 	}
 }
 
-int main(void) {
+void builtin_env(char **envp) {
+	for (char **p = envp; *p; ++p) {
+		ft_printf("%s\n", *p);
+	}
+}
+
+int main(int argc, char **argv, char **envp) {
+	(void)argc;
+	(void)argv;
+
 	for (;;) {
 		ft_putstr("sh==> ");
 		unsigned int line_len = getline();
 
 		if (STREQ("ls", line_buf, line_len)) {
 			builtin_ls(ignore_ws(2));
+		} else if (STREQ("env", line_buf, line_len)) {
+			builtin_env(envp);
 		} else if (STREQ("insmod", line_buf, line_len)) {
 			builtin_insmod(ignore_ws(6));
 		} else if (STREQ("rmmod", line_buf, line_len)) {
