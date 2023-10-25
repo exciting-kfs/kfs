@@ -372,7 +372,6 @@ void envvec_drop(EnvVec *self) {
 	free_naive(self->envp);
 }
 
-int k;
 
 void envvec_push(EnvVec *self, char *str) {
 	if (self->cap <= self->size + 2) {
