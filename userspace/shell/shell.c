@@ -311,6 +311,20 @@ void builtin_rmdir(int idx) {
 	}
 }
 
+void builtin_timespec() {
+	struct timespec t;
+
+	int fd = open("/dev/timestamp", O_RDONLY);
+
+	int ret = read(fd, &t, sizeof(struct timespec));
+
+	if (ret < 0) {
+		ft_printf("Device not present\n");
+	} else {
+		ft_printf("second: %d, nano second: %d\n", t.tv_sec, t.tv_nsec);
+	}
+}
+
 void builtin_rm(int idx) {
 	char buf[4096];
 
@@ -528,6 +542,8 @@ int main(int argc, char **argv, char **envp) {
 			builtin_lc(ignore_ws(2));
 		} else if (STREQ("tc", line_buf, line_len)) {
 			builtin_tc(ignore_ws(2));
+		} else if (STREQ("timespec", line_buf, line_len)) {
+			builtin_timespec();
 		} else if (STREQ("poweroff", line_buf, line_len)) {
 			builtin_power_off();
 		} else if (STREQ("reboot", line_buf, line_len)) {

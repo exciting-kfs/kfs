@@ -1,9 +1,9 @@
+pub mod devfs;
 pub mod ext2;
 pub mod path;
 pub mod syscall;
 pub mod vfs;
 
-mod devfs;
 mod procfs;
 mod tmpfs;
 

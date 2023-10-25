@@ -6,9 +6,14 @@ mod zero;
 
 use core::mem::MaybeUninit;
 
-use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::Vec};
+use alloc::{
+	boxed::Box,
+	collections::{btree_map::Entry, BTreeMap},
+	sync::Arc,
+	vec::Vec,
+};
 
-use crate::{config::NR_CONSOLES, driver::terminal::get_tty, syscall::errno::Errno};
+use crate::{config::NR_CONSOLES, driver::terminal::get_tty, sync::Locked, syscall::errno::Errno};
 
 use self::{null::DevNull, partition::PARTITIONS, tty::DevTTY, zero::DevZero};
 
@@ -37,13 +42,13 @@ pub static mut DEVFS_ROOT_DIR: MaybeUninit<Arc<DevDirInode>> = MaybeUninit::unin
 pub fn init() {
 	partition::init();
 
-	let mut dev_root_dir = DevDirInode::new();
+	let dev_root_dir = DevDirInode::new();
 
 	let mut ttyname: [u8; 4] = *b"ttyx";
 	for i in 0..NR_CONSOLES {
 		ttyname[3] = b'1' + i as u8;
 		let ident = Ident::new(&ttyname);
-		dev_root_dir.devices.insert(
+		dev_root_dir.devices.lock().insert(
 			ident,
 			VfsInode::File(Arc::new(DevTTY::new(get_tty(i).unwrap()))),
 		);
@@ -58,29 +63,46 @@ pub fn init() {
 		partname[4] = b'1' + i as u8;
 		let ident = Ident::new(&partname);
 
-		dev_root_dir.devices.insert(ident, dev);
+		dev_root_dir.devices.lock().insert(ident, dev);
 	}
 
 	dev_root_dir
 		.devices
+		.lock()
 		.insert(Ident::new(b"null"), VfsInode::File(Arc::new(DevNull)));
 
 	dev_root_dir
 		.devices
+		.lock()
 		.insert(Ident::new(b"zero"), VfsInode::File(Arc::new(DevZero)));
 
 	unsafe { DEVFS_ROOT_DIR.write(Arc::new(dev_root_dir)) };
 }
 
 pub struct DevDirInode {
-	devices: BTreeMap<Ident, VfsInode>,
+	devices: Locked<BTreeMap<Ident, VfsInode>>,
 }
 
 impl DevDirInode {
 	pub fn new() -> Self {
 		Self {
-			devices: BTreeMap::new(),
+			devices: Locked::new(BTreeMap::new()),
 		}
+	}
+
+	pub fn register(&self, name: &[u8], device: VfsInode) -> Result<(), Errno> {
+		let ident = Ident::new(name);
+		match self.devices.lock().entry(ident) {
+			Entry::Occupied(_) => Err(Errno::EEXIST),
+			Entry::Vacant(v) => {
+				v.insert(device);
+				Ok(())
+			}
+		}
+	}
+
+	pub fn unregister(&self, name: &[u8]) {
+		self.devices.lock().remove(name);
 	}
 }
 
@@ -109,7 +131,12 @@ impl RealInode for DevDirInode {
 
 impl DirInode for DevDirInode {
 	fn open(&self) -> Result<Box<dyn DirHandle>, Errno> {
-		let mut v: Vec<(u8, Vec<u8>)> = self.devices.keys().map(|x| (3, (&*x.0).clone())).collect();
+		let mut v: Vec<(u8, Vec<u8>)> = self
+			.devices
+			.lock()
+			.keys()
+			.map(|x| (3, (&*x.0).clone()))
+			.collect();
 		v.push((2, b".".to_vec()));
 		v.push((2, b"..".to_vec()));
 
@@ -117,7 +144,7 @@ impl DirInode for DevDirInode {
 	}
 
 	fn lookup(&self, name: &[u8]) -> Result<VfsInode, Errno> {
-		self.devices.get(name).cloned().ok_or(Errno::ENOENT)
+		self.devices.lock().get(name).cloned().ok_or(Errno::ENOENT)
 	}
 
 	fn mkdir(&self, _name: &[u8], _perm: Permission) -> Result<Arc<dyn DirInode>, Errno> {
@@ -139,4 +166,12 @@ impl DirInode for DevDirInode {
 	fn symlink(&self, _target: &[u8], _name: &[u8]) -> Result<Arc<dyn SymLinkInode>, Errno> {
 		Err(Errno::EPERM)
 	}
+}
+
+pub fn register_device(name: &[u8], device: VfsInode) -> Result<(), Errno> {
+	unsafe { DEVFS_ROOT_DIR.assume_init_mut().register(name, device) }
+}
+
+pub fn unregister_device(name: &[u8]) {
+	unsafe { DEVFS_ROOT_DIR.assume_init_mut().unregister(name) };
 }

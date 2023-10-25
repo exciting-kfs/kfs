@@ -101,7 +101,7 @@ fn desc(errno: Errno) -> &'static str {
 		ERANGE => "Math result not representable",
 		ENAMETOOLONG => "File name too long",
 		ENOTEMPTY => "Directory is not empty",
-		ELOOP => "too many levels of symbolic links",
+		ELOOP => "Too many levels of symbolic links",
 		ENOTCONN => "Not connected",
 		EISCONN => "Already connected",
 		ECONNREFUSED => "Connection refused",
