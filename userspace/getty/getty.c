@@ -33,8 +33,10 @@ static void *malloc_naive(size_t size) {
 		size = (size + 4095) & ~(4095);
 
 	AllocInfo *mem = mmap(NULL, size, PROT_READ | PROT_WRITE, MMAP_PRIVATE, -1, 0);
-	if (!mem)
-		return NULL;
+	if (!mem) {
+		ft_printf("failed to mmap\n");
+		_exit(1);
+	}
 
 	mem->alloc_size = size;
 
@@ -42,6 +44,9 @@ static void *malloc_naive(size_t size) {
 }
 
 static void free_naive(void *p) {
+	if (p == NULL)
+		return;
+
 	AllocInfo *ai = (void *)(((unsigned char *)p) - 4);
 
 	munmap(ai, ai->alloc_size);
@@ -342,6 +347,119 @@ PasswdEnt *try_login() {
 	return NULL;
 }
 
+typedef enum {
+	EP_KEY,
+	EP_VALUE,
+} EPState;
+
+typedef struct {
+	size_t size;
+	size_t cap;
+	char **envp;
+} EnvVec;
+
+void envvec_init(EnvVec *self) {
+	self->size = 0;
+	self->cap = 0;
+	self->envp = NULL;
+}
+
+void envvec_drop(EnvVec *self) {
+	for (size_t i = 0; i < self->size; ++i) {
+		free_naive(self->envp[i]);
+	}
+
+	free_naive(self->envp);
+}
+
+
+void envvec_push(EnvVec *self, char *str) {
+	if (self->cap <= self->size + 2) {
+		size_t new_cap = self->cap + 1024;
+
+		char **new_envp = malloc_naive(sizeof(char *) * new_cap);
+		for (size_t i = 0; i < self->size; ++i) {
+			new_envp[i] = self->envp[i];
+		}
+
+		free_naive(self->envp);
+
+		self->cap = new_cap;
+		self->envp = new_envp;
+	}
+
+	self->envp[self->size] = str;
+	self->size += 1;
+
+	self->envp[self->size] = NULL;
+}
+
+#define ENV_ENTRY_SIZE 4000
+
+EnvVec *get_env_from_file(const char *filename) {
+	int fd = open(filename, O_RDONLY);
+
+	if (fd < 0)
+		return NULL;
+
+	EnvVec *env_vec = malloc_naive(sizeof(*env_vec));
+	envvec_init(env_vec);
+
+	EPState state = EP_KEY;
+	char *keyvalue = malloc_naive(ENV_ENTRY_SIZE);
+	size_t length = 0;
+	for (;;) {
+		char ch;
+
+		ssize_t ret = read(fd, &ch, 1);
+
+		if (ret == 0)
+			goto done;
+
+		if (ret < 0)
+			goto parse_error;
+
+		switch (state) {
+		case EP_KEY:
+			if (ch == '\n') {
+				continue;
+			} else if (length <= ENV_ENTRY_SIZE - 2 && ft_isprint(ch)) {
+				if (ch == '=')
+					state = EP_VALUE;
+				keyvalue[length] = ch;
+				length += 1;
+			} else {
+				goto parse_error;
+			}
+
+			break;
+		case EP_VALUE:
+			if (ch == '\n') {
+				keyvalue[length] = '\0';
+				length = 0;
+				envvec_push(env_vec, keyvalue);
+				keyvalue = malloc_naive(ENV_ENTRY_SIZE);
+				state = EP_KEY;
+			} else if (length <= ENV_ENTRY_SIZE - 2 && ft_isprint(ch)) {
+				keyvalue[length] = ch;
+				length += 1;
+			} else {
+				goto parse_error;
+			}
+			break;
+		}
+	}
+
+parse_error:
+	envvec_drop(env_vec);
+	free_naive(env_vec);
+	env_vec = NULL;
+done:
+	free_naive(keyvalue);
+
+	return env_vec;
+}
+
 void get_login_shell() {
 	PasswdEnt *ent;
 	while (!(ent = try_login())) {
@@ -359,7 +477,15 @@ void get_login_shell() {
 		setuid(ent->uid);
 		setgid(ent->gid);
 		chdir(ent->home);
-		execve(ent->shell, NULL, NULL);
+		EnvVec *envvec = get_env_from_file(".env");
+		// ft_printf("ret=%d\n", setsid());
+		char *argv[] = {
+			ent->shell,
+			NULL
+		};
+
+		int ret = execve(ent->shell, argv, envvec->envp);
+		ft_printf("execve: %d\n", ret);
 		_exit(128);
 	}
 
