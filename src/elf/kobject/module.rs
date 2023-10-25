@@ -66,11 +66,10 @@ pub fn cleanup_kernel_module(name: &[u8]) -> Result<(), Errno> {
 	let module = loaded_modules.remove(name).ok_or(Errno::ENOENT)?;
 
 	match Arc::try_unwrap(module) {
-		Ok(_) => {}
+		Ok(_) => Ok(()),
 		Err(module) => {
 			loaded_modules.insert(module.get_info().name, module);
+			Err(Errno::EBUSY)
 		}
 	}
-
-	Ok(())
 }
