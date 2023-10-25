@@ -11,10 +11,10 @@ endif
 
 # === User settings / toolchain ===
 
-RELEASE_MODE := n
+RELEASE_MODE := y
 DEBUG_WITH_VSCODE := y
 TEST_CASE := all
-FAST_HDD_BUILD := n
+FAST_HDD_BUILD := y
 
 # LOG_LEVEL := debug # ALL = debug > info > warn > error
 
@@ -95,10 +95,9 @@ USERSPACE_SRC_ROOT := userspace
 
 .PHONY : all
 all : rescue hdd modules
-	@mkdir -p log
 
-.PHONY : build
-build : $(KERNEL_BIN)
+.PHONY : kernel
+kernel : $(KERNEL_BIN)
 
 .PHONY : rescue
 rescue : $(RESCUE_IMG)
@@ -193,8 +192,8 @@ endif
 .PHONY : test
 test : export RUSTC_FLAG += --cfg ktest
 test : export RUSTC_FLAG += --cfg ktest='"$(TEST_CASE)"'
-test : all
-	@scripts/qemu.sh $(RESCUE_IMG) $(HDD_IMG) stdio -display none
+test : rescue 
+	@scripts/qemu.sh $(RESCUE_IMG) - stdio -display none
 
 # === Main recipes ===
 
