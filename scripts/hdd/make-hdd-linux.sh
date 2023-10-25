@@ -60,6 +60,7 @@ mount $NBDP1 $BUILD_ROOT/mnt/vol1
 
 echo CP sysroot
 cp -r $BUILD_ROOT/sysroot/* $BUILD_ROOT/mnt/vol1
+chown 1000:1000 $BUILD_ROOT/mnt/vol1/home/cjeon
 
 mkdir -p $BUILD_ROOT/mnt/vol2
 mount $NBDP2 $BUILD_ROOT/mnt/vol2

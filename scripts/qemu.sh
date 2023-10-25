@@ -12,8 +12,14 @@ shift
 HDD="$1"
 shift
 
+if [ "$HDD" != "-" ]; then
+    HDD_CMD="-drive file=$HDD,if=none,format=qcow2,id=hdd -device ide-hd,drive=hdd,bus=ide.0,unit=0"
+fi
+
 COM1="$1"
 shift
+
+mkdir -p log
 
 # -m 4032(4096 - 64): almost maximum memory in x86 (without PAE)
 qemu-system-i386                                                \
@@ -24,8 +30,7 @@ qemu-system-i386                                                \
     -vga std                                                    \
     -drive file=$RESCUE,if=none,format=raw,id=rescue            \
     -device ide-hd,drive=rescue,bus=ide.1,unit=0,bootindex=1    \
-    -drive file=$HDD,if=none,format=qcow2,id=hdd                \
-    -device ide-hd,drive=hdd,bus=ide.0,unit=0                   \
+    $HDD_CMD                                                    \
     -device isa-debug-exit                                      \
     -action reboot=shutdown                                     \
     -serial $COM1                                               \

@@ -34,6 +34,7 @@ pub fn ktest(attr: TokenStream, input: TokenStream) -> TokenStream {
 
 	let test = quote! {
 		#[link_section = ".test_array"]
+		#[used]
 		static #static_name: crate::test::TestCase = crate::test::TestCase::new(
 			#func_full_name,
 			#ident,

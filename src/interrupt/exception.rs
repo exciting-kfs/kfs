@@ -1,11 +1,6 @@
 mod generic;
 mod page_fault;
 
-pub use generic::handle_divide_error_impl;
-pub use generic::handle_general_protection_impl;
-pub use generic::handle_invalid_opcode_impl;
-pub use page_fault::handle_page_fault_impl;
-
 use crate::pr_info;
 
 #[repr(u8)]
