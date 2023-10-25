@@ -478,8 +478,13 @@ void get_login_shell() {
 		setgid(ent->gid);
 		chdir(ent->home);
 		EnvVec *envvec = get_env_from_file(".env");
-		// setsid();
-		int ret = execve(ent->shell, &ent->shell, envvec->envp);
+		// ft_printf("ret=%d\n", setsid());
+		char *argv[] = {
+			ent->shell,
+			NULL
+		};
+
+		int ret = execve(ent->shell, argv, envvec->envp);
 		ft_printf("execve: %d\n", ret);
 		_exit(128);
 	}

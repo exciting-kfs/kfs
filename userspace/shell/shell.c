@@ -495,8 +495,10 @@ void builtin_env(char **envp) {
 }
 
 int main(int argc, char **argv, char **envp) {
-	(void)argc;
-	(void)argv;
+	ft_printf("====== sh ======\n");
+	ft_printf(" argc = %d\n", argc);
+	for (char **p = argv; *p; ++p)
+		ft_printf(" argv = %s\n", *p);
 
 	for (;;) {
 		ft_putstr("sh==> ");
