@@ -225,7 +225,7 @@ $(KERNEL_MODULES) : $(TARGET_ROOT)/%.ko : $(TARGET_ROOT)/lib%.a $(LIB_KERNEL)
 	@echo OBJCOPY $(notdir $@)
 	@$(OBJCOPY) --strip-debug $@
 
-$(LIB_KERNEL) : userspace
+$(LIB_KERNEL) : make-userbin-init
 	@$(MAKE) cargo-buildlib-kfs
 
 $(KERNEL_ELF) : $(LIB_KERNEL) $(LINKER_SCRIPT)
