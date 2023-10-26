@@ -19,7 +19,7 @@ int main(void) {
 	};
 
 
-	int ret = execve("test_argv.bin", argv, envp);
+	int ret = execve("/bin/test_argv", argv, envp);
 	ft_printf("error: %d\n", ret);
 
 	return 0;

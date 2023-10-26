@@ -5,12 +5,12 @@
 #include "kfs/ft.h"
 
 const char *tests[] = {
-    "test_socket.bin",
-    "test_sig_stop_cont.bin",
-    "test_sig.bin",
-    "test_pipe.bin",
-    "test_setXid.bin",
-    "test_file.bin",
+    "/bin/test_socket",
+    "/bin/test_sig_stop_cont",
+    "/bin/test_sig",
+    "/bin/test_pipe",
+    "/bin/test_setXid",
+    "/bin/test_file",
     NULL,
 };
 

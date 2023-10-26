@@ -89,12 +89,15 @@ CARGO_TARGETS := $(addprefix cargo-buildlib-,kfs $(KERNEL_MODULE_NAMES))
 
 # === user space targets
 
-USERSPACE_SRC_ROOT := userspace
+USER_SRC_ROOT := userspace
+export USER_BIN_NAMES := init shell test_pipe test_sig test_setXid test_sig_stop_cont test_file test_socket getty test test_argv
+USER_BINS := $(addprefix $(USER_SRC_ROOT)/build/, $(USER_BIN_NAMES))
+USER_BIN_TARGETS := $(addprefix make-userbin-, $(USER_BIN_NAMES))
 
 # === Phony recipes ===
 
 .PHONY : all
-all : rescue hdd modules
+all : rescue hdd modules userspace
 
 .PHONY : kernel
 kernel : $(KERNEL_BIN)
@@ -102,10 +105,11 @@ kernel : $(KERNEL_BIN)
 .PHONY : rescue
 rescue : $(RESCUE_IMG)
 
+.PHONY : modules
+modules : $(KERNEL_MODULES)
+
 .PHONY : userspace
-userspace :
-	@echo MAKE $@
-	@$(MAKE) EXTRA_CFLAGS=$(CFLAGS) -s -C $(USERSPACE_SRC_ROOT)
+userspace : $(USER_BINS)
 
 .PHONY : ci
 ci : export CFLAGS := -Werror
@@ -123,7 +127,7 @@ clean :
 	@rm -f .sw*
 	@rm -rf log/
 	@echo 'MAKE clean'
-	@$(MAKE) -s -C $(USERSPACE_SRC_ROOT) clean
+	@$(MAKE) -s -C $(USER_SRC_ROOT) clean
 
 .PHONY : re
 re : clean
@@ -197,15 +201,18 @@ test : rescue
 
 # === Main recipes ===
 
-.PHONY : modules
-modules : $(KERNEL_MODULES)
-
 .PHONY : $(CARGO_TARGETS)
 $(CARGO_TARGETS) :
 	@echo CARGO lib$(subst cargo-buildlib-,,$@).a
 	@cargo rustc -p $(subst cargo-buildlib-,,$@) $(CARGO_FLAG) -- $(RUSTC_FLAG)
 
 $(KERNEL_MODULE_LIBS) : $(TARGET_ROOT)/lib%.a : cargo-buildlib-%
+
+.PHONY : $(USER_BIN_TARGETS)
+$(USER_BIN_TARGETS) :
+	@$(MAKE) EXTRA_CFLAGS=$(CFLAGS) -s -C $(USER_SRC_ROOT) $(subst make-userbin-,,$@)
+
+$(USER_BINS) : $(USER_SRC_ROOT)/build/% : make-userbin-%
 
 $(KERNEL_MODULES) : $(TARGET_ROOT)/%.ko : $(TARGET_ROOT)/lib%.a $(LIB_KERNEL)
 	@echo LD $(patsubst %.ko,lib%.a,$(notdir $@))
@@ -218,7 +225,7 @@ $(KERNEL_MODULES) : $(TARGET_ROOT)/%.ko : $(TARGET_ROOT)/lib%.a $(LIB_KERNEL)
 	@echo OBJCOPY $(notdir $@)
 	@$(OBJCOPY) --strip-debug $@
 
-$(LIB_KERNEL) : userspace
+$(LIB_KERNEL) : make-userbin-init
 	@$(MAKE) cargo-buildlib-kfs
 
 $(KERNEL_ELF) : $(LIB_KERNEL) $(LINKER_SCRIPT)
@@ -244,12 +251,13 @@ $(RESCUE_IMG) : $(KERNEL_BIN) $(shell find $(RESUCE_SRC_ROOT) -type f) $(KERNEL_
 	@cp $(KERNEL_BIN) $(RESCUE_TARGET_ROOT)/boot
 	@$(GRUB2_MKRESCUE) -d $(GRUB2_I386_LIB) $(RESCUE_TARGET_ROOT) -o $@ 2>/dev/null >/dev/null
 
-$(TARGET_ROOT)/sysroot : $(KERNEL_MODULES) scripts/hdd/make-sysroot.sh
+$(TARGET_ROOT)/sysroot : $(USER_BINS) $(KERNEL_MODULES) scripts/hdd/make-sysroot.sh
 	@echo MAKE sysroot
 	@rm -rf $(TARGET_ROOT)/sysroot
 	@mkdir -p $(TARGET_ROOT)/sysroot
 	@scripts/hdd/make-sysroot.sh $(TARGET_ROOT)/sysroot
 	@cp $(KERNEL_MODULES) $(TARGET_ROOT)/sysroot/lib/modules
+	@cp $(USER_BINS) $(TARGET_ROOT)/sysroot/bin
 
 $(HDD_IMG) : $(TARGET_ROOT)/sysroot scripts/hdd/make-hdd.sh scripts/hdd/make-hdd-linux.sh
 	@echo MAKE $(notdir $@)

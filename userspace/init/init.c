@@ -28,7 +28,7 @@ int main(void) {
 	if (pid == 0) {
 		signal(SIGINT, SIG_IGN);
 		signal(SIGQUIT, SIG_IGN);
-		execve("getty.bin", NULL, NULL);
+		execve("/bin/getty", NULL, NULL);
 		_exit(128);
 	}
 

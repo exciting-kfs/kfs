@@ -1,31 +1,50 @@
-use core::ffi::CStr;
 use core::mem::{self};
 use core::ptr::addr_of_mut;
 
+use alloc::sync::Arc;
+
 use crate::config::{USTACK_BASE, USTACK_PAGES};
+use crate::elf::Elf;
+use crate::fs::path::Path;
+use crate::fs::vfs::{lookup_entry_follow, AccessFlag, IOFlag, Permission, RealEntry};
 use crate::interrupt::InterruptFrame;
-use crate::mm::user::{memory::Memory, verify::verify_string};
-use crate::process::task::CURRENT;
+use crate::mm::user::memory::Memory;
+use crate::mm::user::verify::verify_path;
+use crate::process::task::{Task, CURRENT};
+use crate::ptr::VirtPageBox;
 use crate::syscall::errno::Errno;
-use crate::user_bin;
 
 const PATH_MAX: usize = 128;
+
+fn read_user_binary(path: Path, task: &Arc<Task>) -> Result<VirtPageBox, Errno> {
+	let entry = lookup_entry_follow(&path, task).and_then(|x| x.downcast_file())?;
+
+	entry.access(Permission::ANY_EXECUTE, task)?;
+
+	let stat = entry.stat()?;
+	let mut buffer = VirtPageBox::new(stat.size as usize).map_err(|_| Errno::ENOMEM)?;
+
+	let handle = entry.open(IOFlag::empty(), AccessFlag::O_RDONLY)?;
+	handle.read(&mut buffer[..stat.size as usize])?;
+
+	Ok(buffer)
+}
 
 /// execute new user binary
 /// do not call from kernel thread!!
 pub fn sys_execve(
 	frame: *mut InterruptFrame,
-	raw_binary_name_ptr: usize,
+	path_ptr: usize,
 	argv: usize,
 	envp: usize,
 ) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };
 
-	verify_string(raw_binary_name_ptr, current, PATH_MAX)?;
-	let binary_name = unsafe { CStr::from_ptr(raw_binary_name_ptr as *const i8) };
-	let binary_name = binary_name.to_str().map_err(|_| Errno::ENOENT)?;
+	let path = verify_path(path_ptr, current)?;
+	let path = Path::new(path);
 
-	let elf = user_bin::get_user_elf(binary_name)?;
+	let raw_bin = read_user_binary(path, current)?;
+	let elf = Elf::new(raw_bin.as_slice()).map_err(|_| Errno::ENOEXEC)?;
 	let entry_point = elf.get_entry_point();
 
 	let mut new_memory = Memory::from_elf(USTACK_BASE, USTACK_PAGES, elf)?;

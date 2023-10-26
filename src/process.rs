@@ -30,7 +30,7 @@ pub fn init() {
 	CURRENT.init(idle_task.clone());
 	unsafe { IDLE_TASK.write(idle_task) };
 
-	let init = get_user_elf("init.bin").expect("invalid INIT elf file");
+	let init = get_user_elf("init").expect("invalid INIT elf file");
 	let init_task = Task::new_init_task(Pid::allocate(), init).expect("OOM");
 	unsafe { INIT_TASK.write(init_task) };
 }
