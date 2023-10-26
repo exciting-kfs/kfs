@@ -372,7 +372,6 @@ void envvec_drop(EnvVec *self) {
 	free_naive(self->envp);
 }
 
-
 void envvec_push(EnvVec *self, char *str) {
 	if (self->cap <= self->size + 2) {
 		size_t new_cap = self->cap + 1024;
@@ -474,15 +473,13 @@ void get_login_shell() {
 	if (pid == 0) {
 		signal(SIGINT, SIG_DFL);
 		signal(SIGQUIT, SIG_DFL);
+		setsid();
 		setuid(ent->uid);
 		setgid(ent->gid);
 		chdir(ent->home);
 		EnvVec *envvec = get_env_from_file(".env");
 		// ft_printf("ret=%d\n", setsid());
-		char *argv[] = {
-			ent->shell,
-			NULL
-		};
+		char *argv[] = {ent->shell, NULL};
 
 		int ret = execve(ent->shell, argv, envvec->envp);
 		ft_printf("execve: %d\n", ret);

@@ -1,7 +1,6 @@
 mod block_pool;
 mod constant;
 mod staged;
-mod wait_list;
 
 pub mod dir;
 pub mod file;

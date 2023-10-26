@@ -11,8 +11,8 @@ use alloc::{
 
 use crate::{
 	driver::partition::BlockId,
-	fs::ext2::wait_list::WaitList,
 	mm::util::next_align,
+	process::wait_list::WaitList,
 	scheduler::preempt::{preempt_disable, AtomicOps},
 	sync::{LocalLocked, LockRW, ReadLockGuard, WriteLockGuard},
 	syscall::errno::Errno,

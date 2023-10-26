@@ -1,3 +1,5 @@
+use core::mem::take;
+
 use alloc::{
 	sync::{Arc, Weak},
 	vec::Vec,
@@ -25,23 +27,28 @@ impl WaitList {
 
 		self.list.push(w);
 	}
-}
 
-impl Drop for WaitList {
-	fn drop(&mut self) {
+	pub fn wake_up_all(&mut self) {
+		let list = take(&mut self.list);
+
 		trace_feature!(
-			"ext2-waitlist",
+			"waitlist",
 			"wake up: {}",
-			self.list
-				.iter()
+			list.iter()
 				.filter_map(|w| w.upgrade().map(|t| t.get_pid()))
 				.collect::<Vec<_>>()
 		);
 
-		self.list.iter().for_each(|w| {
+		list.into_iter().for_each(|w| {
 			if let Some(task) = w.upgrade() {
 				wake_up_deep_sleep(&task)
 			}
 		})
+	}
+}
+
+impl Drop for WaitList {
+	fn drop(&mut self) {
+		self.wake_up_all();
 	}
 }

@@ -510,6 +510,8 @@ void builtin_env(char **envp) {
 
 int main(int argc, char **argv, char **envp) {
 	ft_printf("====== sh ======\n");
+	ft_printf(" pid = %d\n", getpid());
+	ft_printf(" sid = %d\n", getsid());
 	ft_printf(" argc = %d\n", argc);
 	for (char **p = argv; *p; ++p)
 		ft_printf(" argv = %s\n", *p);

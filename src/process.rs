@@ -8,6 +8,7 @@ pub mod relation;
 pub mod signal;
 pub mod task;
 pub mod uid;
+pub mod wait_list;
 
 use core::mem::MaybeUninit;
 
