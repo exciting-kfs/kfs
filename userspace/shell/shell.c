@@ -323,6 +323,7 @@ void builtin_timespec() {
 	} else {
 		ft_printf("second: %d, nano second: %d\n", t.tv_sec, t.tv_nsec);
 	}
+	close(fd);
 }
 
 void builtin_rm(int idx) {
