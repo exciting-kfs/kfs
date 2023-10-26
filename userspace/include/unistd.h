@@ -21,7 +21,7 @@ DEFINE_SYSCALL(getpgid, 132, pid_t, pid_t, pid);
 DEFINE_SYSCALL(setpgid, 57, pid_t, pid_t, pid, pid_t, pgid);
 
 DEFINE_SYSCALL(setsid, 66, pid_t, void);
-DEFINE_SYSCALL(getsid, 147, pid_t, void);
+DEFINE_SYSCALL(getsid, 147, pid_t, pid_t, pid);
 
 DEFINE_SYSCALL(pipe, 42, int, int *, pipe_pair);
 
@@ -37,7 +37,6 @@ DEFINE_SYSCALL(getcwd, 183, char *, char *, buf, size_t, size);
 DEFINE_SYSCALL(rmdir, 40, int, const char *, path);
 DEFINE_SYSCALL(unlink, 10, int, const char *, path);
 DEFINE_SYSCALL(symlink, 83, int, const char *, target, const char *, linkpath);
-
 
 DEFINE_SYSCALL(reboot, 80, int, int, cmd);
 
