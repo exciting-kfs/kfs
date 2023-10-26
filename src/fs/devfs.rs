@@ -21,7 +21,7 @@ use super::{
 	tmpfs::{TmpDir, TmpSb},
 	vfs::{
 		DirHandle, DirInode, FileInode, FileSystem, Ident, MemoryFileSystem, Permission, RawStat,
-		RealInode, SuperBlock, SymLinkInode, TimeSpec, VfsInode,
+		RealInode, SuperBlock, SymLinkInode, TimeSpec, VfsDirEntry, VfsInode,
 	},
 };
 
@@ -31,13 +31,22 @@ impl FileSystem for DevFs {}
 
 impl MemoryFileSystem for DevFs {
 	fn mount() -> Result<(Arc<dyn SuperBlock>, Arc<dyn DirInode>), Errno> {
+		if DEVFS_ROOT_DIR_ENTRY.lock().is_some() {
+			return Err(Errno::EBUSY);
+		}
+
 		Ok((Arc::new(TmpSb), unsafe {
 			DEVFS_ROOT_DIR.assume_init_ref().clone()
 		}))
 	}
+
+	fn finish_mount(entry: &Arc<VfsDirEntry>) {
+		DEVFS_ROOT_DIR_ENTRY.lock().replace(entry.clone());
+	}
 }
 
 pub static mut DEVFS_ROOT_DIR: MaybeUninit<Arc<DevDirInode>> = MaybeUninit::uninit();
+static DEVFS_ROOT_DIR_ENTRY: Locked<Option<Arc<VfsDirEntry>>> = Locked::new(None);
 
 pub fn init() {
 	partition::init();
@@ -103,6 +112,10 @@ impl DevDirInode {
 
 	pub fn unregister(&self, name: &[u8]) {
 		self.devices.lock().remove(name);
+
+		if let Some(ent) = &*DEVFS_ROOT_DIR_ENTRY.lock() {
+			ent.remove_child_force(name);
+		}
 	}
 }
 
