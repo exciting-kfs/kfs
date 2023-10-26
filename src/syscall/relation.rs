@@ -91,10 +91,18 @@ pub fn sys_getppid() -> Result<usize, Errno> {
 	Ok(current.get_ppid().as_raw())
 }
 
-pub fn sys_getsid() -> Result<usize, Errno> {
-	let current = unsafe { CURRENT.get_mut() };
+pub fn sys_getsid(pid: usize) -> Result<usize, Errno> {
+	let tree = PROCESS_TREE.lock();
+	let task = match pid == 0 {
+		true => Ok(unsafe { CURRENT.get_ref() }),
+		false => tree.get(&Pid::from_raw(pid)).ok_or(Errno::ESRCH),
+	}?;
 
-	Ok(current.get_sid().as_raw())
+	let current = unsafe { CURRENT.get_ref() };
+	match task.get_sid() {
+		x if x == current.get_sid() => Ok(x.as_raw()),
+		_ => Err(Errno::EPERM),
+	}
 }
 
 pub fn sys_getpgid(pid: usize) -> Result<usize, Errno> {

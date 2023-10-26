@@ -146,7 +146,7 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 		129 => sys_cleanup_module(frame.ebx),
 		132 => sys_getpgid(frame.ebx),
 		141 => sys_getdents(frame.ebx as isize, frame.ecx, frame.edx),
-		147 => sys_getsid(),
+		147 => sys_getsid(frame.ebx),
 		158 => sys_sched_yield(),
 		183 => sys_getcwd(frame.ebx, frame.ecx),
 		199 => sys_getuid(),
