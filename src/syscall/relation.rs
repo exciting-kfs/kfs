@@ -93,15 +93,17 @@ pub fn sys_getppid() -> Result<usize, Errno> {
 
 pub fn sys_getsid(pid: usize) -> Result<usize, Errno> {
 	let tree = PROCESS_TREE.lock();
+	let current = unsafe { CURRENT.get_ref() };
 	let task = match pid == 0 {
-		true => Ok(unsafe { CURRENT.get_ref() }),
+		true => Ok(current),
 		false => tree.get(&Pid::from_raw(pid)).ok_or(Errno::ESRCH),
 	}?;
 
-	let current = unsafe { CURRENT.get_ref() };
-	match task.get_sid() {
-		x if x == current.get_sid() => Ok(x.as_raw()),
-		_ => Err(Errno::EPERM),
+	let sid = task.get_sid();
+	if sid == current.get_sid() {
+		Ok(sid.as_raw())
+	} else {
+		Err(Errno::EPERM)
 	}
 }
 
