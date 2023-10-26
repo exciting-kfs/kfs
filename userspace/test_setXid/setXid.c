@@ -15,7 +15,7 @@ void print_id(const char *s) {
 	ft_putstr("\npgid: ");
 	ft_putnbr(getpgrp());
 	ft_putstr("\nsid:  ");
-	ft_putnbr(getsid());
+	ft_putnbr(getsid(0));
 	ft_putstr("\n");
 }
 
