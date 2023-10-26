@@ -18,7 +18,7 @@ use crate::{
 	driver::ide::block::Block as IdeBlock,
 	driver::{ide::dma::hook::Cleanup, partition::BlockId},
 	fs::devfs::partition::PartBorrow,
-	process::{signal::poll_signal_queue, task::Task},
+	process::{signal::poll_signal_queue, task::Task, wait_list::WaitList},
 	scheduler::{
 		preempt::{preempt_disable, AtomicOps},
 		sleep::{sleep_and_yield_atomic, wake_up_deep_sleep, Sleep},
@@ -32,8 +32,6 @@ use self::{
 	block::{BidNode, Block},
 	list::List,
 };
-
-use super::wait_list::WaitList;
 
 #[derive(Debug)]
 enum MaybeBlock {

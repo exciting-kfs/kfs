@@ -17,7 +17,9 @@ use crate::input::keyboard::KEYBOARD;
 use crate::io::{BlkRead, BlkWrite, ChRead, ChWrite, NoSpace};
 use crate::process::relation::session::Session;
 use crate::process::signal::{poll_signal_queue, send_signal_to_foreground};
-use crate::scheduler::sleep::{sleep_and_yield, wake_up_foreground, Sleep};
+use crate::process::wait_list::WaitList;
+use crate::scheduler::preempt::{preempt_disable, AtomicOps};
+use crate::scheduler::sleep::{sleep_and_yield_atomic, Sleep};
 use crate::scheduler::work::schedule_fast_work;
 use crate::sync::{Locked, LockedGuard};
 use crate::syscall::errno::Errno;
@@ -164,6 +166,7 @@ pub struct TTY {
 	line_buffer: LineBuffer<4096>,
 	into_process: VecDeque<u8>,
 	session: Weak<Locked<Session>>,
+	waitlist: WaitList,
 }
 
 struct ControlChars {
@@ -223,6 +226,7 @@ impl TTY {
 			into_process: VecDeque::new(),
 			session: Weak::default(),
 			console: Console::buffer_reserved(WINDOW_SIZE),
+			waitlist: WaitList::new(),
 		}
 	}
 
@@ -401,36 +405,34 @@ impl ChWrite<Code> for TTY {
 	/// - context: irq_disabled: memory allocation, console lock
 	fn write_one(&mut self, code: Code) -> Result<(), NoSpace> {
 		let mut buf = [0; 16];
-		let iter = self.input_convert(code, &mut buf);
+		let input = match self.input_convert(code, &mut buf) {
+			None => return Ok(()),
+			Some(i) => i,
+		};
 
-		if let None = iter {
-			return Ok(());
-		}
-		let iter = iter.unwrap();
-
-		if self.is_signal(iter[0]) {
+		if self.is_signal(input[0]) {
 			// Isig
-			self.send_signal(iter[0]);
+			self.send_signal(input[0]);
 		} else {
 			// Icanon
 			if self.flag.contains(TTYFlag::Icanon) {
-				self.do_icanon(iter, code);
+				self.do_icanon(input, code);
 			} else {
-				self.into_process.extend(iter);
+				self.into_process.extend(input);
 			}
 		}
 
 		// Opost & Onlcr
-		let len = iter.len();
-		let iter = self.output_convert(&mut buf, len);
+		let len = input.len();
+		let output = self.output_convert(&mut buf, len);
 
 		// Echo
 		if self.flag.contains(TTYFlag::Echo) {
-			self.do_echo(iter)?
+			self.do_echo(output)?
 		}
 
 		// wake_up on event
-		wake_up_foreground(&self.session, Sleep::Light);
+		self.waitlist.wake_up_all();
 
 		Ok(())
 	}
@@ -476,6 +478,12 @@ impl TTYFile {
 	pub fn lock_tty(&self) -> LockedGuard<'_, TTY> {
 		self.tty.lock()
 	}
+
+	pub fn put_on_waitlist(&self) -> AtomicOps {
+		let atomic = preempt_disable();
+		self.lock_tty().waitlist.register();
+		atomic
+	}
 }
 
 impl FileHandle for TTYFile {
@@ -484,7 +492,7 @@ impl FileHandle for TTYFile {
 		let mut count = self.lock_tty().read(buf);
 		while block && count == 0 {
 			unsafe { poll_signal_queue()? };
-			sleep_and_yield(Sleep::Light);
+			sleep_and_yield_atomic(Sleep::Light, self.put_on_waitlist());
 			count += self.lock_tty().read(buf);
 		}
 		Ok(count)
@@ -495,7 +503,7 @@ impl FileHandle for TTYFile {
 		let mut count = self.lock_tty().write(buf);
 		while block && count == 0 {
 			unsafe { poll_signal_queue()? };
-			sleep_and_yield(Sleep::Light);
+			sleep_and_yield_atomic(Sleep::Light, self.put_on_waitlist());
 			count += self.lock_tty().write(buf);
 		}
 		Ok(count)
