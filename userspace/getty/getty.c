@@ -473,7 +473,7 @@ void get_login_shell() {
 	if (pid == 0) {
 		signal(SIGINT, SIG_DFL);
 		signal(SIGQUIT, SIG_DFL);
-		setsid();
+		// setsid();
 		setuid(ent->uid);
 		setgid(ent->gid);
 		chdir(ent->home);

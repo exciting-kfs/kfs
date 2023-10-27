@@ -84,6 +84,11 @@ impl Signal {
 			return;
 		}
 
+		let table = self.table.lock();
+		if let SigHandler::Ignore = table[info.num.index()] {
+			return;
+		}
+
 		let mut queue = self.queue.lock();
 
 		use SigNum::*;
@@ -204,8 +209,8 @@ impl Signal {
 	}
 
 	fn get_signal_event(&self) -> Option<SigInfo> {
-		let mut queue = self.queue.lock();
 		let mask = self.mask.lock();
+		let mut queue = self.queue.lock();
 
 		let mut ret = None;
 		let mut not = LinkedList::new();
@@ -217,7 +222,7 @@ impl Signal {
 				break;
 			}
 		}
-		queue.extend(not);
+		queue.append(&mut not);
 
 		ret
 	}
