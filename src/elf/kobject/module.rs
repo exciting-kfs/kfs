@@ -1,7 +1,7 @@
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 
-use crate::{ptr::VirtPageBox, sync::Locked, syscall::errno::Errno};
+use crate::{fs::remove_module_node, ptr::VirtPageBox, sync::Locked, syscall::errno::Errno};
 
 #[macro_export]
 macro_rules! kernel_module {
@@ -32,7 +32,8 @@ impl Drop for KernelModule {
 	}
 }
 
-static LOADED_MODULES: Locked<BTreeMap<&[u8], Arc<KernelModule>>> = Locked::new(BTreeMap::new());
+pub static LOADED_MODULES: Locked<BTreeMap<&[u8], Arc<KernelModule>>> =
+	Locked::new(BTreeMap::new());
 
 impl KernelModule {
 	pub fn new(mem: VirtPageBox, info_offset: usize) -> Arc<Self> {
@@ -65,11 +66,12 @@ pub fn cleanup_kernel_module(name: &[u8]) -> Result<(), Errno> {
 
 	let module = loaded_modules.remove(name).ok_or(Errno::ENOENT)?;
 
-	match Arc::try_unwrap(module) {
-		Ok(_) => Ok(()),
-		Err(module) => {
-			loaded_modules.insert(module.get_info().name, module);
-			Err(Errno::EBUSY)
-		}
+	if let Err(module) = Arc::try_unwrap(module) {
+		loaded_modules.insert(module.get_info().name, module);
+		return Err(Errno::EBUSY);
 	}
+
+	remove_module_node(name);
+
+	Ok(())
 }

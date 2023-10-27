@@ -509,6 +509,28 @@ void builtin_env(char **envp) {
 	}
 }
 
+
+void builtin_lsmod() {
+	char buf[4096];
+
+	int fd = open("/sys/modules", O_DIRECTORY | O_RDONLY | O_CLOEXEC, 0777);
+	if (fd < 0) {
+		show_error("lsmod: open", fd);
+		return;
+	}
+
+	int end = getdents(fd, buf, 4096);
+	int curr = 0;
+	while (curr < end) {
+		struct kfs_dirent *dir = (struct kfs_dirent *)&buf[curr];
+
+		if (dir->name[0] != '.')
+			ft_printf("%s\n", dir->name);
+		curr += dir->size;
+	}
+	close(fd);	
+}
+
 int main(int argc, char **argv, char **envp) {
 	ft_printf("====== sh ======\n");
 	ft_printf(" pid = %d\n", getpid());
@@ -521,14 +543,16 @@ int main(int argc, char **argv, char **envp) {
 		ft_putstr("sh==> ");
 		unsigned int line_len = getline();
 
-		if (STREQ("ls", line_buf, line_len)) {
-			builtin_ls(ignore_ws(2));
-		} else if (STREQ("env", line_buf, line_len)) {
+		if (STREQ("env", line_buf, line_len)) {
 			builtin_env(envp);
 		} else if (STREQ("insmod", line_buf, line_len)) {
 			builtin_insmod(ignore_ws(6));
 		} else if (STREQ("rmmod", line_buf, line_len)) {
 			builtin_rmmod(ignore_ws(5));
+		} else if (STREQ("lsmod", line_buf, line_len)) {
+			builtin_lsmod();
+		} else if (STREQ("ls", line_buf, line_len)) {
+			builtin_ls(ignore_ws(2));
 		} else if (STREQ("cd", line_buf, line_len)) {
 			builtin_cd(ignore_ws(2));
 		} else if (STREQ("cat", line_buf, line_len)) {

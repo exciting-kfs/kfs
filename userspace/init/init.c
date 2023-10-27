@@ -17,6 +17,9 @@ int main(void) {
 	mkdir("/proc", 0777);
 	mount("proc", "/proc", "procfs");
 
+	mkdir("/sys", 0777);
+	mount("sysfs", "/sys", "sysfs");
+
 	open("/dev/tty1", O_RDWR);
 	open("/dev/tty1", O_RDWR);
 	open("/dev/tty1", O_RDWR);
