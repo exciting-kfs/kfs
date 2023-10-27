@@ -503,12 +503,38 @@ void builtin_rmmod(int idx) {
 	}
 }
 
+void builtin_exec(int idx) {
+	char buf[4096];
+
+	idx = extract(idx, buf);
+
+	pid_t pid = fork();
+
+	if (pid == 0) {
+
+		int ret = execve(buf, NULL, NULL);
+
+		if (ret < 0) {
+			show_error("rmmod: cleanup_module", ret);
+		}
+	} else {
+		int stat = 0;
+
+		signal(SIGINT, SIG_IGN);
+		signal(SIGQUIT, SIG_IGN);
+
+		waitpid(pid, &stat, 0);
+
+		signal(SIGINT, SIG_DFL);
+		signal(SIGQUIT, SIG_DFL);
+	}
+}
+
 void builtin_env(char **envp) {
 	for (char **p = envp; *p; ++p) {
 		ft_printf("%s\n", *p);
 	}
 }
-
 
 void builtin_lsmod() {
 	char buf[4096];
@@ -528,7 +554,7 @@ void builtin_lsmod() {
 			ft_printf("%s\n", dir->name);
 		curr += dir->size;
 	}
-	close(fd);	
+	close(fd);
 }
 
 int main(int argc, char **argv, char **envp) {
@@ -597,6 +623,10 @@ int main(int argc, char **argv, char **envp) {
 			builtin_pwd();
 		} else if (STREQ("test", line_buf, line_len)) {
 			builtin_test();
+		} else if (STREQ("exec", line_buf, line_len)) {
+			builtin_exec(ignore_ws(4));
+		} else if (STREQ("exit", line_buf, line_len)) {
+			break;
 		} else {
 			extract(0, line_buf);
 			ft_putstr("sh: ");
