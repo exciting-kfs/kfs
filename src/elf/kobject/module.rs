@@ -32,7 +32,8 @@ impl Drop for KernelModule {
 	}
 }
 
-static LOADED_MODULES: Locked<BTreeMap<&[u8], Arc<KernelModule>>> = Locked::new(BTreeMap::new());
+pub static LOADED_MODULES: Locked<BTreeMap<&[u8], Arc<KernelModule>>> =
+	Locked::new(BTreeMap::new());
 
 impl KernelModule {
 	pub fn new(mem: VirtPageBox, info_offset: usize) -> Arc<Self> {

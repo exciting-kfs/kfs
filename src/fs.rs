@@ -5,6 +5,7 @@ pub mod syscall;
 pub mod vfs;
 
 mod procfs;
+mod sysfs;
 mod tmpfs;
 
 use crate::driver::ide::dma::dma_q;
@@ -22,6 +23,7 @@ use vfs::{VfsDirEntry, ROOT_DIR_ENTRY};
 pub use devfs::init as init_devfs;
 pub use procfs::init as init_procfs;
 pub use procfs::{change_cwd, create_fd_node, create_task_node, delete_fd_node, delete_task_node};
+pub use sysfs::init as init_sysfs;
 
 use self::ext2::Ext2;
 use self::vfs::{MemoryFileSystem, PhysicalFileSystem};

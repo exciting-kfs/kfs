@@ -3,7 +3,9 @@ mod module;
 mod rel_section;
 
 use alloc::sync::Arc;
-pub use module::{cleanup_kernel_module, load_kernel_module, KernelModule, KernelModuleInfo};
+pub use module::{
+	cleanup_kernel_module, load_kernel_module, KernelModule, KernelModuleInfo, LOADED_MODULES,
+};
 
 use alloc::collections::BTreeMap;
 

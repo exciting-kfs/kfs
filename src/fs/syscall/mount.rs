@@ -1,5 +1,6 @@
 use alloc::sync::Arc;
 
+use crate::fs::sysfs::SysFs;
 use crate::mm::user::verify::{verify_path, verify_string};
 use crate::process::task::CURRENT;
 use crate::syscall::errno::Errno;
@@ -53,6 +54,7 @@ fn do_mount(
 		MEMFS b"tmpfs" => TmpFs,
 		MEMFS b"procfs" => ProcFs,
 		MEMFS b"devfs" => DevFs,
+		MEMFS b"sysfs" => SysFs,
 		PHYFS b"ext2" => Ext2,
 	})
 }
