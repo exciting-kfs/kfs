@@ -2,7 +2,7 @@ use core::mem::MaybeUninit;
 
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 
-use crate::elf::kobject::{KernelModule, LOADED_MODULES};
+use crate::elf::kobject::LOADED_MODULES;
 use crate::process::get_init_task;
 use crate::sync::Locked;
 use crate::syscall::errno::Errno;
@@ -68,9 +68,9 @@ fn sync_entry(ent: &Arc<VfsDirEntry>, mod_name: &[u8]) -> Result<(), Errno> {
 	Ok(())
 }
 
-pub fn remove_module_node(module: Arc<KernelModule>) {
+pub fn remove_module_node(mod_name: &[u8]) {
 	if let Some(ent) = &*SYSFS_ROOT_DIR_ENTRY.lock() {
-		_ = sync_entry(ent, module.get_info().name);
+		_ = sync_entry(ent, mod_name);
 	}
 }
 
