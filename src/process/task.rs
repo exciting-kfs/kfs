@@ -93,11 +93,12 @@ impl UserTaskExt {
 impl Task {
 	/// create new init (pid 1) process.
 	/// this must be called only once!!
-	pub(super) fn new_init_task(pid: Pid, elf: Elf<'_>) -> Result<Arc<Self>, AllocError> {
+	pub(super) fn new_init_task(pid: Pid, elf: Elf<'_>) -> Result<Arc<Self>, Errno> {
 		debug_assert!(pid.as_raw() == 1, "invalid init pid");
 
-		let kstack = Stack::new_user(elf.get_entry_point(), USTACK_BASE)?;
-		let memory = Memory::from_elf(USTACK_BASE, USTACK_PAGES, elf).expect("FIXME");
+		let kstack =
+			Stack::new_user(elf.get_entry_point(), USTACK_BASE - 32).map_err(|_| Errno::ENOMEM)?;
+		let memory = Memory::from_elf(USTACK_BASE, USTACK_PAGES, elf)?;
 
 		let task = Arc::new_cyclic(|w| Task {
 			kstack,

@@ -227,23 +227,14 @@ impl Memory {
 		&mut self,
 		argv_ptr: usize,
 		task: &Arc<Task>,
-	) -> Result<(usize, usize), Errno> {
+	) -> Result<Vec<usize>, Errno> {
 		let copy_base = next_align(self.system_data_base, PAGE_SIZE);
 
 		let (args, arg_ptrs) = Self::copy_c_argv(argv_ptr, copy_base, task)?;
 
 		self.push_data(&args).map_err(|_| Errno::ENOMEM)?;
-		let array_base = self
-			.push_data(unsafe {
-				from_raw_parts(
-					arg_ptrs.as_ptr().cast::<u8>(),
-					arg_ptrs.len() * size_of::<usize>(),
-				)
-			})
-			.map_err(|_| Errno::ENOMEM)?;
-		let array_size = arg_ptrs.len() - 1;
 
-		Ok((array_base, array_size))
+		Ok(arg_ptrs)
 	}
 
 	fn push_data(&mut self, data: &[u8]) -> Result<usize, AllocError> {
