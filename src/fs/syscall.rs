@@ -30,7 +30,7 @@ pub use stat::{sys_fstat, sys_stat};
 pub use symlink::sys_symlink;
 pub use truncate::sys_truncate;
 pub use unlink::{sys_rmdir, sys_unlink};
-pub use write::sys_write;
+pub use write::{sys_write, sys_writev};
 
 use crate::process::{fd_table::Fd, task::CURRENT};
 use crate::syscall::errno::Errno;

@@ -5,6 +5,7 @@ pub mod kstack;
 pub mod kthread;
 pub mod process_tree;
 pub mod relation;
+pub mod set_thread_area;
 pub mod signal;
 pub mod task;
 pub mod uid;

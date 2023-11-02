@@ -515,7 +515,7 @@ void builtin_exec(int idx) {
 		int ret = execve(buf, NULL, NULL);
 
 		if (ret < 0) {
-			show_error("rmmod: cleanup_module", ret);
+			show_error("exec: execve", ret);
 		}
 	} else {
 		int stat = 0;

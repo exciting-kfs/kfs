@@ -119,6 +119,11 @@ ci : test
 .PHONY: hdd
 hdd: $(HDD_IMG)
 
+.PHONY : hdd-force
+hdd-force :
+	touch scripts/hdd/make-sysroot.sh 
+	$(MAKE) hdd
+
 .PHONY : clean
 clean :
 	@echo 'CARGO clean'
@@ -258,6 +263,7 @@ $(TARGET_ROOT)/sysroot : $(USER_BINS) $(KERNEL_MODULES) scripts/hdd/make-sysroot
 	@scripts/hdd/make-sysroot.sh $(TARGET_ROOT)/sysroot
 	@cp $(KERNEL_MODULES) $(TARGET_ROOT)/sysroot/lib/modules
 	@cp $(USER_BINS) $(TARGET_ROOT)/sysroot/bin
+	@cp examples/* $(TARGET_ROOT)/sysroot/bin
 
 $(HDD_IMG) : $(TARGET_ROOT)/sysroot scripts/hdd/make-hdd.sh scripts/hdd/make-hdd-linux.sh
 	@echo MAKE $(notdir $@)

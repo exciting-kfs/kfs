@@ -1,5 +1,4 @@
 use core::mem::{self};
-use core::ptr::addr_of_mut;
 
 use alloc::sync::Arc;
 
@@ -49,8 +48,8 @@ pub fn sys_execve(
 
 	let mut new_memory = Memory::from_elf(USTACK_BASE, USTACK_PAGES, elf)?;
 
-	let (argv_begin, argv_count) = new_memory.push_string_array(argv, current)?;
-	let (envp_begin, _) = new_memory.push_string_array(envp, current)?;
+	let argv = new_memory.push_string_array(argv, current)?;
+	let envp = new_memory.push_string_array(envp, current)?;
 
 	new_memory.pick_up();
 
@@ -63,9 +62,18 @@ pub fn sys_execve(
 
 	unsafe {
 		frame.copy_from_nonoverlapping(&InterruptFrame::new_user(entry_point, USTACK_BASE), 1);
-		addr_of_mut!((*frame).edi).write(argv_begin);
-		addr_of_mut!((*frame).edx).write(argv_count);
-		addr_of_mut!((*frame).esi).write(envp_begin);
+
+		let argc = argv.len() - 1;
+		for x in Some(argc)
+			.into_iter()
+			.chain(argv.into_iter())
+			.chain(envp.into_iter())
+			.chain(Some(0))
+			.rev()
+		{
+			(*frame).esp -= 4;
+			((*frame).esp as *mut usize).write(x);
+		}
 	};
 
 	Ok(0)

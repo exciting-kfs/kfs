@@ -5,7 +5,9 @@ use core::{
 };
 
 use crate::{
+	pr_warn,
 	sync::CpuLocal,
+	syscall::errno::Errno,
 	util::bitrange::{BitData, BitRange},
 };
 
@@ -85,6 +87,9 @@ pub struct GDT {
 	user_code: SystemDesc,
 	user_data: SystemDesc,
 	tss: SystemDesc,
+	tls1: SystemDesc,
+	tls2: SystemDesc,
+	tls3: SystemDesc,
 }
 
 impl GDT {
@@ -94,6 +99,9 @@ impl GDT {
 	pub const USER_CODE: usize = 24;
 	pub const USER_DATA: usize = 32;
 	pub const TSS: usize = 40;
+	pub const TLS1: usize = 48;
+	pub const TLS2: usize = 56;
+	pub const TLS3: usize = 64;
 
 	pub fn new(tss_base: usize) -> Self {
 		Self {
@@ -103,6 +111,9 @@ impl GDT {
 			user_code: SystemDesc::new_code(DPL_USER),
 			user_data: SystemDesc::new_data(DPL_USER),
 			tss: SystemDesc::new_tss(tss_base),
+			tls1: SystemDesc::new_null(),
+			tls2: SystemDesc::new_null(),
+			tls3: SystemDesc::new_null(),
 		}
 	}
 
@@ -137,6 +148,25 @@ impl GDT {
 				options(att_syntax)
 			)
 		};
+	}
+
+	pub fn set_tls(&mut self, tls: &[SystemDesc; 3]) {
+		self.tls1 = tls[0];
+		self.tls2 = tls[1];
+		self.tls3 = tls[2];
+	}
+
+	pub fn set_tls_by_idx(&mut self, idx: usize, tls: SystemDesc) -> Result<(), Errno> {
+		let old_tls = match idx {
+			0 => Ok(&mut self.tls1),
+			1 => Ok(&mut self.tls2),
+			2 => Ok(&mut self.tls3),
+			_ => Err(Errno::EINVAL),
+		}?;
+
+		*old_tls = tls;
+
+		Ok(())
 	}
 }
 
@@ -378,6 +408,82 @@ impl Display for SystemDesc {
 			self.high.get_raw_bits(),
 			self.low.get_raw_bits()
 		)
+	}
+}
+
+#[repr(transparent)]
+pub struct UserDescFlag(BitData);
+
+impl UserDescFlag {
+	const SEG_32BIT: BitRange = BitRange::new(0, 1);
+	const CONTENTS: BitRange = BitRange::new(1, 3);
+	const READ_EXEC_ONLY: BitRange = BitRange::new(3, 4);
+	const LIMIT_IN_PAGES: BitRange = BitRange::new(4, 5);
+	const SEG_NOT_PRESENT: BitRange = BitRange::new(5, 6);
+	const USEABLE: BitRange = BitRange::new(6, 7);
+
+	pub fn is_empty(&self) -> bool {
+		let raw = self.0.get_raw_bits() & ((1 << 7) - 1);
+
+		// SEG_NOT_PRESENT | READ_EXEC_ONLY
+		raw == ((1 << 5) | (1 << 3))
+	}
+}
+
+impl fmt::Debug for UserDescFlag {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{{ SEG_32BIT: {}, CONTENTS: {}, READ_EXEC_ONLY: {}, LIMIT_IN_PAGES: {}, SEG_NOT_PRESENT: {}, USABLE: {} }}",
+			self.0.shift_get_bits(&Self::SEG_32BIT),
+			self.0.shift_get_bits(&Self::CONTENTS),
+			self.0.shift_get_bits(&Self::READ_EXEC_ONLY),
+			self.0.shift_get_bits(&Self::LIMIT_IN_PAGES),
+			self.0.shift_get_bits(&Self::SEG_NOT_PRESENT),
+			self.0.shift_get_bits(&Self::USEABLE)
+		)
+	}
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct UserDesc {
+	pub entry_number: i32,
+	base_addr: usize,
+	limit: usize,
+	flags: UserDescFlag,
+}
+
+impl UserDesc {
+	pub fn is_empty(&self) -> bool {
+		self.base_addr == 0 && self.limit == 0 && self.flags.is_empty()
+	}
+
+	pub fn parse_into_system_desc(&self) -> Result<SystemDesc, Errno> {
+		if self.is_empty() {
+			return Ok(SystemDesc::new_null());
+		}
+
+		let contents = self.flags.0.shift_get_bits(&UserDescFlag::CONTENTS);
+		if contents != 0 {
+			pr_warn!("UserDesc::parse: unknown contents: {}", contents);
+		}
+
+		let mut desc = SystemDesc::new_null();
+
+		let present = self.flags.0.get_bits(&UserDescFlag::SEG_NOT_PRESENT) == 0;
+		let granularity = self.flags.0.get_bits(&UserDescFlag::LIMIT_IN_PAGES) != 0;
+		let operation_size = self.flags.0.get_bits(&UserDescFlag::SEG_32BIT) != 0;
+		let writable = self.flags.0.get_bits(&UserDescFlag::READ_EXEC_ONLY) != 0;
+
+		desc.set_base(self.base_addr)
+			.set_limit(self.limit)
+			.set_granularity(granularity)
+			.set_operation_size(operation_size)
+			.set_system(true)
+			.set_present(present)
+			.set_dpl(3)
+			.set_type(0b0001 | ((writable as usize) << 1)); // read accessed | write
+
+		Ok(desc)
 	}
 }
 

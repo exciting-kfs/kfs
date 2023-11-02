@@ -18,6 +18,7 @@ use crate::sync::CpuLocal;
 use crate::sync::{Locked, LockedGuard};
 use crate::syscall::errno::Errno;
 use crate::syscall::wait::Who;
+use crate::x86::SystemDesc;
 
 use super::exit::ExitStatus;
 use super::fd_table::FdTable;
@@ -59,6 +60,7 @@ pub struct UserTaskExt {
 	relation: Locked<Relation>,
 	fd_table: Arc<Locked<FdTable>>,
 	pub signal: Arc<Signal>,
+	tls: Locked<[SystemDesc; 3]>,
 }
 
 unsafe impl Sync for UserTaskExt {}
@@ -81,6 +83,10 @@ impl UserTaskExt {
 		self.fd_table.lock()
 	}
 
+	pub fn lock_tls(&self) -> LockedGuard<'_, [SystemDesc; 3]> {
+		self.tls.lock()
+	}
+
 	pub fn was_exec_called(&self) -> bool {
 		self.exec_called.load(Ordering::SeqCst)
 	}
@@ -93,11 +99,12 @@ impl UserTaskExt {
 impl Task {
 	/// create new init (pid 1) process.
 	/// this must be called only once!!
-	pub(super) fn new_init_task(pid: Pid, elf: Elf<'_>) -> Result<Arc<Self>, AllocError> {
+	pub(super) fn new_init_task(pid: Pid, elf: Elf<'_>) -> Result<Arc<Self>, Errno> {
 		debug_assert!(pid.as_raw() == 1, "invalid init pid");
 
-		let kstack = Stack::new_user(elf.get_entry_point(), USTACK_BASE)?;
-		let memory = Memory::from_elf(USTACK_BASE, USTACK_PAGES, elf).expect("FIXME");
+		let kstack =
+			Stack::new_user(elf.get_entry_point(), USTACK_BASE - 32).map_err(|_| Errno::ENOMEM)?;
+		let memory = Memory::from_elf(USTACK_BASE, USTACK_PAGES, elf)?;
 
 		let task = Arc::new_cyclic(|w| Task {
 			kstack,
@@ -112,6 +119,7 @@ impl Task {
 				relation: Locked::new(Relation::new_init(w)),
 				fd_table: Arc::new(Locked::new(FdTable::new())),
 				signal: Arc::new(Signal::new()),
+				tls: Locked::new([SystemDesc::new_null(); 3]),
 			}),
 		});
 
@@ -192,6 +200,7 @@ impl Task {
 					relation: Locked::new(relation),
 					fd_table: Arc::new(Locked::new(fd_table)),
 					signal: Arc::new(signal),
+					tls: Locked::new([SystemDesc::new_null(); 3]),
 				}),
 			}
 		});

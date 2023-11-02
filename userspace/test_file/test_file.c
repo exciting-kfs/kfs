@@ -3,24 +3,26 @@
 #include "kfs/kernel.h"
 #include "kfs/libft.h"
 
+
 int main(void) {	
+
 	char *argv[] = {
-		"v1",
-		"v2",
-		"v3",
+		"/bin/args",
+		"1",
+		"2",
+		"3",
 		NULL,
 	};
 
 	char *envp[] = {
-		"e1",
-		"e2",
-		"e3",
+		"A=b",
+		"B=c",
+		"C=d",
 		NULL,
 	};
 
-
-	int ret = execve("/bin/test_argv", argv, envp);
-	ft_printf("error: %d\n", ret);
+	int ret = execve("/bin/args", argv, envp);
+	ft_printf("failed to execve (ret = %d)\n", ret);
 
 	return 0;
 }

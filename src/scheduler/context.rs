@@ -9,7 +9,7 @@ use crate::{
 		preempt::{get_preempt_count, preemptable},
 		TASK_QUEUE,
 	},
-	x86::CPU_TASK_STATE,
+	x86::{CPU_GDT, CPU_TASK_STATE},
 };
 
 /// yield control from current task to next task
@@ -66,6 +66,11 @@ pub unsafe extern "fastcall" fn switch_task_finish(curr: *const Task, next: *con
 	};
 
 	if let Some(user) = next.get_user_ext() {
+		let tls = user.lock_tls();
+		let gdt = unsafe { CPU_GDT.get_mut() };
+		gdt.set_tls(&*tls);
+		gdt.pick_up();
+
 		user.lock_memory().pick_up();
 	}
 
