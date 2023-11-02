@@ -22,6 +22,7 @@ use crate::mm::alloc::virt::{kmap, kunmap};
 use crate::mm::alloc::Zone;
 use crate::mm::page::{get_zero_page_phys, index_to_meta, PageFlag, PD};
 use crate::mm::{constant::*, util::*};
+use crate::pr_warn;
 use crate::process::task::Task;
 use crate::ptr::PageBox;
 use crate::syscall::errno::Errno;
@@ -87,6 +88,36 @@ impl Memory {
 			}
 		}
 		return true;
+	}
+
+	pub fn brk(&mut self, new_data_end: usize) -> Result<usize, Errno> {
+		let begin = next_align(self.system_data_base, PAGE_SIZE);
+		let end = next_align(new_data_end, PAGE_SIZE);
+
+		let old = self.system_data_base;
+
+		if end == begin {
+			self.system_data_base = new_data_end;
+			return Ok(old);
+		}
+
+		if end < begin {
+			return Err(Errno::ENOMEM);
+		}
+
+		self.mmap_private(
+			begin,
+			(end - begin) / PAGE_SIZE,
+			AreaFlag::Readable | AreaFlag::Writable,
+		)?;
+
+		self.system_data_base = new_data_end;
+
+		Ok(old)
+	}
+
+	pub fn get_data_end(&self) -> usize {
+		self.system_data_base
 	}
 
 	pub fn mmap_shared(
@@ -271,6 +302,7 @@ impl Memory {
 				page_dir.map_user(vaddr, paddr, PageFlag::USER_RDWR)?;
 			}
 		}
+		pr_warn!("SBASE: {}", self.system_data_base);
 
 		Ok(Self {
 			system_data_base: self.system_data_base,

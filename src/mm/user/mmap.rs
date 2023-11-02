@@ -1,5 +1,8 @@
 use crate::{
+	mm::{constant::PAGE_SIZE, util::next_align},
 	mm::{constant::PAGE_SIZE, util::size_to_pages},
+	pr_warn,
+	process::task::CURRENT,
 	process::{fd_table::Fd, task::CURRENT},
 	syscall::errno::Errno,
 };
@@ -23,6 +26,29 @@ pub fn sys_mmap(
 	flags: i32,
 	fd: i32,
 	offset: isize,
+) -> Result<usize, Errno> {
+	let ret = __sys_mmap(addr, len, prot, flags, _fd, _offset);
+	pr_warn!(
+		"{:?} = mmap({:#010x}, {:#010x}, {:#010x}, {:#010x}, {:#010x}, {:#010x})",
+		ret,
+		addr,
+		len,
+		prot,
+		flags,
+		_fd,
+		_offset
+	);
+
+	ret
+}
+
+pub fn __sys_mmap(
+	addr: usize,
+	len: usize,
+	prot: i32,
+	flags: i32,
+	_fd: i32,
+	_offset: isize,
 ) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };
 	let user_ext = current.get_user_ext().expect("must be user process");

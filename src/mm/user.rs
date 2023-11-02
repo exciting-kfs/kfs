@@ -1,3 +1,4 @@
+pub mod brk;
 pub mod copy;
 pub mod memory;
 pub mod mmap;

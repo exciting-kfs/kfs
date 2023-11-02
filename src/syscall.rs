@@ -14,6 +14,7 @@ use crate::driver::pipe::sys_pipe;
 use crate::elf::syscall::*;
 use crate::fs::syscall::*;
 use crate::interrupt::InterruptFrame;
+use crate::mm::user::brk::sys_brk;
 use crate::mm::user::mmap::{sys_mmap, sys_munmap};
 
 use crate::net::syscall::*;
@@ -464,7 +465,6 @@ fn get_syscall_name(n: usize) -> &'static str {
 }
 
 fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errno> {
-	// let current = unsafe { CURRENT.get_mut() };
 	match frame.eax {
 		1 => {
 			// pr_info!("PID[{}]: exited({})", current.get_pid().as_raw(), frame.ebx);
@@ -496,6 +496,7 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 		39 => sys_mkdir(frame.ebx, frame.ecx as u32),
 		40 => sys_rmdir(frame.ebx),
 		42 => sys_pipe(frame.ebx),
+		45 => sys_brk(frame.ebx),
 		48 => {
 			pr_info!("syscall: signal: {}, {:x}", frame.ebx, frame.ecx);
 			sys_signal(frame.ebx, frame.ecx)
@@ -542,6 +543,14 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 		147 => sys_getsid(frame.ebx),
 		158 => sys_sched_yield(),
 		183 => sys_getcwd(frame.ebx, frame.ecx),
+		192 => sys_mmap(
+			frame.ebx,
+			frame.ecx,
+			frame.edx as i32,
+			frame.esi as i32,
+			frame.edi as i32,
+			frame.ebp as isize,
+		),
 		199 => sys_getuid(),
 		200 => sys_getgid(),
 		212 => sys_chown(frame.ebx, frame.ecx, frame.edx),
