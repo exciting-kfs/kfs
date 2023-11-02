@@ -65,7 +65,7 @@ fn ptr_to_allocated_meta(ptr: NonNull<u8>) -> Option<NonNull<MetaPage>> {
 	let mut index = addr_to_pfn(virt_to_phys(ptr.as_ptr() as usize));
 	let mut page = index_to_meta(index);
 
-	while !unsafe { page.as_ref() }.inuse() {
+	while !unsafe { page.as_ref() }.is_inuse() {
 		let rank = pfn_to_rank(index)?;
 		index ^= rank_to_pages(rank);
 		page = index_to_meta(index);

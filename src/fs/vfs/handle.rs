@@ -5,7 +5,7 @@ use alloc::{boxed::Box, sync::Arc};
 use crate::fs::path::Path;
 use crate::net::address::{ReadOnly, UnknownSocketAddress, WriteOnly};
 use crate::net::socket::{Socket, SocketHandle};
-use crate::process::task::Task;
+use crate::process::task::{Task, CURRENT};
 use crate::syscall::errno::Errno;
 
 use super::{AccessFlag, Entry, IOFlag, VfsDirEntry, VfsEntry, VfsFileEntry, VfsSocketEntry};
@@ -62,7 +62,7 @@ impl VfsHandle {
 		}
 	}
 
-	fn as_entry(&self) -> Option<VfsEntry> {
+	pub fn as_entry(&self) -> Option<VfsEntry> {
 		use VfsHandle::*;
 		match self {
 			File(f) => f.entry.clone().map(|ent| VfsEntry::new_file(ent)),
@@ -75,6 +75,20 @@ impl VfsHandle {
 		let ent = self.as_entry().ok_or(Errno::EPIPE)?;
 
 		ent.get_abs_path()
+	}
+
+	pub fn deep_copy(&self) -> Result<Self, Errno> {
+		let ent = self.as_entry().ok_or(Errno::EINVAL)?;
+		let real = ent.downcast_real()?;
+
+		use VfsHandle::*;
+		let (io_flags, access_flags) = match self {
+			File(f) => (f.io_flags, f.access_flags),
+			Socket(s) => (s.io_flags, s.access_flags),
+			Dir(d) => (d.io_flags, d.access_flags),
+		};
+
+		real.open(io_flags, access_flags, unsafe { CURRENT.get_ref() })
 	}
 }
 

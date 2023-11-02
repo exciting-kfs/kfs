@@ -111,12 +111,22 @@ impl MetaPage {
 		return left_page;
 	}
 
-	pub fn set_inuse(&mut self, value: bool) {
-		self.data.set_flag(MetaData::INUSE, value.into());
+	pub fn inc_inuse(&mut self) {
+		let inuse = self.data.get_flag(MetaData::INUSE);
+		self.data.set_flag(MetaData::INUSE, inuse + 1);
 	}
 
-	pub fn inuse(&self) -> bool {
+	pub fn dec_inuse(&mut self) {
+		let inuse = self.data.get_flag(MetaData::INUSE);
+		self.data.set_flag(MetaData::INUSE, inuse - 1);
+	}
+
+	pub fn is_inuse(&self) -> bool {
 		self.data.get_flag(MetaData::INUSE) != 0
+	}
+
+	pub fn inuse(&self) -> usize {
+		self.data.get_flag(MetaData::INUSE)
 	}
 
 	pub fn set_rank(&mut self, rank: usize) {

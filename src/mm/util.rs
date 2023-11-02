@@ -35,6 +35,11 @@ pub const fn size_to_rank(size: usize) -> usize {
 }
 
 #[inline]
+pub fn size_to_pages(size: usize) -> usize {
+	next_align(size.checked_sub(1).unwrap_or_default(), PAGE_SIZE) / PAGE_SIZE
+}
+
+#[inline]
 pub const fn phys_to_virt(paddr: usize) -> usize {
 	paddr.wrapping_add(VM_OFFSET)
 }

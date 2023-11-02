@@ -36,7 +36,7 @@ pub fn lookup_size(ptr: NonNull<u8>) -> Option<usize> {
 		let pfn = addr_to_pfn(virt_to_phys(addr));
 		for n in (0..=pfn).rev() {
 			let meta_page = unsafe { page::index_to_meta(n).as_mut() };
-			if meta_page.inuse() {
+			if meta_page.is_inuse() {
 				return Some(1 << (meta_page.rank() + PAGE_SHIFT));
 			}
 		}

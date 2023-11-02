@@ -4,9 +4,8 @@ use crate::util::bitrange::{BitData, BitRange};
 pub struct MetaData(BitData);
 
 impl MetaData {
-	pub const INUSE: BitRange = BitRange::new(0, 1);
-	pub const RANK: BitRange = BitRange::new(1, 5);
-	const UNUSED_AREA: BitRange = BitRange::new(5, 32);
+	pub const INUSE: BitRange = BitRange::new(0, 28);
+	pub const RANK: BitRange = BitRange::new(28, 32);
 
 	pub fn new() -> Self {
 		MetaData(BitData::new(0))

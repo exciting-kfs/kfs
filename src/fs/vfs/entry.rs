@@ -87,6 +87,14 @@ impl VfsEntry {
 		VfsEntry::Real(block.into())
 	}
 
+	pub fn downcast_real(self) -> Result<VfsRealEntry, Errno> {
+		use VfsEntry::*;
+		match self {
+			Real(r) => Ok(r),
+			Symlink(_) => Err(Errno::EISDIR),
+		}
+	}
+
 	pub fn downcast_dir(self) -> Result<Arc<VfsDirEntry>, Errno> {
 		use VfsEntry::*;
 		match self {

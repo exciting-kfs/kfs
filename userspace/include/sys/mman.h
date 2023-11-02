@@ -4,6 +4,7 @@
 #include "kfs/internal/prelude.h"
 #include "kfs/syscall.h"
 
+#define MMAP_SHARED 0x01
 #define MMAP_PRIVATE 0x02
 
 #define PROT_READ 1

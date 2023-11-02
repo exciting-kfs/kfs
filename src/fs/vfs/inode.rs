@@ -9,6 +9,7 @@ use crate::{
 
 use super::{DirHandle, FileHandle};
 
+#[derive(Copy, Clone)]
 pub struct AccessFlag(i32);
 impl AccessFlag {
 	const RDONLY: i32 = 0o0;
