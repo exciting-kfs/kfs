@@ -17,6 +17,9 @@ rustflags = [
 	'log_level="debug"',            # ALL = debug > info > warn > error
 	'--cfg',
 	'trace_feature="mmap_shared"',
+	'trace_feature="syscall"',
+	# '--cfg',
+	# 'trace_feature="ext2-idspace"',
 	# '--cfg',
 	# 'trace_feature="block_pool"',
 	# '--cfg',
