@@ -9,7 +9,6 @@ use crate::fs::vfs::{lookup_entry_follow, AccessFlag, IOFlag, Permission, RealEn
 use crate::interrupt::InterruptFrame;
 use crate::mm::user::memory::Memory;
 use crate::mm::user::verify::verify_path;
-use crate::pr_warn;
 use crate::process::task::{Task, CURRENT};
 use crate::ptr::VirtPageBox;
 use crate::syscall::errno::Errno;
@@ -72,7 +71,6 @@ pub fn sys_execve(
 			.chain(Some(0))
 			.rev()
 		{
-			pr_warn!("x: {:#010x}", x);
 			(*frame).esp -= 4;
 			((*frame).esp as *mut usize).write(x);
 		}

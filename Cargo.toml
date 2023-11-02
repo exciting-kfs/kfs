@@ -30,3 +30,6 @@ members = [
     "kbd",
     "timestamp"
 ]
+
+[profile.release]
+debug = true

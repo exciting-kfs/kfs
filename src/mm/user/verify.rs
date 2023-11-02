@@ -67,7 +67,7 @@ pub fn verify_string(string: usize, task: &Arc<Task>, limit: usize) -> Result<&'
 	Ok(unsafe { from_raw_parts(string as *const u8, length) })
 }
 
-fn verify_region(
+pub fn verify_region(
 	buf_ptr: usize,
 	len: usize,
 	task: &Arc<Task>,

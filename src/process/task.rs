@@ -18,6 +18,7 @@ use crate::sync::CpuLocal;
 use crate::sync::{Locked, LockedGuard};
 use crate::syscall::errno::Errno;
 use crate::syscall::wait::Who;
+use crate::x86::SystemDesc;
 
 use super::exit::ExitStatus;
 use super::fd_table::FdTable;
@@ -59,6 +60,7 @@ pub struct UserTaskExt {
 	relation: Locked<Relation>,
 	fd_table: Arc<Locked<FdTable>>,
 	pub signal: Arc<Signal>,
+	tls: Locked<[SystemDesc; 3]>,
 }
 
 unsafe impl Sync for UserTaskExt {}
@@ -79,6 +81,10 @@ impl UserTaskExt {
 
 	pub fn lock_fd_table(&self) -> LockedGuard<'_, FdTable> {
 		self.fd_table.lock()
+	}
+
+	pub fn lock_tls(&self) -> LockedGuard<'_, [SystemDesc; 3]> {
+		self.tls.lock()
 	}
 
 	pub fn was_exec_called(&self) -> bool {
@@ -113,6 +119,7 @@ impl Task {
 				relation: Locked::new(Relation::new_init(w)),
 				fd_table: Arc::new(Locked::new(FdTable::new())),
 				signal: Arc::new(Signal::new()),
+				tls: Locked::new([SystemDesc::new_null(); 3]),
 			}),
 		});
 
@@ -193,6 +200,7 @@ impl Task {
 					relation: Locked::new(relation),
 					fd_table: Arc::new(Locked::new(fd_table)),
 					signal: Arc::new(signal),
+					tls: Locked::new([SystemDesc::new_null(); 3]),
 				}),
 			}
 		});

@@ -17,13 +17,14 @@ use crate::interrupt::InterruptFrame;
 use crate::mm::user::mmap::{sys_mmap, sys_munmap};
 
 use crate::net::syscall::*;
-use crate::pr_info;
 use crate::process::exit::sys_exit;
 use crate::process::gid::{sys_getgid, sys_setgid};
+use crate::process::set_thread_area::sys_set_thread_area;
 use crate::process::signal::sig_handler::SigAction;
 use crate::process::task::CURRENT;
 use crate::process::uid::{sys_getuid, sys_setuid};
 use crate::scheduler::sys_sched_yield;
+use crate::{pr_info, trace_feature};
 
 use self::errno::Errno;
 use self::exec::*;
@@ -72,6 +73,7 @@ pub extern "C" fn handle_syscall_impl(mut frame: InterruptFrame) {
 }
 
 fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errno> {
+	trace_feature!("syscall", "system call #{} called.", frame.eax);
 	// let current = unsafe { CURRENT.get_mut() };
 	match frame.eax {
 		1 => {
@@ -109,8 +111,8 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 			sys_signal(frame.ebx, frame.ecx)
 		}
 		57 => sys_setpgid(frame.ebx, frame.ecx),
-		64 => sys_getppid(),
-		65 => sys_getpgrp(),
+		65 => sys_getppid(),
+		64 => sys_getpgrp(),
 		66 => sys_setsid(),
 		67 => {
 			// pr_info!(
@@ -146,6 +148,7 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 		129 => sys_cleanup_module(frame.ebx),
 		132 => sys_getpgid(frame.ebx),
 		141 => sys_getdents(frame.ebx as isize, frame.ecx, frame.edx),
+		146 => sys_writev(frame.ebx as isize, frame.ecx, frame.edx),
 		147 => sys_getsid(frame.ebx),
 		158 => sys_sched_yield(),
 		183 => sys_getcwd(frame.ebx, frame.ecx),
@@ -154,6 +157,7 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 		212 => sys_chown(frame.ebx, frame.ecx, frame.edx),
 		213 => sys_setuid(frame.ebx),
 		214 => sys_setgid(frame.ebx),
+		243 => sys_set_thread_area(frame.ebx),
 		359 => sys_socket(frame.ebx as i32, frame.ecx as i32, frame.edx as i32),
 		361 => sys_bind(frame.ebx, frame.ecx, frame.edx),
 		362 => sys_connect(frame.ebx, frame.ecx, frame.edx),
