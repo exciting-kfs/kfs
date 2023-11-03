@@ -40,8 +40,6 @@ use self::wait::sys_waitpid;
 
 #[no_mangle]
 pub extern "C" fn handle_syscall_impl(mut frame: InterruptFrame) {
-	let mut restart = true;
-	let mut ret = Err(Errno::UnknownErrno);
 	let signal = unsafe {
 		CURRENT
 			.get_mut()
@@ -51,16 +49,20 @@ pub extern "C" fn handle_syscall_impl(mut frame: InterruptFrame) {
 			.as_ref()
 	};
 
-	while restart {
-		restart = false;
+	let mut ret;
+	loop {
+		let mut restart = false;
 		ret = syscall(&mut frame, &mut restart);
 
-		if let Some(_) = signal.do_signal(&frame, syscall_return_to_isize(&ret)) {
-			restart = true;
+		if matches!(
+			signal.do_signal(&frame, syscall_return_to_isize(&ret)),
+			Some(_)
+		) || restart
+		{
+			continue;
 		}
-		// use crate::pr_debug;
-		// pr_debug!("syscall: ret: {:?}", ret);
-		// pr_debug!("syscall: restart: {}", restart);
+
+		break;
 	}
 
 	// Because of signal system, This can be `return` from timer interrupt.
@@ -528,7 +530,7 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 			frame.edi as i32,
 			frame.ebp as isize,
 		)
-		.map_err(|_| Errno::UnknownErrno), // FIXME: proper return type
+		.map_err(|_| Errno::EPERM), // FIXME: proper return type
 		91 => sys_munmap(frame.ebx, frame.ecx),
 		92 => sys_truncate(frame.ebx, frame.ecx as isize),
 		119 => {
@@ -543,6 +545,7 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 		147 => sys_getsid(frame.ebx),
 		158 => sys_sched_yield(),
 		183 => sys_getcwd(frame.ebx, frame.ecx),
+		// TODO: proper mmap2 impl
 		192 => sys_mmap(
 			frame.ebx,
 			frame.ecx,
@@ -550,7 +553,8 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 			frame.esi as i32,
 			frame.edi as i32,
 			frame.ebp as isize,
-		),
+		)
+		.map_err(|_| Errno::EPERM),
 		199 => sys_getuid(),
 		200 => sys_getgid(),
 		212 => sys_chown(frame.ebx, frame.ecx, frame.edx),
@@ -576,22 +580,33 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 			frame.esi,
 			frame.edi,
 		),
-		x => {
-			trace_feature!(
-				"syscall",
-				"unimplemented syscall: {}(no={}) args:\n #1: {:#010x}\n #2: {:#010x}\n #3: {:#010x}\n #4: {:#010x}\n #5: {:#010x}\n #6: {:#010x}",
-				get_syscall_name(x),
-				x,
-				frame.ebx,
-				frame.ecx,
-				frame.edx,
-				frame.esi,
-				frame.edi,
-				frame.ebp
-			);
-			Ok(0)
-		}
+		x => handle_unimplemented_syscall(x, &frame),
 	}
+}
+
+fn handle_unimplemented_syscall(nr: usize, frame: &InterruptFrame) -> Result<usize, Errno> {
+	trace_feature!(
+		"syscall",
+		concat!(
+			"unimplemented syscall: {}(no={}) args:\n",
+			" #1: {:#010x}\n",
+			" #2: {:#010x}\n",
+			" #3: {:#010x}\n",
+			" #4: {:#010x}\n",
+			" #5: {:#010x}\n",
+			" #6: {:#010x}",
+		),
+		get_syscall_name(nr),
+		nr,
+		frame.ebx,
+		frame.ecx,
+		frame.edx,
+		frame.esi,
+		frame.edi,
+		frame.ebp
+	);
+
+	Ok(0)
 }
 
 pub fn syscall_return_to_isize(result: &Result<usize, Errno>) -> isize {

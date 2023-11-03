@@ -27,7 +27,7 @@ pub fn sys_signal(num: usize, handler: usize) -> Result<usize, Errno> {
 	};
 
 	let mut table = unsafe { CURRENT.get_mut() }
-		.user_ext_ok_or(Errno::UnknownErrno)? // kernel task.
+		.user_ext_ok_or(Errno::ENOENT)? // kernel task.
 		.signal
 		.as_ref()
 		.table
@@ -51,7 +51,7 @@ pub fn sys_sigaction(
 	let num = validate_sig_num(num)?;
 
 	let mut table = unsafe { CURRENT.get_mut() }
-		.user_ext_ok_or(Errno::UnknownErrno)? // kernel task.
+		.user_ext_ok_or(Errno::ENOENT)? // kernel task.
 		.signal
 		.as_ref()
 		.table
@@ -85,7 +85,7 @@ pub fn sys_sigreturn(frame: &InterruptFrame, restart: &mut bool) -> Result<usize
 	unsafe {
 		// pr_debug!("sigreturn: {:p}, {}", sig_ctx, (*sig_ctx).intr);
 		let current = CURRENT.get_mut();
-		let signal = current.user_ext_ok_or(Errno::UnknownErrno)?.signal.as_ref();
+		let signal = current.user_ext_ok_or(Errno::ENOENT)?.signal.as_ref();
 
 		// restore the sig mask of the task.signal.
 		signal.overwrite_mask((*sig_ctx).mask);
