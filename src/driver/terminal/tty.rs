@@ -7,7 +7,8 @@ use bitflags::bitflags;
 
 use super::ascii::constants::*;
 use super::console::Console;
-use super::console_screen_draw;
+use super::termios::WinSize;
+use super::{console_screen_draw, termios};
 
 use crate::collection::LineBuffer;
 use crate::driver::vga::text_vga::WINDOW_SIZE;
@@ -15,8 +16,11 @@ use crate::fs::vfs::{FileHandle, IOFlag};
 use crate::input::key_event::*;
 use crate::input::keyboard::KEYBOARD;
 use crate::io::{BlkRead, BlkWrite, ChRead, ChWrite, NoSpace};
+use crate::mm::user::verify::verify_ptr_mut;
+use crate::pr_warn;
 use crate::process::relation::session::Session;
 use crate::process::signal::{poll_signal_queue, send_signal_to_foreground};
+use crate::process::task::CURRENT;
 use crate::process::wait_list::WaitList;
 use crate::scheduler::preempt::{preempt_disable, AtomicOps};
 use crate::scheduler::sleep::{sleep_and_yield_atomic, Sleep};
@@ -484,6 +488,14 @@ impl TTYFile {
 		self.lock_tty().waitlist.register();
 		atomic
 	}
+
+	fn get_window_size(&self, argp: usize) -> Result<(), Errno> {
+		let current = unsafe { CURRENT.get_ref() };
+		let win_size = verify_ptr_mut::<WinSize>(argp, current)?;
+		*win_size = WinSize { row: 24, col: 80 };
+
+		Ok(())
+	}
 }
 
 impl FileHandle for TTYFile {
@@ -511,6 +523,17 @@ impl FileHandle for TTYFile {
 
 	fn lseek(&self, _offset: isize, _whence: crate::fs::vfs::Whence) -> Result<usize, Errno> {
 		Err(Errno::ESPIPE)
+	}
+
+	fn ioctl(&self, request: usize, argp: usize) -> Result<usize, Errno> {
+		match request as u32 {
+			termios::TIOCGWINSZ => self.get_window_size(argp),
+			x => {
+				pr_warn!("tty: ioctl: unknown request: {}", x);
+				Err(Errno::EINVAL)
+			}
+		}
+		.map(|_| 0)
 	}
 }
 

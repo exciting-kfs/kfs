@@ -22,7 +22,6 @@ use crate::mm::alloc::virt::{kmap, kunmap};
 use crate::mm::alloc::Zone;
 use crate::mm::page::{get_zero_page_phys, index_to_meta, PageFlag, PD};
 use crate::mm::{constant::*, util::*};
-use crate::pr_warn;
 use crate::process::task::Task;
 use crate::ptr::PageBox;
 use crate::syscall::errno::Errno;
@@ -302,7 +301,6 @@ impl Memory {
 				page_dir.map_user(vaddr, paddr, PageFlag::USER_RDWR)?;
 			}
 		}
-		pr_warn!("SBASE: {}", self.system_data_base);
 
 		Ok(Self {
 			system_data_base: self.system_data_base,

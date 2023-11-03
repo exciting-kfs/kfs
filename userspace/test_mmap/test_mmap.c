@@ -17,7 +17,7 @@ int main(void) {
 
 	if (pid == 0) {
 		ft_printf("pid: %d :%s", getpid(), mmaped);
-		return;
+		return 0;
 	} else {
 		int stat;
 		waitpid(pid, &stat, 0);
