@@ -274,6 +274,9 @@ pub trait FileHandle {
 	fn read(&self, buf: &mut [u8], flags: IOFlag) -> Result<usize, Errno>;
 	fn write(&self, buf: &[u8], flags: IOFlag) -> Result<usize, Errno>;
 	fn lseek(&self, offset: isize, whence: Whence) -> Result<usize, Errno>;
+	fn ioctl(&self, _request: usize, _argp: usize) -> Result<usize, Errno> {
+		Err(Errno::ENOTTY)
+	}
 	fn close(&self) -> Result<(), Errno> {
 		Ok(())
 	}
