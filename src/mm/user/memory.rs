@@ -2,19 +2,15 @@ mod chunk;
 mod mapped_file;
 
 use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 use chunk::PageAlignedChunk;
 
 use core::alloc::AllocError;
 use core::cmp::min;
-use core::mem::size_of;
 use core::ptr::NonNull;
 use core::slice::{from_raw_parts, from_raw_parts_mut};
 
-use alloc::sync::Arc;
-use alloc::vec;
-use alloc::vec::Vec;
-
-use crate::config::{MAX_PAGE_PER_ARG, MAX_PAGE_PER_ARGV, TRAMPOLINE_BASE};
+use crate::config::{TRAMPOLINE_BASE, USTACK_BASE, USTACK_PAGES};
 use crate::elf::Elf;
 use crate::fs::vfs::{RealEntry, VfsHandle, Whence};
 use crate::mm::alloc::page::free_pages;
@@ -22,7 +18,6 @@ use crate::mm::alloc::virt::{kmap, kunmap};
 use crate::mm::alloc::Zone;
 use crate::mm::page::{get_zero_page_phys, index_to_meta, PageFlag, PD};
 use crate::mm::{constant::*, util::*};
-use crate::process::task::Task;
 use crate::ptr::PageBox;
 use crate::syscall::errno::Errno;
 use crate::trace_feature;
@@ -30,10 +25,12 @@ use crate::trace_feature;
 use self::mapped_file::MappedFile;
 
 use super::copy::{copy_user_to_user_page, memset_to_user_page};
-use super::verify::{verify_ptr, verify_string};
+use super::stack::UserStack;
+use super::string_vec::StringVec;
 use super::vma::{AreaFlag, UserAddressSpace};
 
 pub struct Memory {
+	stack_pointer: usize,
 	system_data_base: usize,
 	vma: UserAddressSpace,
 	file_mapping: BTreeMap<usize, MappedFile>,
@@ -46,15 +43,14 @@ extern "C" {
 }
 
 impl Memory {
-	pub fn from_elf(stack_base: usize, nr_stack_pages: usize, elf: Elf<'_>) -> Result<Self, Errno> {
+	pub fn from_elf(elf: Elf<'_>, argv: StringVec, envp: StringVec) -> Result<Self, Errno> {
 		let mut memory = Self {
+			stack_pointer: USTACK_BASE,
 			system_data_base: TRAMPOLINE_BASE,
 			vma: UserAddressSpace::new(),
 			file_mapping: BTreeMap::new(),
 			page_dir: PD::new().map_err(|_| Errno::ENOMEM)?,
 		};
-
-		memory.reserve_stack(stack_base, nr_stack_pages)?;
 
 		let len = __trampoline_end as usize - __trampoline_start as usize;
 		let trampoline = unsafe { from_raw_parts(__trampoline_start as *const u8, len) };
@@ -63,6 +59,24 @@ impl Memory {
 		for section in elf.loadable_sections() {
 			memory.load_section(section.vaddr, section.data, section.mem_size, section.flags)?;
 		}
+
+		// let ... memory.push_data(data)
+
+		let mut stack = UserStack::new();
+		let argc = argv.len();
+		// AUXV
+		stack.push(0)?;
+
+		// ENVP
+		memory.push_string_array(envp, &mut stack)?;
+
+		// ARGV
+		memory.push_string_array(argv, &mut stack)?;
+
+		// ARGC
+		stack.push(argc)?;
+
+		memory.reserve_stack(stack)?;
 
 		Ok(memory)
 	}
@@ -303,6 +317,7 @@ impl Memory {
 		}
 
 		Ok(Self {
+			stack_pointer: self.stack_pointer,
 			system_data_base: self.system_data_base,
 			vma,
 			page_dir,
@@ -323,54 +338,19 @@ impl Memory {
 		&self.vma
 	}
 
-	fn copy_c_argv(
-		argv_ptr: usize,
-		copy_base: usize,
-		task: &Arc<Task>,
-	) -> Result<(Vec<u8>, Vec<usize>), Errno> {
-		if argv_ptr == 0 {
-			return Ok((vec![], vec![0]));
-		}
-
-		let mut args: Vec<u8> = Vec::new();
-		let mut arg_ptrs: Vec<usize> = Vec::new();
-		let mut curr_copy_base = copy_base;
-
-		for i in (0..).step_by(size_of::<usize>()) {
-			let argp = verify_ptr::<usize>(argv_ptr + i, task)?;
-			if *argp == 0 {
-				break;
-			}
-
-			let arg = verify_string(*argp, task, MAX_PAGE_PER_ARG * PAGE_SIZE)?;
-			if arg.len() + args.len() > MAX_PAGE_PER_ARGV * PAGE_SIZE {
-				return Err(Errno::E2BIG);
-			}
-			args.extend(arg);
-			args.push(b'\0');
-
-			arg_ptrs.push(curr_copy_base);
-
-			curr_copy_base += arg.len() + 1;
-		}
-
-		arg_ptrs.push(0);
-
-		Ok((args, arg_ptrs))
-	}
-
-	pub fn push_string_array(
-		&mut self,
-		argv_ptr: usize,
-		task: &Arc<Task>,
-	) -> Result<Vec<usize>, Errno> {
+	fn push_string_array(&mut self, strv: StringVec, stack: &mut UserStack) -> Result<(), Errno> {
 		let copy_base = next_align(self.system_data_base, PAGE_SIZE);
 
-		let (args, arg_ptrs) = Self::copy_c_argv(argv_ptr, copy_base, task)?;
+		let StringVec { data, index } = strv;
 
-		self.push_data(&args).map_err(|_| Errno::ENOMEM)?;
+		self.push_data(&data).map_err(|_| Errno::ENOMEM)?;
 
-		Ok(arg_ptrs)
+		stack.push(0)?;
+		for elem in index {
+			stack.push(elem + copy_base)?;
+		}
+
+		Ok(())
 	}
 
 	fn push_data(&mut self, data: &[u8]) -> Result<usize, AllocError> {
@@ -464,19 +444,28 @@ impl Memory {
 		Ok(())
 	}
 
-	fn reserve_stack(&mut self, stack_base: usize, nr_pages: usize) -> Result<(), AllocError> {
-		let stack_top = stack_base - (nr_pages * PAGE_SIZE);
+	fn reserve_stack(&mut self, mut stack: UserStack) -> Result<(), AllocError> {
+		self.stack_pointer = stack.get_stack_pointer(USTACK_BASE);
+
+		let stack_top = USTACK_BASE - (USTACK_PAGES * PAGE_SIZE);
 
 		self.vma.allocate_fixed_area(
 			stack_top,
-			nr_pages,
+			USTACK_PAGES,
 			AreaFlag::Readable | AreaFlag::Writable,
 		)?;
 
-		for user_vaddr in (0..nr_pages).map(|x| stack_top + x * PAGE_SIZE) {
-			let user_page = PageBox::new(Zone::High)?;
+		for user_vaddr in (1..=USTACK_PAGES).map(|x| USTACK_BASE - x * PAGE_SIZE) {
+			let user_page = match stack.pop_page() {
+				Some(page) => page,
+				None => {
+					let page = PageBox::new(Zone::High)?;
 
-			unsafe { memset_to_user_page(user_page.as_phys_addr(), 0)? };
+					unsafe { memset_to_user_page(page.as_phys_addr(), 0)? };
+
+					page
+				}
+			};
 
 			self.page_dir
 				.map_user(user_vaddr, user_page.as_phys_addr(), PageFlag::USER_RDWR)?;
@@ -485,6 +474,10 @@ impl Memory {
 		}
 
 		Ok(())
+	}
+
+	pub fn get_stack_pointer(&self) -> usize {
+		self.stack_pointer
 	}
 
 	fn free_page_if_allocated(pd: &PD, vaddr: usize) -> Option<()> {

@@ -8,12 +8,9 @@ pub fn sys_close(fildes: isize) -> Result<usize, Errno> {
 
 	let fd = Fd::from(fildes as usize).ok_or(Errno::EBADF)?;
 
-	let vfs_handle = {
-		let mut fd_table = ext.lock_fd_table();
-		fd_table.close(fd.clone())?
-	};
+	let handle = ext.lock_fd_table().close(fd.clone())?;
 
-	vfs_handle.close()?;
+	handle.close()?;
 
 	let _ = delete_fd_node(current.get_pid(), fd);
 

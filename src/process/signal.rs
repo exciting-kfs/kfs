@@ -28,7 +28,7 @@ use crate::{
 		task::{Task, CURRENT},
 	},
 	scheduler::sleep::{sleep_and_yield, wake_up, Sleep},
-	sync::Locked,
+	sync::{Locked, LockedGuard},
 	syscall::{errno::Errno, signal::is_syscall_restart},
 };
 
@@ -76,6 +76,10 @@ impl Signal {
 
 	pub fn overwrite_mask(&self, mask: SigMask) {
 		*self.mask.lock() = mask;
+	}
+
+	pub fn lock_mask(&self) -> LockedGuard<'_, SigMask> {
+		self.mask.lock()
 	}
 
 	pub fn recv_signal(&self, info: SigInfo) {

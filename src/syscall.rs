@@ -6,6 +6,7 @@ pub mod relation;
 pub mod signal;
 pub mod wait;
 
+mod dup;
 mod reboot;
 
 use core::fmt::{self, Display};
@@ -28,6 +29,7 @@ use crate::process::uid::{sys_getuid, sys_setuid};
 use crate::scheduler::sys_sched_yield;
 use crate::{pr_info, pr_warn, trace_feature};
 
+use self::dup::{sys_dup, sys_dup2};
 use self::errno::Errno;
 use self::exec::*;
 use self::fork::sys_fork;
@@ -36,7 +38,7 @@ use self::reboot::sys_reboot;
 use self::relation::{
 	sys_getpgid, sys_getpgrp, sys_getpid, sys_getppid, sys_getsid, sys_setpgid, sys_setsid,
 };
-use self::signal::{sys_sigaction, sys_signal, sys_sigreturn};
+use self::signal::{sys_sigaction, sys_signal, sys_sigprocmask, sys_sigreturn, sys_sigsuspend};
 use self::wait::sys_waitpid;
 
 #[no_mangle]
@@ -542,6 +544,7 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		37 => sys_kill(frame.ebx as isize, frame.ecx as isize),
 		39 => sys_mkdir(frame.ebx, frame.ecx as u32),
 		40 => sys_rmdir(frame.ebx),
+		41 => sys_dup(frame.ebx),
 		42 => sys_pipe(frame.ebx),
 		45 => sys_brk(frame.ebx),
 		48 => {
@@ -550,10 +553,12 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		}
 		54 => sys_ioctl(frame.ebx as isize, frame.ecx, frame.edx),
 		57 => sys_setpgid(frame.ebx, frame.ecx),
-		65 => sys_getppid(),
-		64 => sys_getpgrp(),
+		63 => sys_dup2(frame.ebx, frame.ecx),
+		64 => sys_getppid(),
+		65 => sys_getpgrp(),
 		66 => sys_setsid(),
-		67 => {
+		// sigaction / rt_sigaction
+		67 | 174 => {
 			// pr_info!(
 			// 	"syscall: sigaction: {}, {:x}, {:x}",
 			// 	frame.ebx,
@@ -568,7 +573,8 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		}
 		80 => sys_reboot(frame.ebx),
 		83 => sys_symlink(frame.ebx, frame.ecx),
-		90 => sys_mmap(
+		// mmap / mmap2 TODO: proper mmap2 handling
+		90 | 192 => sys_mmap(
 			frame.ebx,
 			frame.ecx,
 			frame.edx as i32,
@@ -579,6 +585,8 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		.map_err(|_| Errno::EPERM), // FIXME: proper return type
 		91 => sys_munmap(frame.ebx, frame.ecx),
 		92 => sys_truncate(frame.ebx, frame.ecx as isize),
+		// TODO: wait4
+		114 => Err(Errno::ENOSYS),
 		119 => {
 			// pr_info!("syscall: sigreturn: {:p}", &frame);
 			sys_sigreturn(frame, restart)
@@ -590,23 +598,19 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		146 => sys_writev(frame.ebx as isize, frame.ecx, frame.edx),
 		147 => sys_getsid(frame.ebx),
 		158 => sys_sched_yield(),
+		// TODO: rt_sigprocmask
+		175 => sys_sigprocmask(frame.ebx, frame.ecx, frame.edx),
+		// TODO: rt_sigsuspend
+		179 => sys_sigsuspend(frame.ebx),
 		183 => sys_getcwd(frame.ebx, frame.ecx),
-		// TODO: proper mmap2 impl
-		192 => sys_mmap(
-			frame.ebx,
-			frame.ecx,
-			frame.edx as i32,
-			frame.esi as i32,
-			frame.edi as i32,
-			frame.ebp as isize,
-		)
-		.map_err(|_| Errno::EPERM),
 		199 => sys_getuid(),
 		200 => sys_getgid(),
 		212 => sys_chown(frame.ebx, frame.ecx, frame.edx),
 		213 => sys_setuid(frame.ebx),
 		214 => sys_setgid(frame.ebx),
 		243 => sys_set_thread_area(frame.ebx),
+		// TODO: exit_group
+		252 => sys_exit(frame.ebx),
 		359 => sys_socket(frame.ebx as i32, frame.ecx as i32, frame.edx as i32),
 		361 => sys_bind(frame.ebx, frame.ecx, frame.edx),
 		362 => sys_connect(frame.ebx, frame.ecx, frame.edx),
@@ -626,6 +630,13 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 			frame.esi,
 			frame.edi,
 		),
+		// vfork
+		190 => sys_fork(frame),
+		// stat64
+		195 => sys_stat(frame.ebx, frame.ecx),
+
+		// statx
+		383 => Err(Errno::ENOSYS),
 		_ => {
 			pr_warn!(
 				"unimplemented syscall: {}(no={})",

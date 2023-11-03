@@ -108,9 +108,13 @@ pub fn sys_getsid(pid: usize) -> Result<usize, Errno> {
 }
 
 pub fn sys_getpgid(pid: usize) -> Result<usize, Errno> {
-	let task = PROCESS_TREE
-		.get_task(Pid::from_raw(pid))
-		.ok_or_else(|| Errno::ESRCH)?;
+	let task = if pid == 0 {
+		unsafe { CURRENT.get_ref() }.clone()
+	} else {
+		PROCESS_TREE
+			.get_task(Pid::from_raw(pid))
+			.ok_or_else(|| Errno::ESRCH)?
+	};
 
 	Ok(task.get_pgid().as_raw())
 }

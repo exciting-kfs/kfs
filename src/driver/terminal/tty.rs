@@ -16,9 +16,10 @@ use crate::fs::vfs::{FileHandle, IOFlag};
 use crate::input::key_event::*;
 use crate::input::keyboard::KEYBOARD;
 use crate::io::{BlkRead, BlkWrite, ChRead, ChWrite, NoSpace};
-use crate::mm::user::verify::verify_ptr_mut;
+use crate::mm::user::verify::{verify_ptr, verify_ptr_mut};
 use crate::pr_warn;
 use crate::process::relation::session::Session;
+use crate::process::relation::Pgid;
 use crate::process::signal::{poll_signal_queue, send_signal_to_foreground};
 use crate::process::task::CURRENT;
 use crate::process::wait_list::WaitList;
@@ -496,6 +497,32 @@ impl TTYFile {
 
 		Ok(())
 	}
+
+	fn get_foreground_group(&self, argp: usize) -> Result<(), Errno> {
+		let current = unsafe { CURRENT.get_ref() };
+		let foreground = verify_ptr_mut::<usize>(argp, current)?;
+		*foreground = self
+			.lock_tty()
+			.session
+			.upgrade()
+			.and_then(|x| x.lock().foreground())
+			.and_then(|x| x.upgrade())
+			.map(|x| x.get_pgid().as_raw())
+			.ok_or(Errno::ESRCH)?;
+
+		Ok(())
+	}
+
+	fn set_foreground_group(&self, argp: usize) -> Result<(), Errno> {
+		let current = unsafe { CURRENT.get_ref() };
+		let pgid = Pgid::from_raw(*verify_ptr::<usize>(argp, current)?);
+
+		self.lock_tty()
+			.session
+			.upgrade()
+			.ok_or(Errno::ESRCH)
+			.and_then(|x| x.lock().set_foreground(pgid))
+	}
 }
 
 impl FileHandle for TTYFile {
@@ -526,8 +553,23 @@ impl FileHandle for TTYFile {
 	}
 
 	fn ioctl(&self, request: usize, argp: usize) -> Result<usize, Errno> {
+		let current = unsafe { CURRENT.get_ref() };
+
+		let rel = current
+			.get_user_ext()
+			.expect("must be user process")
+			.lock_relation();
+
+		if let Some(ref sess) = self.lock_tty().session.upgrade() {
+			if !Arc::ptr_eq(sess, &rel.get_session()) {
+				return Err(Errno::EPERM);
+			}
+		}
+
 		match request as u32 {
 			termios::TIOCGWINSZ => self.get_window_size(argp),
+			termios::TIOCGPGRP => self.get_foreground_group(argp),
+			termios::TIOCSPGRP => self.set_foreground_group(argp),
 			x => {
 				pr_warn!("tty: ioctl: unknown request: {}", x);
 				Err(Errno::EINVAL)

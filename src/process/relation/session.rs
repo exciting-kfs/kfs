@@ -5,6 +5,7 @@ use crate::driver::terminal::TTYFile;
 use crate::pr_debug;
 use crate::process::relation::{Pgid, Pid, Sid};
 use crate::sync::Locked;
+use crate::syscall::errno::Errno;
 
 use super::pgroup::ProcessGroup;
 
@@ -45,6 +46,15 @@ impl Session {
 			self.foreground = Some(w.clone());
 		}
 		self.members.insert(pgid, w);
+	}
+
+	pub fn set_foreground(&mut self, pgid: Pgid) -> Result<(), Errno> {
+		if let Some(pgrp) = self.members.get(&pgid) {
+			self.foreground = Some(pgrp.clone());
+			Ok(())
+		} else {
+			Err(Errno::EPERM)
+		}
 	}
 
 	pub fn foreground(&self) -> Option<Weak<ProcessGroup>> {
