@@ -19,7 +19,7 @@ bitflags! {
 pub fn sys_mmap(
 	addr: usize,
 	len: usize,
-	prot: i32,
+	_prot: i32,
 	flags: i32,
 	fd: i32,
 	offset: isize,
@@ -27,8 +27,11 @@ pub fn sys_mmap(
 	let current = unsafe { CURRENT.get_mut() };
 	let user_ext = current.get_user_ext().expect("must be user process");
 
-	let flags = MmapFlag::from_bits(flags as u32).ok_or(Errno::EINVAL)?;
-	let prot = AreaFlag::from_bits(prot as u32).ok_or(Errno::EINVAL)?;
+	// let flags = MmapFlag::from_bits(flags as u32).ok_or(Errno::EINVAL)?;
+	// let prot = AreaFlag::from_bits(prot as u32).ok_or(Errno::EINVAL)?;
+
+	let flags = MmapFlag::from_bits_truncate(flags as u32);
+	let prot = AreaFlag::Readable | AreaFlag::Writable;
 
 	// misaligned address
 	if addr % PAGE_SIZE != 0 || len == 0 {
