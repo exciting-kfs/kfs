@@ -59,7 +59,7 @@ pub fn sys_setpgid(pid: usize, pgid: usize) -> Result<usize, Errno> {
 	let pgid = if pgid == 0 {
 		Pgid::from(task.get_pid())
 	} else {
-		Pgid::from_raw(pgid)
+		Pgid::from(Pid::from_raw(pgid))
 	};
 
 	__set_pgid(&task, pgid).map(|_| 0)

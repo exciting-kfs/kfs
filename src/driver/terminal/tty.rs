@@ -19,7 +19,7 @@ use crate::io::{BlkRead, BlkWrite, ChRead, ChWrite, NoSpace};
 use crate::mm::user::verify::{verify_ptr, verify_ptr_mut};
 use crate::pr_warn;
 use crate::process::relation::session::Session;
-use crate::process::relation::Pgid;
+use crate::process::relation::{Pgid, Pid};
 use crate::process::signal::{poll_signal_queue, send_signal_to_foreground};
 use crate::process::task::CURRENT;
 use crate::process::wait_list::WaitList;
@@ -515,7 +515,7 @@ impl TTYFile {
 
 	fn set_foreground_group(&self, argp: usize) -> Result<(), Errno> {
 		let current = unsafe { CURRENT.get_ref() };
-		let pgid = Pgid::from_raw(*verify_ptr::<usize>(argp, current)?);
+		let pgid = Pgid::from(Pid::from_raw(*verify_ptr::<usize>(argp, current)?));
 
 		self.lock_tty()
 			.session

@@ -57,6 +57,7 @@ impl ProcessGroup {
 		self.members.lock()
 	}
 
+	#[inline]
 	pub fn get_pgid(&self) -> Pgid {
 		self.pgid
 	}

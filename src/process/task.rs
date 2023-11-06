@@ -300,7 +300,7 @@ impl Task {
 			.lock_relation();
 
 		let result = relation.waitpid(who);
-		if let Ok(z) = result {
+		if let Ok(z) = result.as_ref() {
 			Pid::deallocate(z.pid);
 		}
 

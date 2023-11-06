@@ -506,7 +506,13 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 	if cfg!(trace_feature = "syscall") {
 		let snapshot = SyscallSnapshot::new(frame);
 		let ret = __syscall(frame, restart);
-		trace_feature!("syscall", "{} #R: {:?}", snapshot, ret);
+		trace_feature!(
+			"syscall",
+			"{:?}: {} #R: {:?}",
+			unsafe { CURRENT.get_ref().get_pid() },
+			snapshot,
+			ret
+		);
 		ret
 	} else {
 		__syscall(frame, restart)
@@ -515,19 +521,10 @@ fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errn
 
 fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errno> {
 	match frame.eax {
-		1 => {
-			// pr_info!("PID[{}]: exited({})", current.get_pid().as_raw(), frame.ebx);
-			sys_exit(frame.ebx);
-		}
+		1 => sys_exit(frame.ebx),
 		2 => sys_fork(frame),
-		3 => {
-			// pr_debug!("syscall: read");
-			sys_read(frame.ebx as isize, frame.ecx, frame.edx)
-		}
-		4 => {
-			// pr_debug!("syscall: write");
-			sys_write(frame.ebx as isize, frame.ecx, frame.edx)
-		}
+		3 => sys_read(frame.ebx as isize, frame.ecx, frame.edx),
+		4 => sys_write(frame.ebx as isize, frame.ecx, frame.edx),
 		5 => sys_open(frame.ebx, frame.ecx as i32, frame.edx as u32),
 		6 => sys_close(frame.ebx as isize),
 		7 => sys_waitpid(frame.ebx as isize, frame.ecx as *mut isize, frame.edx),
@@ -586,7 +583,7 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		91 => sys_munmap(frame.ebx, frame.ecx),
 		92 => sys_truncate(frame.ebx, frame.ecx as isize),
 		// TODO: wait4
-		114 => Err(Errno::ENOSYS),
+		114 => sys_waitpid(frame.ebx as isize, frame.ecx as *mut isize, frame.edx),
 		119 => {
 			// pr_info!("syscall: sigreturn: {:p}", &frame);
 			sys_sigreturn(frame, restart)

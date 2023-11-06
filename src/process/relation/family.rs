@@ -1,6 +1,6 @@
 pub mod zombie;
 
-use core::mem;
+use core::mem::{self, take};
 
 use alloc::collections::BTreeSet;
 
@@ -76,8 +76,10 @@ impl Family {
 			init_relation.family.insert_child(child.get_pid());
 		}
 
-		for (_, zombie) in self.zombie.iter() {
-			init_relation.family.insert_zombie(*zombie);
+		let zombies = take(&mut self.zombie);
+
+		for (_, zombie) in zombies.zomibes() {
+			init_relation.family.insert_zombie(zombie);
 		}
 	}
 
