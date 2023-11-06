@@ -1,3 +1,4 @@
+mod auxv;
 pub mod brk;
 pub mod copy;
 pub mod memory;

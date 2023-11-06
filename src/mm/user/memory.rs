@@ -7,11 +7,12 @@ use chunk::PageAlignedChunk;
 
 use core::alloc::AllocError;
 use core::cmp::min;
+use core::mem::size_of;
 use core::ptr::NonNull;
 use core::slice::{from_raw_parts, from_raw_parts_mut};
 
 use crate::config::{TRAMPOLINE_BASE, USTACK_BASE, USTACK_PAGES};
-use crate::elf::Elf;
+use crate::elf::{Elf, ProgramHdr};
 use crate::fs::vfs::{RealEntry, VfsHandle, Whence};
 use crate::mm::alloc::page::free_pages;
 use crate::mm::alloc::virt::{kmap, kunmap};
@@ -24,6 +25,7 @@ use crate::trace_feature;
 
 use self::mapped_file::MappedFile;
 
+use super::auxv::{AuxEntry, AuxEntryType};
 use super::copy::{copy_user_to_user_page, memset_to_user_page};
 use super::stack::UserStack;
 use super::string_vec::StringVec;
@@ -60,12 +62,23 @@ impl Memory {
 			memory.load_section(section.vaddr, section.data, section.mem_size, section.flags)?;
 		}
 
-		// let ... memory.push_data(data)
+		let phdr_addr = memory.push_data(unsafe {
+			from_raw_parts(
+				elf.program_hdrs.as_ptr() as *const u8,
+				elf.program_hdrs.len() * size_of::<ProgramHdr>(),
+			)
+		})?;
 
 		let mut stack = UserStack::new();
 		let argc = argv.len();
+
 		// AUXV
-		stack.push(0)?;
+		stack.push_aux_entry(AuxEntry::new_null())?;
+		stack.push_aux_entry(AuxEntry::new(AuxEntryType::Phdr, phdr_addr))?;
+		stack.push_aux_entry(AuxEntry::new(AuxEntryType::Phent, size_of::<ProgramHdr>()))?;
+		stack.push_aux_entry(AuxEntry::new(AuxEntryType::Phnum, elf.program_hdrs.len()))?;
+		stack.push_aux_entry(AuxEntry::new(AuxEntryType::Pagesz, PAGE_SIZE))?;
+		stack.push_aux_entry(AuxEntry::new(AuxEntryType::Entry, elf.get_entry_point()))?;
 
 		// ENVP
 		memory.push_string_array(envp, &mut stack)?;
