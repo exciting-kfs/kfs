@@ -1,11 +1,14 @@
 mod chunk;
+mod mapped_file;
 
+use alloc::collections::BTreeMap;
 use chunk::PageAlignedChunk;
 
 use core::alloc::AllocError;
+use core::cmp::min;
 use core::mem::size_of;
 use core::ptr::NonNull;
-use core::slice::from_raw_parts;
+use core::slice::{from_raw_parts, from_raw_parts_mut};
 
 use alloc::sync::Arc;
 use alloc::vec;
@@ -13,14 +16,18 @@ use alloc::vec::Vec;
 
 use crate::config::{MAX_PAGE_PER_ARG, MAX_PAGE_PER_ARGV, TRAMPOLINE_BASE};
 use crate::elf::Elf;
+use crate::fs::vfs::{RealEntry, VfsHandle, Whence};
 use crate::mm::alloc::page::free_pages;
 use crate::mm::alloc::virt::{kmap, kunmap};
 use crate::mm::alloc::Zone;
-use crate::mm::page::{get_zero_page_phys, PageFlag, PD};
+use crate::mm::page::{get_zero_page_phys, index_to_meta, PageFlag, PD};
 use crate::mm::{constant::*, util::*};
 use crate::process::task::Task;
 use crate::ptr::PageBox;
 use crate::syscall::errno::Errno;
+use crate::trace_feature;
+
+use self::mapped_file::MappedFile;
 
 use super::copy::{copy_user_to_user_page, memset_to_user_page};
 use super::verify::{verify_ptr, verify_string};
@@ -29,6 +36,7 @@ use super::vma::{AreaFlag, UserAddressSpace};
 pub struct Memory {
 	system_data_base: usize,
 	vma: UserAddressSpace,
+	file_mapping: BTreeMap<usize, MappedFile>,
 	page_dir: PD,
 }
 
@@ -42,6 +50,7 @@ impl Memory {
 		let mut memory = Self {
 			system_data_base: TRAMPOLINE_BASE,
 			vma: UserAddressSpace::new(),
+			file_mapping: BTreeMap::new(),
 			page_dir: PD::new().map_err(|_| Errno::ENOMEM)?,
 		};
 
@@ -80,31 +89,88 @@ impl Memory {
 		return true;
 	}
 
+	pub fn mmap_shared(
+		&mut self,
+		start: usize,
+		len: usize,
+		file: VfsHandle,
+		offset: isize,
+		flags: AreaFlag,
+	) -> Result<usize, Errno> {
+		file.lseek(offset, Whence::Begin)?;
+
+		let file_end_from_offset = file
+			.as_entry()
+			.and_then(|e| e.downcast_real().ok())
+			.and_then(|real| real.stat().ok())
+			.and_then(|stat| stat.size.checked_sub(offset))
+			.unwrap_or_default();
+
+		let mapping_len = min(len, file_end_from_offset as usize);
+		let count = size_to_pages(mapping_len);
+		let (start, pages) = self.alloc_memory(start, count, flags)?;
+
+		trace_feature!(
+			"mmap_shared",
+			"shared start: {:x}, len: {}",
+			start,
+			mapping_len
+		);
+
+		let buf = unsafe { from_raw_parts_mut(start as *mut u8, mapping_len) };
+		let mut cursor = 0;
+		while cursor < mapping_len {
+			let buf = &mut buf[cursor..];
+			let x = match file.read(buf) {
+				Ok(x) => x,
+				Err(e) => {
+					self.mmap_cleanup(start, count);
+					return Err(e);
+				}
+			};
+			cursor += x;
+		}
+
+		self.file_mapping
+			.insert(start, MappedFile::new(file, offset, mapping_len));
+		pages.into_iter().for_each(|p| p.forget());
+		Ok(start)
+	}
+
+	fn alloc_memory(
+		&mut self,
+		start: usize,
+		count: usize,
+		flags: AreaFlag,
+	) -> Result<(usize, Vec<PageBox>), Errno> {
+		let mut pages = Vec::new();
+
+		for _ in 0..count {
+			pages.push(PageBox::new(Zone::High)?);
+		}
+
+		let start = self.alloc_area(start, count, flags)?;
+
+		for (i, page) in (0..count).zip(pages.iter()) {
+			if let Err(_) =
+				self.page_dir
+					.map_user(start + i * PAGE_SIZE, page.as_phys_addr(), flags.into())
+			{
+				self.mmap_cleanup(start, i);
+				return Err(Errno::ENOMEM);
+			}
+		}
+
+		Ok((start, pages))
+	}
+
 	pub fn mmap_private(
 		&mut self,
 		start: usize,
 		pages: usize,
 		flags: AreaFlag,
 	) -> Result<usize, Errno> {
-		fn cleanup(memory: &mut Memory, start: usize, count: usize) {
-			memory.vma.deallocate_area(start);
-			let count = match count.checked_sub(1) {
-				Some(x) => x,
-				None => return,
-			};
-
-			for i in 0..count {
-				memory.page_dir.unmap_user(start + i * PAGE_SIZE);
-			}
-		}
-
-		let start = if start != 0 {
-			self.vma.allocate_fixed_area(start, pages, flags)
-		} else {
-			Err(AllocError)
-		}
-		.or_else(|_| self.vma.allocate_area(pages, flags))
-		.map_err(|_| Errno::ENOMEM)?;
+		let start = self.alloc_area(start, pages, flags)?;
 
 		for i in 0..pages {
 			if let Err(_) = self.page_dir.map_user(
@@ -112,7 +178,7 @@ impl Memory {
 				get_zero_page_phys(),
 				PageFlag::Present | PageFlag::User,
 			) {
-				cleanup(self, start, i);
+				self.mmap_cleanup(start, i);
 				return Err(Errno::ENOMEM);
 			}
 		}
@@ -120,12 +186,38 @@ impl Memory {
 		Ok(start)
 	}
 
-	pub fn munmap_private(&mut self, start: usize, pages: usize) -> Result<(), Errno> {
+	fn alloc_area(&mut self, start: usize, pages: usize, flags: AreaFlag) -> Result<usize, Errno> {
+		if start != 0 {
+			self.vma.allocate_fixed_area(start, pages, flags)
+		} else {
+			Err(AllocError)
+		}
+		.or_else(|_| self.vma.allocate_area(pages, flags))
+		.map_err(|_| Errno::ENOMEM)
+	}
+
+	fn mmap_cleanup(&mut self, start: usize, count: usize) {
+		self.vma.deallocate_area(start);
+		let count = match count.checked_sub(1) {
+			Some(x) => x,
+			None => return,
+		};
+
+		for i in 0..count {
+			self.page_dir.unmap_user(start + i * PAGE_SIZE);
+		}
+	}
+
+	pub fn munmap(&mut self, start: usize, pages: usize) -> Result<(), Errno> {
 		let end = start.checked_add(pages * PAGE_SIZE).ok_or(Errno::EINVAL)?;
 
 		let area = self.vma.find_area(start).ok_or(Errno::EINVAL)?;
 		if area.start != start || area.end != end {
 			return Err(Errno::EINVAL);
+		}
+
+		if let Some(mapped_file) = self.file_mapping.remove(&start) {
+			mapped_file.sync_with_buf(start as *const u8)?;
 		}
 
 		self.vma.deallocate_area(start).unwrap();
@@ -157,11 +249,23 @@ impl Memory {
 		for area in vma.get_areas() {
 			for vaddr in (area.start..area.end).step_by(PAGE_SIZE) {
 				let src_paddr = self.page_dir.lookup(vaddr).unwrap();
+				let zero_paddr = get_zero_page_phys();
 
-				let paddr = if src_paddr != get_zero_page_phys() {
-					get_copied_page(src_paddr)?
+				let paddr = if src_paddr == zero_paddr {
+					zero_paddr
+				} else if area.flags.contains(AreaFlag::Shared) {
+					let index = src_paddr / PAGE_SIZE;
+
+					let mut meta = index_to_meta(index);
+					unsafe { meta.as_mut().inc_inuse() };
+
+					trace_feature!("mmap_shared", "clone: inuse: {}", unsafe {
+						meta.as_mut().inuse()
+					});
+
+					src_paddr
 				} else {
-					get_zero_page_phys()
+					get_copied_page(src_paddr)?
 				};
 
 				page_dir.map_user(vaddr, paddr, PageFlag::USER_RDWR)?;
@@ -172,6 +276,7 @@ impl Memory {
 			system_data_base: self.system_data_base,
 			vma,
 			page_dir,
+			file_mapping: self.file_mapping.clone(),
 		})
 	}
 
@@ -179,6 +284,7 @@ impl Memory {
 		self.page_dir.pick_up();
 	}
 
+	#[inline]
 	pub fn get_pd(&mut self) -> &mut PD {
 		&mut self.page_dir
 	}
@@ -366,6 +472,10 @@ impl Drop for Memory {
 	fn drop(&mut self) {
 		for area in self.vma.get_areas() {
 			for vaddr in area.iter_pages() {
+				if let Some(mapped_file) = self.file_mapping.remove(&vaddr) {
+					let _ = mapped_file.sync_with_buf(vaddr as *const u8);
+				}
+
 				Self::free_page_if_allocated(&self.page_dir, vaddr);
 			}
 		}

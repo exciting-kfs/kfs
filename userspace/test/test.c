@@ -5,13 +5,8 @@
 #include "kfs/ft.h"
 
 const char *tests[] = {
-    "/bin/test_socket",
-    "/bin/test_sig_stop_cont",
-    "/bin/test_sig",
-    "/bin/test_pipe",
-    "/bin/test_setXid",
-    "/bin/test_file",
-    NULL,
+    "/bin/test_mmap", "/bin/test_socket", "/bin/test_sig_stop_cont", "/bin/test_sig",
+    "/bin/test_pipe", "/bin/test_setXid", "/bin/test_file",	     NULL,
 };
 
 void waitpid_verbose(pid_t pid, const char *test_name) {
@@ -41,6 +36,14 @@ void waitpid_verbose(pid_t pid, const char *test_name) {
 	ft_putstr("\n\n");
 }
 
+void wait_newline() {
+	char c = 0;
+
+	while (c != '\n') {
+		read(0, &c, 1);
+	}
+}
+
 int main(void) {
 	for (const char **p = tests; *p; p++) {
 		int pid = fork();
@@ -52,6 +55,7 @@ int main(void) {
 			_exit(128);
 		}
 		waitpid_verbose(pid, *p);
+		wait_newline();
 	}
 
 	ft_putstr("====TEST FINISHED.====\n");

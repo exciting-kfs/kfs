@@ -6,10 +6,11 @@ use bitflags::bitflags;
 use crate::mm::{constant::*, page::PageFlag};
 
 bitflags! {
-	#[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
+	#[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Debug)]
 	pub struct AreaFlag: u32 {
 		const Readable = (1 << 0);
 		const Writable = (1 << 1);
+		const Shared = (1 << 2);
 	}
 }
 
@@ -25,7 +26,7 @@ impl Into<PageFlag> for AreaFlag {
 
 /// user memroy area.
 /// area is half-opened [start, end)
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Area {
 	pub start: usize,
 	pub end: usize,

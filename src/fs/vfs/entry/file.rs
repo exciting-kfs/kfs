@@ -58,6 +58,7 @@ impl Entry for Arc<VfsFileEntry> {
 	fn parent_weak(&self) -> Weak<VfsDirEntry> {
 		self.parent.clone()
 	}
+
 	fn get_name(&self) -> Ident {
 		Ident(self.name.clone())
 	}

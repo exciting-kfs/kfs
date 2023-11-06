@@ -48,7 +48,7 @@ impl BuddyAlloc {
 	/// deallocate pages.
 	pub fn free_pages(&mut self, ptr: NonNull<u8>) {
 		let mut page = ptr_to_meta(ptr);
-		unsafe { page.as_mut().set_inuse(false) };
+		unsafe { page.as_mut().dec_inuse() };
 
 		while let Some(mut buddy) = self.get_free_buddy(page) {
 			unsafe { buddy.as_mut().disjoint() };
@@ -66,7 +66,7 @@ impl BuddyAlloc {
 			self.free_list.add(rpage);
 		}
 
-		unsafe { lpage.as_mut().set_inuse(true) };
+		unsafe { lpage.as_mut().inc_inuse() };
 
 		let page = meta_to_ptr(lpage);
 		unsafe { NonNull::from(from_raw_parts(page.as_ptr(), rank_to_size(req_rank))) }
@@ -82,7 +82,7 @@ impl BuddyAlloc {
 		let buddy_index = meta_to_index(page) ^ rank_to_pages(rank);
 		let buddy_page = unsafe { index_to_meta(buddy_index).as_ref() };
 
-		return (!buddy_page.inuse() && unsafe { page.as_ref().rank() } == buddy_page.rank())
+		return (!buddy_page.is_inuse() && unsafe { page.as_ref().rank() } == buddy_page.rank())
 			.then(|| NonNull::from(buddy_page));
 	}
 }

@@ -1,6 +1,6 @@
 use crate::{
-	mm::{constant::PAGE_SIZE, util::next_align},
-	process::task::CURRENT,
+	mm::{constant::PAGE_SIZE, util::size_to_pages},
+	process::{fd_table::Fd, task::CURRENT},
 	syscall::errno::Errno,
 };
 use bitflags::bitflags;
@@ -11,6 +11,7 @@ bitflags! {
 	#[repr(transparent)]
 	#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 	pub struct MmapFlag: u32 {
+		const Shared = 1;
 		const Private = 2;
 	}
 }
@@ -20,17 +21,13 @@ pub fn sys_mmap(
 	len: usize,
 	prot: i32,
 	flags: i32,
-	_fd: i32,
-	_offset: isize,
+	fd: i32,
+	offset: isize,
 ) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };
 	let user_ext = current.get_user_ext().expect("must be user process");
 
 	let flags = MmapFlag::from_bits(flags as u32).ok_or(Errno::EINVAL)?;
-	if !flags.is_all() {
-		return Err(Errno::EINVAL);
-	}
-
 	let prot = AreaFlag::from_bits(prot as u32).ok_or(Errno::EINVAL)?;
 
 	// misaligned address
@@ -38,9 +35,18 @@ pub fn sys_mmap(
 		return Err(Errno::EINVAL);
 	}
 
-	let pages = next_align(len - 1, PAGE_SIZE) / PAGE_SIZE;
+	if flags.contains(MmapFlag::Shared) {
+		let fd = Fd::from(fd as usize).ok_or(Errno::EINVAL)?;
+		let handle = user_ext.lock_fd_table().get_file(fd).ok_or(Errno::EINVAL)?;
+		let prot = prot.union(AreaFlag::Shared);
 
-	user_ext.lock_memory().mmap_private(addr, pages, prot)
+		user_ext
+			.lock_memory()
+			.mmap_shared(addr, len, handle.deep_copy()?, offset, prot)
+	} else {
+		let pages = size_to_pages(len);
+		user_ext.lock_memory().mmap_private(addr, pages, prot)
+	}
 }
 
 pub fn sys_munmap(addr: usize, len: usize) -> Result<usize, Errno> {
@@ -55,5 +61,5 @@ pub fn sys_munmap(addr: usize, len: usize) -> Result<usize, Errno> {
 		.expect("must be user process")
 		.lock_memory();
 
-	memory.munmap_private(addr, len / PAGE_SIZE).map(|_| 0)
+	memory.munmap(addr, len / PAGE_SIZE).map(|_| 0)
 }
