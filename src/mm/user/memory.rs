@@ -13,14 +13,17 @@ use core::slice::{from_raw_parts, from_raw_parts_mut};
 
 use crate::config::{TRAMPOLINE_BASE, USTACK_BASE, USTACK_PAGES};
 use crate::elf::{Elf, ProgramHdr};
+use crate::fs::path::Path;
 use crate::fs::vfs::{RealEntry, VfsHandle, Whence};
 use crate::mm::alloc::page::free_pages;
 use crate::mm::alloc::virt::{kmap, kunmap};
 use crate::mm::alloc::Zone;
 use crate::mm::page::{get_zero_page_phys, index_to_meta, PageFlag, PD};
 use crate::mm::{constant::*, util::*};
+use crate::process::task::CURRENT;
 use crate::ptr::PageBox;
 use crate::syscall::errno::Errno;
+use crate::syscall::exec::read_user_binary;
 use crate::trace_feature;
 
 use self::mapped_file::MappedFile;
@@ -34,6 +37,7 @@ use super::vma::{AreaFlag, UserAddressSpace};
 pub struct Memory {
 	stack_pointer: usize,
 	system_data_base: usize,
+	pub entry_point: usize,
 	vma: UserAddressSpace,
 	file_mapping: BTreeMap<usize, MappedFile>,
 	page_dir: PD,
@@ -45,8 +49,26 @@ extern "C" {
 }
 
 impl Memory {
+	fn load_interp(&mut self, interp: Path) -> Result<usize, Errno> {
+		let current = unsafe { CURRENT.get_ref() };
+		let raw_bin = read_user_binary(interp, current)?;
+		let elf = Elf::new(raw_bin.as_slice()).map_err(|_| Errno::ENOEXEC)?;
+
+		let interp_base = match elf.is_position_independent() {
+			true => 0x400000,
+			false => 0,
+		};
+
+		self.load_sections(interp_base, &elf)?;
+
+		self.entry_point = interp_base + elf.get_entry_point();
+
+		Ok(interp_base)
+	}
+
 	pub fn from_elf(elf: Elf<'_>, argv: StringVec, envp: StringVec) -> Result<Self, Errno> {
 		let mut memory = Self {
+			entry_point: 0,
 			stack_pointer: USTACK_BASE,
 			system_data_base: TRAMPOLINE_BASE,
 			vma: UserAddressSpace::new(),
@@ -58,35 +80,41 @@ impl Memory {
 		let trampoline = unsafe { from_raw_parts(__trampoline_start as *const u8, len) };
 		memory.push_data(trampoline)?;
 
-		for section in elf.loadable_sections() {
-			memory.load_section(section.vaddr, section.data, section.mem_size, section.flags)?;
-		}
+		let executable_base = match elf.is_position_independent() {
+			true => 0x0804_8000,
+			false => 0,
+		};
 
-		let phdr_addr = memory.push_data(unsafe {
-			from_raw_parts(
-				elf.program_hdrs.as_ptr() as *const u8,
-				elf.program_hdrs.len() * size_of::<ProgramHdr>(),
-			)
-		})?;
+		memory.entry_point = executable_base + elf.get_entry_point();
+
+		memory.load_sections(executable_base, &elf)?;
 
 		let mut stack = UserStack::new();
-		let argc = argv.len();
 
-		// AUXV
 		stack.push_aux_entry(AuxEntry::new_null())?;
-		stack.push_aux_entry(AuxEntry::new(AuxEntryType::Phdr, phdr_addr))?;
-		stack.push_aux_entry(AuxEntry::new(AuxEntryType::Phent, size_of::<ProgramHdr>()))?;
-		stack.push_aux_entry(AuxEntry::new(AuxEntryType::Phnum, elf.program_hdrs.len()))?;
-		stack.push_aux_entry(AuxEntry::new(AuxEntryType::Pagesz, PAGE_SIZE))?;
-		stack.push_aux_entry(AuxEntry::new(AuxEntryType::Entry, elf.get_entry_point()))?;
 
-		// ENVP
+		if let Some(interp) = elf.get_interpreter() {
+			let interp_base = memory.load_interp(interp)?;
+			stack.push_aux_entry(AuxEntry::new(AuxEntryType::Base, interp_base))?;
+			stack.push_aux_entry(AuxEntry::new(
+				AuxEntryType::Phdr,
+				executable_base + elf.program_hdrs[0].p_vaddr,
+			))?;
+			stack.push_aux_entry(AuxEntry::new(AuxEntryType::Phent, size_of::<ProgramHdr>()))?;
+			stack.push_aux_entry(AuxEntry::new(AuxEntryType::Phnum, elf.program_hdrs.len()))?;
+			stack.push_aux_entry(AuxEntry::new(
+				AuxEntryType::Entry,
+				executable_base + elf.get_entry_point(),
+			))?;
+		}
+
+		stack.push_aux_entry(AuxEntry::new(AuxEntryType::Pagesz, PAGE_SIZE))?;
+
 		memory.push_string_array(envp, &mut stack)?;
 
-		// ARGV
+		let argc = argv.len();
 		memory.push_string_array(argv, &mut stack)?;
 
-		// ARGC
 		stack.push(argc)?;
 
 		memory.reserve_stack(stack)?;
@@ -330,6 +358,7 @@ impl Memory {
 		}
 
 		Ok(Self {
+			entry_point: self.entry_point,
 			stack_pointer: self.stack_pointer,
 			system_data_base: self.system_data_base,
 			vma,
@@ -374,6 +403,19 @@ impl Memory {
 		self.system_data_base = addr + data.len();
 
 		Ok(addr)
+	}
+
+	fn load_sections(&mut self, base_addr: usize, elf: &Elf<'_>) -> Result<(), Errno> {
+		for section in elf.loadable_sections() {
+			self.load_section(
+				base_addr + section.vaddr,
+				section.data,
+				section.mem_size,
+				section.flags,
+			)?;
+		}
+
+		Ok(())
 	}
 
 	fn load_section(

@@ -16,6 +16,7 @@ for USER in $USERS; do
     mkdir $SYSROOT/home/$USER
 done
 
+
 mkdir $SYSROOT/lib/modules
 
 cat << 'EOF' > $SYSROOT/etc/passwd

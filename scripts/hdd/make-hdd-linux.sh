@@ -57,6 +57,7 @@ mkfs.ext2 -q $NBDP2 -b 1024
 
 mkdir -p $BUILD_ROOT/mnt/vol1
 mount $NBDP1 $BUILD_ROOT/mnt/vol1
+tar -C $BUILD_ROOT/mnt/vol1 -xf /root/alpine-minirootfs-3.18.4-x86.tar.gz
 
 echo CP sysroot
 cp -r $BUILD_ROOT/sysroot/* $BUILD_ROOT/mnt/vol1

@@ -14,8 +14,9 @@ pub fn sys_set_thread_area(user_desc: usize) -> Result<usize, Errno> {
 	let system_desc = user_desc.parse_into_system_desc()?;
 
 	let idx = match user_desc.entry_number {
-		x if x < 0 => 0 as usize,
-		x => x as usize,
+		-1 => 0 as usize,
+		x @ 6..=8 => x as usize - 6,
+		_ => return Err(Errno::EINVAL),
 	};
 
 	let gdt = unsafe { CPU_GDT.get_mut() };

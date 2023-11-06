@@ -511,8 +511,10 @@ void builtin_exec(int idx) {
 	pid_t pid = fork();
 
 	if (pid == 0) {
+		char *argv[] = {buf, NULL};
+		char *envp[] = {NULL};
 
-		int ret = execve(buf, NULL, NULL);
+		int ret = execve(buf, argv, envp);
 
 		if (ret < 0) {
 			show_error("exec: execve", ret);
