@@ -56,6 +56,7 @@ pub fn sys_open(path: usize, flags: i32, perm: u32) -> Result<usize, Errno> {
 	let io_flags = IOFlag::from_bits_truncate(flags);
 
 	let path = verify_path(path, current)?;
+
 	let path = Path::new(path);
 
 	let ent = match creation_flags.contains(CreationFlag::O_CREAT) {

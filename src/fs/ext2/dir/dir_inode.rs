@@ -352,20 +352,25 @@ impl vfs::DirInode for DirInode {
 			return Err(Errno::EEXIST);
 		}
 
-		let (inum, block) = self.new_child_with_space(name, FileType::SymLink)?;
-
 		let sb = self.super_block();
-		let child = SymLinkInode::new_shared(target, inum, &block, &sb);
+		let (child, block_size) = if target.len() > 60 {
+			let (inum, block) = self.new_child_with_space(name, FileType::SymLink)?;
+			let block_size = block.read_lock().size();
+			let child = SymLinkInode::with_block(target, inum, &block, &sb);
+			(child, block_size)
+		} else {
+			let inum = self.new_child(name, FileType::SymLink)?;
+			let child = SymLinkInode::new(target, inum, &sb);
+			(child, 0)
+		};
 
 		{
-			let block_size = block.read_lock().size();
 			let mut info = child.inner().info_mut();
-			info.set_size(target.len());
 			info.inc_blocks(block_size);
-
-			self.inner().info_mut().links_count += 1;
+			info.set_size(target.len());
 		}
 
+		self.inner().info_mut().links_count += 1;
 		vfs::SuperBlock::sync(sb.as_ref());
 
 		Ok(child)
