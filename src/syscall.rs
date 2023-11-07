@@ -548,6 +548,7 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 			sys_signal(frame.ebx, frame.ecx)
 		}
 		54 => sys_ioctl(frame.ebx as isize, frame.ecx, frame.edx),
+		55 | 221 => sys_fcntl(frame.ebx as isize, frame.ecx, frame.edx),
 		57 => sys_setpgid(frame.ebx, frame.ecx),
 		63 => sys_dup2(frame.ebx, frame.ecx),
 		64 => sys_getppid(),
