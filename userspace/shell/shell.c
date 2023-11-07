@@ -83,13 +83,14 @@ void builtin_ls(int idx) {
 		buf[0] = '.';
 		buf[1] = '\0';
 	}
+
 	int fd = open(buf, O_DIRECTORY | O_RDONLY | O_CLOEXEC, 0777);
 	if (fd < 0) {
 		show_error("ls: open", fd);
 		return;
 	}
 
-	int end = getdents(fd, buf, 4096);
+	int end = getdents64(fd, buf, 4096);
 	int curr = 0;
 	while (curr < end) {
 		struct kfs_dirent *dir = (struct kfs_dirent *)&buf[curr];
@@ -476,7 +477,8 @@ void builtin_symlink(int idx) {
 void builtin_pwd(void) {
 	char buf[4096];
 
-	ft_printf("%s\n", getcwd(buf, sizeof(buf)));
+	getcwd(buf, sizeof(buf));
+	ft_printf("%s\n", buf);
 }
 
 void builtin_test(void) {
@@ -547,7 +549,7 @@ void builtin_lsmod() {
 		return;
 	}
 
-	int end = getdents(fd, buf, 4096);
+	int end = getdents64(fd, buf, 4096);
 	int curr = 0;
 	while (curr < end) {
 		struct kfs_dirent *dir = (struct kfs_dirent *)&buf[curr];

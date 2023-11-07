@@ -392,7 +392,7 @@ impl Memory {
 		self.push_data(&data).map_err(|_| Errno::ENOMEM)?;
 
 		stack.push(0)?;
-		for elem in index {
+		for elem in index.iter().rev() {
 			stack.push(elem + copy_base)?;
 		}
 

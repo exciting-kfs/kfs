@@ -604,6 +604,7 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		212 => sys_chown(frame.ebx, frame.ecx, frame.edx),
 		213 => sys_setuid(frame.ebx),
 		214 => sys_setgid(frame.ebx),
+		220 => sys_getdents(frame.ebx as isize, frame.ecx, frame.edx),
 		243 => sys_set_thread_area(frame.ebx),
 		// TODO: exit_group
 		252 => sys_exit(frame.ebx),

@@ -1,4 +1,4 @@
-use core::mem::{size_of, transmute};
+use core::mem::{offset_of, size_of, transmute};
 
 use alloc::{boxed::Box, sync::Arc};
 
@@ -326,9 +326,10 @@ pub trait FileHandle {
 }
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct KfsDirent {
-	pub ino: u32,
-	pub private: u32,
+	pub ino: u64,
+	pub private: u64,
 	pub size: u16,
 	pub file_type: FileType,
 	pub name: (),
@@ -337,12 +338,12 @@ pub struct KfsDirent {
 impl KfsDirent {
 	#[inline]
 	pub fn header_len() -> usize {
-		size_of::<KfsDirent>() - 1
+		size_of::<KfsDirent>()
 	}
 
 	#[inline]
 	pub fn total_len(name: &[u8]) -> usize {
-		Self::header_len() + name.len() + 1
+		Self::header_len().max(name.len() + offset_of!(KfsDirent, name) + 1)
 	}
 }
 

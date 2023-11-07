@@ -10,6 +10,7 @@
 #![feature(variant_count)]
 #![feature(extract_if)]
 #![feature(maybe_uninit_as_bytes)]
+#![feature(offset_of)]
 #![feature(slice_as_chunks)]
 #![feature(unboxed_closures)]
 #![feature(iter_intersperse)]

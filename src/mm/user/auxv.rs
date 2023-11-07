@@ -9,6 +9,7 @@ pub enum AuxEntryType {
 	Pagesz = 6,
 	Base = 7,
 	Entry = 9,
+	Execfn = 31,
 }
 
 #[repr(C)]

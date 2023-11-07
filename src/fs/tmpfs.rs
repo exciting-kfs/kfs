@@ -504,7 +504,7 @@ impl DirHandle for TmpDir {
 		for i in *last..self.dirents.len() {
 			let (kind, name) = &self.dirents[i];
 
-			let curr_size = next_align(size_of::<KfsDirent>() + name.len() + 1 + 1, 4);
+			let curr_size = next_align(size_of::<KfsDirent>() + name.len() + 1 + 1, 8);
 
 			if curr_buf.len() < curr_size {
 				break;

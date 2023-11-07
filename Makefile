@@ -265,7 +265,7 @@ $(TARGET_ROOT)/sysroot : $(USER_BINS) $(KERNEL_MODULES) scripts/hdd/make-sysroot
 	@cp $(USER_BINS) $(TARGET_ROOT)/sysroot/bin
 	@cp examples/* $(TARGET_ROOT)/sysroot/bin
 
-$(HDD_IMG) : $(TARGET_ROOT)/sysroot scripts/hdd/make-hdd.sh scripts/hdd/make-hdd-linux.sh
+$(HDD_IMG) : $(USER_BINS) $(TARGET_ROOT)/sysroot scripts/hdd/make-hdd.sh scripts/hdd/make-hdd-linux.sh
 	@echo MAKE $(notdir $@)
 ifeq ($(FAST_HDD_BUILD),y)
 	@scripts/hdd/make-hdd-linux.sh $@ $(TARGET_ROOT)/sysroot

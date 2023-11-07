@@ -323,7 +323,7 @@ impl vfs::DirInode for DirInode {
 		// 	}
 		// }
 
-		Ok(Box::new(DirFile::new(self.clone())))
+		Ok(Box::new(DirFile::new(self)))
 	}
 
 	fn lookup(&self, name: &[u8]) -> Result<vfs::VfsInode, Errno> {

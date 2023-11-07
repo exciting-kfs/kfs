@@ -5,7 +5,6 @@ use alloc::sync::Arc;
 use crate::fs::path::Path;
 use crate::fs::vfs::{lookup_entry, Entry, Statx};
 use crate::mm::user::verify::{verify_buffer_mut, verify_path};
-use crate::pr_warn;
 use crate::process::fd_table::Fd;
 use crate::process::task::{Task, CURRENT};
 use crate::syscall::errno::Errno;
@@ -59,8 +58,6 @@ pub fn sys_statx(
 	)?;
 
 	let stat = entry.stat()?;
-
-	pr_warn!("STATX: {:#?}", stat);
 
 	*buf = stat;
 

@@ -6,7 +6,6 @@
 
 #include <time.h>
 
-
 struct stat {
 	mode_t perm;
 	uid_t uid;
@@ -19,7 +18,7 @@ struct stat {
 };
 
 DEFINE_SYSCALL(mkdir, 39, int, const char *, path, mode_t, mode);
-DEFINE_SYSCALL(stat, 18, int, const char *, path, struct stat *, statbuf);
+DEFINE_SYSCALL(stat, 9999, int, const char *, path, struct stat *, statbuf);
 DEFINE_SYSCALL(chmod, 15, int, const char *, path, mode_t, mode);
 DEFINE_SYSCALL(chown, 212, int, const char *, path, uid_t, owner, gid_t, group);
 
