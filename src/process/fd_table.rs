@@ -72,7 +72,6 @@ impl FdTable {
 
 		*entry = Some(src);
 
-		pr_debug!("start: {}, src: {:?}, dst: {}", start, src_fd, dst_fd);
 
 		Ok(Fd(dst_fd))
 	}
