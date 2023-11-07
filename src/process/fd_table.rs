@@ -2,7 +2,6 @@ use core::mem::{replace, take};
 use core::{array, ops::IndexMut};
 
 use crate::fs::vfs::VfsHandle;
-use crate::pr_debug;
 use crate::syscall::errno::Errno;
 
 pub const FDTABLE_SIZE: usize = 256;
@@ -71,7 +70,6 @@ impl FdTable {
 			.ok_or(Errno::EMFILE)?;
 
 		*entry = Some(src);
-
 
 		Ok(Fd(dst_fd))
 	}
