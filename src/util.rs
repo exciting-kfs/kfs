@@ -3,6 +3,7 @@ use crate::{pr_info, printk};
 pub mod arch;
 pub mod backtrace;
 pub mod bitrange;
+pub mod endian;
 pub mod lazy_constant;
 pub mod lcg;
 

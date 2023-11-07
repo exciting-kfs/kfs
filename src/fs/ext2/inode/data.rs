@@ -113,6 +113,7 @@ impl<'a> DataCommon<'a> {
 			.collect::<Vec<_>>();
 
 		trace_feature!("data-ready_read", "request count: {}", v.len());
+		trace_feature!("data-ready_read", "inode: {:?}", self.inode.inum);
 
 		sb.block_pool.load_async(v.as_slice())
 	}

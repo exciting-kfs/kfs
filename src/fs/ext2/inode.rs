@@ -65,10 +65,21 @@ impl Inode {
 		Self::with_block(inum, info, sb, bid)
 	}
 
-	pub fn new_symlink(inum: Inum, sb: &Arc<SuperBlock>, perm: Permission, bid: BlockId) -> Self {
+	pub fn new_symlink_with_block(
+		inum: Inum,
+		sb: &Arc<SuperBlock>,
+		perm: Permission,
+		bid: BlockId,
+	) -> Self {
 		let info = InodeInfo::new(FileType::SymLink, perm);
 
 		Self::with_block(inum, info, sb, bid)
+	}
+
+	pub fn new_symlink(inum: Inum, sb: &Arc<SuperBlock>, perm: Permission) -> Self {
+		let info = InodeInfo::new(FileType::SymLink, perm);
+
+		Self::from_info(inum, info, sb)
 	}
 
 	fn with_block(inum: Inum, info: InodeInfo, sb: &Arc<SuperBlock>, bid: BlockId) -> Self {

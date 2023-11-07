@@ -1,14 +1,16 @@
 use core::mem::{self};
 
+use alloc::string::String;
 use alloc::sync::Arc;
 
 use crate::elf::Elf;
 use crate::fs::path::Path;
-use crate::fs::vfs::{lookup_entry_follow, AccessFlag, IOFlag, Permission, RealEntry};
+use crate::fs::vfs::{lookup_entry_follow, AccessFlag, Entry, IOFlag, Permission, RealEntry};
 use crate::interrupt::InterruptFrame;
 use crate::mm::user::memory::Memory;
 use crate::mm::user::string_vec::StringVec;
 use crate::mm::user::verify::verify_path;
+use crate::pr_debug;
 use crate::process::task::{Task, CURRENT};
 use crate::ptr::VirtPageBox;
 use crate::syscall::errno::Errno;
@@ -21,6 +23,9 @@ pub fn read_user_binary(path: Path, task: &Arc<Task>) -> Result<VirtPageBox, Err
 	entry.access(Permission::ANY_EXECUTE, task)?;
 
 	let stat = entry.stat()?;
+
+	pr_debug!("name: {:?}", String::from_utf8(entry.get_name().to_vec()));
+
 	let mut buffer = VirtPageBox::new(stat.size as usize).map_err(|_| Errno::ENOMEM)?;
 
 	let handle = entry.open(IOFlag::empty(), AccessFlag::O_RDONLY)?;
@@ -41,6 +46,8 @@ pub fn sys_execve(
 
 	let path = verify_path(path_ptr, current)?;
 	let path = Path::new(path);
+
+	pr_debug!("exec: path: {:?}", String::from_utf8(path.to_buffer()));
 
 	let raw_bin = read_user_binary(path, current)?;
 	let elf = Elf::new(raw_bin.as_slice()).map_err(|_| Errno::ENOEXEC)?;
