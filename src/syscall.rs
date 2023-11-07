@@ -504,13 +504,12 @@ impl Display for SyscallSnapshot {
 
 fn syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Errno> {
 	if cfg!(trace_feature = "syscall") {
-		let snapshot = SyscallSnapshot::new(frame);
 		let ret = __syscall(frame, restart);
 		trace_feature!(
 			"syscall",
 			"{:?}: {} #R: {:?}",
 			unsafe { CURRENT.get_ref().get_pid() },
-			snapshot,
+			SyscallSnapshot::new(frame),
 			ret
 		);
 		ret

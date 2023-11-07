@@ -3,10 +3,7 @@ use core::mem::{replace, take};
 use alloc::collections::LinkedList;
 
 use crate::{
-	driver::{
-		hpet::get_timestamp_micro,
-		ide::{ide_id::IdeId, IdeController},
-	},
+	driver::ide::{ide_id::IdeId, IdeController},
 	scheduler::{context::yield_now, work::schedule_slow_work},
 	sync::{Locked, LockedGuard},
 	trace_feature,
