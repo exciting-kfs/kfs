@@ -9,7 +9,7 @@ use crate::{
 
 use super::{DirHandle, FileHandle};
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct AccessFlag(i32);
 impl AccessFlag {
 	const RDONLY: i32 = 0o0;
@@ -39,7 +39,7 @@ impl AccessFlag {
 }
 
 bitflags! {
-	#[derive(Clone, Copy)]
+	#[derive(Clone, Copy, Debug)]
 	pub struct CreationFlag: i32 {
 		const O_CREAT = 0o100;
 		const O_EXCL = 0o200;
@@ -52,7 +52,7 @@ bitflags! {
 }
 
 bitflags! {
-	#[derive(Clone, Copy)]
+	#[derive(Clone, Copy, Debug)]
 	pub struct IOFlag: i32 {
 		const O_APPEND = 0o2000;
 		const O_NONBLOCK = 0o4000;

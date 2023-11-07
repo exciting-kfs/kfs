@@ -13,7 +13,13 @@ pub fn sys_dup2(fd1: usize, fd2: usize) -> Result<usize, Errno> {
 		.expect("must be user process")
 		.lock_fd_table();
 
-	fd_table.dup2(fd1, fd2).map(|_| 0)
+	let old_handle = fd_table.dup2(fd1, fd2)?;
+
+	if let Some(old) = old_handle {
+		old.close()?;
+	}
+
+	Ok(0)
 }
 
 pub fn sys_dup(fd: usize) -> Result<usize, Errno> {

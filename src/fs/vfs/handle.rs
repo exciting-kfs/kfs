@@ -6,6 +6,7 @@ use crate::fs::path::Path;
 use crate::net::address::{ReadOnly, UnknownSocketAddress, WriteOnly};
 use crate::net::socket::{Socket, SocketHandle};
 use crate::process::task::{Task, CURRENT};
+use crate::sync::LocalLocked;
 use crate::syscall::errno::Errno;
 
 use super::{AccessFlag, Entry, IOFlag, VfsDirEntry, VfsEntry, VfsFileEntry, VfsSocketEntry};
@@ -91,19 +92,48 @@ impl VfsHandle {
 
 		use VfsHandle::*;
 		let (io_flags, access_flags) = match self {
-			File(f) => (f.io_flags, f.access_flags),
+			File(f) => (*f.io_flags.lock(), f.access_flags),
 			Socket(s) => (s.io_flags, s.access_flags),
 			Dir(d) => (d.io_flags, d.access_flags),
 		};
 
 		real.open(io_flags, access_flags, unsafe { CURRENT.get_ref() })
 	}
+
+	pub fn set_io_flags(&self, new_flags: IOFlag) -> Result<(), Errno> {
+		use VfsHandle::*;
+		match self {
+			File(f) => {
+				*f.io_flags.lock() = new_flags;
+				Ok(())
+			}
+			Socket(_) | Dir(_) => Err(Errno::EPERM),
+		}
+	}
+
+	pub fn io_flags(&self) -> IOFlag {
+		use VfsHandle::*;
+		match self {
+			File(f) => *f.io_flags.lock(),
+			Socket(s) => s.io_flags,
+			Dir(d) => d.io_flags,
+		}
+	}
+
+	pub fn access_flags(&self) -> AccessFlag {
+		use VfsHandle::*;
+		match self {
+			File(f) => f.access_flags,
+			Socket(s) => s.access_flags,
+			Dir(d) => d.access_flags,
+		}
+	}
 }
 
 pub struct VfsFileHandle {
 	entry: Option<Arc<VfsFileEntry>>,
 	inner: Box<dyn FileHandle>,
-	io_flags: IOFlag,
+	io_flags: LocalLocked<IOFlag>,
 	access_flags: AccessFlag,
 }
 
@@ -117,14 +147,14 @@ impl VfsFileHandle {
 		Self {
 			entry,
 			inner,
-			io_flags,
+			io_flags: LocalLocked::new(io_flags),
 			access_flags,
 		}
 	}
 
 	pub fn read(&self, buf: &mut [u8]) -> Result<usize, Errno> {
 		match self.access_flags.read_ok() {
-			true => self.inner.read(buf, self.io_flags),
+			true => self.inner.read(buf, *self.io_flags.lock()),
 			false => Err(Errno::EBADF),
 		}
 	}
@@ -134,10 +164,12 @@ impl VfsFileHandle {
 			return Err(Errno::EBADF);
 		}
 
-		if self.io_flags.contains(IOFlag::O_APPEND) {
+		let io_flags = self.io_flags.lock();
+
+		if io_flags.contains(IOFlag::O_APPEND) {
 			self.inner.lseek(0, Whence::End)?;
 		}
-		self.inner.write(buf, self.io_flags)
+		self.inner.write(buf, *io_flags)
 	}
 
 	pub fn lseek(&self, offset: isize, whence: Whence) -> Result<usize, Errno> {
