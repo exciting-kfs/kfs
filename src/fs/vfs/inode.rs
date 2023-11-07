@@ -7,7 +7,7 @@ use crate::{
 	syscall::errno::Errno,
 };
 
-use super::{DirHandle, FileHandle};
+use super::{DirHandle, FileHandle, Statx, StatxMode, StatxTimeStamp};
 
 #[derive(Copy, Clone, Debug)]
 pub struct AccessFlag(i32);
@@ -123,6 +123,16 @@ pub struct TimeSpec {
 	nanoseconds: isize,
 }
 
+impl Into<StatxTimeStamp> for TimeSpec {
+	fn into(self) -> StatxTimeStamp {
+		StatxTimeStamp {
+			sec: self.seconds as i64,
+			nsec: self.nanoseconds as u32,
+			pad: 0,
+		}
+	}
+}
+
 impl From<u64> for TimeSpec {
 	fn from(value: u64) -> Self {
 		Self {
@@ -130,49 +140,6 @@ impl From<u64> for TimeSpec {
 			nanoseconds: (value % 1_000_000_000) as isize,
 		}
 	}
-}
-
-#[repr(C)]
-pub struct RawStat {
-	pub perm: u32,
-	pub uid: usize,
-	pub gid: usize,
-	pub size: isize,
-	pub file_type: usize,
-	pub access_time: TimeSpec,
-	pub modify_fime: TimeSpec,
-	pub change_time: TimeSpec,
-}
-
-#[repr(C)]
-pub struct StatxTimeStamp {
-	pub sec: i64,
-	pub nsec: u32,
-	pub pad: i32,
-}
-
-#[repr(C)]
-pub struct Statx {
-	pub mask: u32,
-	pub blksize: u32,
-	pub attributes: u64,
-	pub nlink: u32,
-	pub uid: u32,
-	pub gid: u32,
-	pub mode: u16,
-	pub pad1: u16,
-	pub ino: u64,
-	pub size: u64,
-	pub blocks: u64,
-	pub attributes_mask: u64,
-	pub atime: StatxTimeStamp,
-	pub btime: StatxTimeStamp,
-	pub ctime: StatxTimeStamp,
-	pub mtime: StatxTimeStamp,
-	pub rdev_major: u32,
-	pub rdev_minor: u32,
-	pub dev_major: u32,
-	pub dev_minor: u32,
 }
 
 fn default_access(
@@ -199,12 +166,12 @@ fn default_access(
 }
 
 pub trait Inode {
-	fn stat(&self) -> Result<RawStat, Errno>;
+	fn stat(&self) -> Result<Statx, Errno>;
 	fn chown(&self, owner: usize, group: usize) -> Result<(), Errno>;
 	fn chmod(&self, perm: Permission) -> Result<(), Errno>;
 	fn access(&self, uid: usize, gid: usize, perm: Permission) -> Result<(), Errno> {
 		let stat = self.stat()?;
-		let file_perm = Permission::from_bits_truncate(stat.perm);
+		let file_perm = stat.get_perm();
 
 		if !default_access(stat.uid, stat.gid, file_perm, uid, gid, perm) {
 			return Err(Errno::EACCES);
@@ -256,16 +223,28 @@ impl SocketInode {
 }
 
 impl Inode for SocketInode {
-	fn stat(&self) -> Result<RawStat, Errno> {
-		Ok(RawStat {
-			perm: self.perm.lock().bits(),
+	fn stat(&self) -> Result<Statx, Errno> {
+		Ok(Statx {
+			mask: Statx::MASK_ALL,
+			blksize: 0,
+			attributes: 0,
+			nlink: 0,
 			uid: *self.owner.lock(),
 			gid: *self.group.lock(),
+			mode: StatxMode::new(StatxMode::SOCKET, self.perm.lock().bits() as u16),
+			pad1: 0,
+			ino: 0,
 			size: 0,
-			file_type: 6,
-			access_time: self.atime.lock().clone(),
-			modify_fime: self.mtime.lock().clone(),
-			change_time: self.ctime.lock().clone(),
+			blocks: 0,
+			attributes_mask: 0,
+			atime: self.atime.lock().clone().into(),
+			btime: StatxTimeStamp::default(),
+			ctime: self.ctime.lock().clone().into(),
+			mtime: self.mtime.lock().clone().into(),
+			rdev_major: 0,
+			rdev_minor: 0,
+			dev_major: 0,
+			dev_minor: 0,
 		})
 	}
 
@@ -278,17 +257,6 @@ impl Inode for SocketInode {
 
 	fn chmod(&self, perm: Permission) -> Result<(), Errno> {
 		*self.perm.lock() = perm;
-
-		Ok(())
-	}
-
-	fn access(&self, uid: usize, gid: usize, perm: Permission) -> Result<(), Errno> {
-		let stat = self.stat()?;
-		let file_perm = Permission::from_bits_truncate(stat.perm);
-
-		if !default_access(stat.uid, stat.gid, file_perm, uid, gid, perm) {
-			return Err(Errno::EACCES);
-		}
 
 		Ok(())
 	}

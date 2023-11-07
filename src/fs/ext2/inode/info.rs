@@ -8,7 +8,7 @@ use crate::{
 		hpet::{get_timestamp_nano, get_timestamp_second},
 		partition::BlockId,
 	},
-	fs::vfs::{self, FileType, Permission, TimeSpec},
+	fs::vfs::{self, FileType, Permission, Statx, StatxMode, StatxTimeStamp},
 	mm::constant::SECTOR_SIZE,
 	process::task::CURRENT,
 	sync::{ReadLockGuard, WriteLockGuard},
@@ -127,23 +127,32 @@ impl InodeInfo {
 		self.blocks = blocks as u32;
 	}
 
-	pub fn stat(&self) -> vfs::RawStat {
-		let perm = (self.mode & 0x0fff) as u32;
-		let file_type = FileType::from_mode(self.mode);
-
+	pub fn stat(&self) -> vfs::Statx {
 		let uid = self.uid as usize;
 		let gid = self.gid as usize;
-		let size = self.get_size() as isize;
+		let size = self.get_size();
 
-		vfs::RawStat {
-			perm,
+		Statx {
+			mask: Statx::MASK_ALL,
+			blksize: 0,
+			attributes: 0,
+			nlink: 0,
 			uid,
 			gid,
-			size,
-			file_type: file_type as usize,
-			access_time: TimeSpec::default(),
-			modify_fime: TimeSpec::default(),
-			change_time: TimeSpec::default(),
+			mode: StatxMode(self.mode),
+			pad1: 0,
+			ino: 0,
+			size: size as u64,
+			blocks: 0,
+			attributes_mask: 0,
+			atime: StatxTimeStamp::default(),
+			btime: StatxTimeStamp::default(),
+			ctime: StatxTimeStamp::default(),
+			mtime: StatxTimeStamp::default(),
+			rdev_major: 0,
+			rdev_minor: 0,
+			dev_major: 0,
+			dev_minor: 0,
 		}
 	}
 

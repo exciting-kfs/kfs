@@ -294,7 +294,7 @@ impl DirInode {
 }
 
 impl vfs::Inode for DirInode {
-	fn stat(&self) -> Result<vfs::RawStat, Errno> {
+	fn stat(&self) -> Result<vfs::Statx, Errno> {
 		Ok(self.inner().info().stat())
 	}
 

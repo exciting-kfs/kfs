@@ -26,7 +26,7 @@ use crate::{
 use self::block::VfsBlockEntry;
 
 use super::{
-	AccessFlag, DirInode, FileInode, IOFlag, Inode, Permission, RawStat, SocketInode, SuperBlock,
+	AccessFlag, DirInode, FileInode, IOFlag, Inode, Permission, SocketInode, Statx, SuperBlock,
 	SymLinkInode, VfsDirHandle, VfsFileHandle, VfsHandle, VfsInode, VfsSocketHandle,
 	ROOT_DIR_ENTRY,
 };
@@ -143,7 +143,7 @@ impl VfsEntry {
 pub trait Entry {
 	fn get_inode(&self) -> &dyn Inode;
 
-	fn stat(&self) -> Result<RawStat, Errno> {
+	fn stat(&self) -> Result<Statx, Errno> {
 		self.get_inode().stat()
 	}
 

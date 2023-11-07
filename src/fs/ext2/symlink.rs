@@ -123,7 +123,7 @@ impl SymLinkInode {
 }
 
 impl vfs::Inode for SymLinkInode {
-	fn stat(&self) -> Result<vfs::RawStat, Errno> {
+	fn stat(&self) -> Result<vfs::Statx, Errno> {
 		Ok(self.inner().info().stat())
 	}
 

@@ -16,14 +16,13 @@ use crate::{
 
 use super::path::{format_path, Path};
 use super::vfs::{
-	self, lookup_entry_at_follow, Entry, FileSystem, Inode, SuperBlock, TimeSpec, VfsDirEntry,
-	VfsHandle,
+	self, lookup_entry_at_follow, Entry, FileSystem, Inode, StatxMode, StatxTimeStamp, SuperBlock,
+	VfsDirEntry, VfsHandle,
 };
 use super::{
 	tmpfs::{TmpDir, TmpSymLink},
 	vfs::{
-		DirHandle, DirInode, FileInode, MemoryFileSystem, Permission, RawStat, SymLinkInode,
-		VfsInode,
+		DirHandle, DirInode, FileInode, MemoryFileSystem, Permission, Statx, SymLinkInode, VfsInode,
 	},
 };
 
@@ -189,17 +188,30 @@ impl ProcFdDirInode {
 }
 
 impl Inode for Locked<ProcFdDirInode> {
-	fn stat(&self) -> Result<RawStat, Errno> {
+	fn stat(&self) -> Result<Statx, Errno> {
 		let this = self.lock();
-		Ok(RawStat {
-			perm: 0o500,
+
+		Ok(Statx {
+			mask: Statx::MASK_ALL,
+			blksize: 0,
+			attributes: 0,
+			nlink: 0,
 			uid: this.task.get_uid(),
 			gid: this.task.get_gid(),
+			mode: StatxMode::new(StatxMode::DIRECTORY, 0o500),
+			pad1: 0,
+			ino: 0,
 			size: 0,
-			file_type: 2,
-			access_time: TimeSpec::default(),
-			modify_fime: TimeSpec::default(),
-			change_time: TimeSpec::default(),
+			blocks: 0,
+			attributes_mask: 0,
+			atime: StatxTimeStamp::default(),
+			btime: StatxTimeStamp::default(),
+			ctime: StatxTimeStamp::default(),
+			mtime: StatxTimeStamp::default(),
+			rdev_major: 0,
+			rdev_minor: 0,
+			dev_major: 0,
+			dev_minor: 0,
 		})
 	}
 
@@ -284,18 +296,30 @@ impl ProcDirInode {
 }
 
 impl Inode for Locked<ProcDirInode> {
-	fn stat(&self) -> Result<RawStat, Errno> {
+	fn stat(&self) -> Result<Statx, Errno> {
 		let this = self.lock();
 
-		Ok(RawStat {
-			perm: 0o555,
+		Ok(Statx {
+			mask: Statx::MASK_ALL,
+			blksize: 0,
+			attributes: 0,
+			nlink: 0,
 			uid: this.task.get_uid(),
 			gid: this.task.get_gid(),
+			mode: StatxMode::new(StatxMode::DIRECTORY, 0o555),
+			pad1: 0,
+			ino: 0,
 			size: 0,
-			file_type: 2,
-			access_time: TimeSpec::default(),
-			modify_fime: TimeSpec::default(),
-			change_time: TimeSpec::default(),
+			blocks: 0,
+			attributes_mask: 0,
+			atime: StatxTimeStamp::default(),
+			btime: StatxTimeStamp::default(),
+			ctime: StatxTimeStamp::default(),
+			mtime: StatxTimeStamp::default(),
+			rdev_major: 0,
+			rdev_minor: 0,
+			dev_major: 0,
+			dev_minor: 0,
 		})
 	}
 
@@ -382,16 +406,28 @@ impl Locked<ProcRootDirInode> {
 }
 
 impl Inode for Locked<ProcRootDirInode> {
-	fn stat(&self) -> Result<RawStat, Errno> {
-		Ok(RawStat {
-			perm: 0o555,
+	fn stat(&self) -> Result<Statx, Errno> {
+		Ok(Statx {
+			mask: Statx::MASK_ALL,
+			blksize: 0,
+			attributes: 0,
+			nlink: 0,
 			uid: 0,
 			gid: 0,
+			mode: StatxMode::new(StatxMode::DIRECTORY, 0o555),
+			pad1: 0,
+			ino: 0,
 			size: 0,
-			file_type: 2,
-			access_time: TimeSpec::default(),
-			modify_fime: TimeSpec::default(),
-			change_time: TimeSpec::default(),
+			blocks: 0,
+			attributes_mask: 0,
+			atime: StatxTimeStamp::default(),
+			btime: StatxTimeStamp::default(),
+			ctime: StatxTimeStamp::default(),
+			mtime: StatxTimeStamp::default(),
+			rdev_major: 0,
+			rdev_minor: 0,
+			dev_major: 0,
+			dev_minor: 0,
 		})
 	}
 

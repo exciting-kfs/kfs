@@ -27,6 +27,6 @@ rustflags = [
 	# 'trace_feature="partition-load_async"',
 	# '--cfg',
 	# 'trace_feature="ext2-read_inode"',
-	'--cfg',
-	'trace_feature="ext2-symlink"',
+	# '--cfg',
+	# 'trace_feature="ext2-symlink"',
 ]

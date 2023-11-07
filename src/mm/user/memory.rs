@@ -187,7 +187,12 @@ impl Memory {
 		let file_end_from_offset = file
 			.as_entry()
 			.and_then(|ent| ent.stat().ok())
-			.and_then(|stat| stat.size.checked_sub(offset))
+			.and_then(|stat| {
+				offset
+					.try_into()
+					.ok()
+					.and_then(|offset| stat.size.checked_sub(offset))
+			})
 			.unwrap_or_default();
 
 		let mapping_len = min(len, file_end_from_offset as usize);
