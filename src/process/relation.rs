@@ -66,7 +66,7 @@ impl Relation {
 	}
 
 	pub fn exit(&mut self, pid: Pid, status: ExitStatus) {
-		let zombie = Zombie::new(pid, self.pgroup.get_pgid(), status);
+		let zombie = Zombie::new(pid, self.get_pgroup(), self.get_session(), status);
 		self.family.exit(zombie);
 	}
 

@@ -25,7 +25,7 @@ pub fn sys_kill(pid: isize, sig: isize) -> Result<usize, Errno> {
 	match pid {
 		-1 => kill_everyone(&siginfo),
 		0 => kill_pgid(current.get_pgid(), &siginfo),
-		x if x < 0 => kill_pgid(Pgid::from_raw(-x as usize), &siginfo),
+		x if x < 0 => kill_pgid(unsafe { Pgid::from_raw(-x as usize) }, &siginfo),
 		x if x > 0 => kill_pid(Pid::from_raw(x as usize), &siginfo),
 		_ => unreachable!("bug"),
 	}

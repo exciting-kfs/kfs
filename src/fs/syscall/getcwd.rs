@@ -22,5 +22,5 @@ pub fn sys_getcwd(buf_ptr: usize, len: usize) -> Result<usize, Errno> {
 	buf[0..path_buf.len()].copy_from_slice(&path_buf);
 	buf[path_buf.len()] = b'\0';
 
-	Ok(buf_ptr)
+	Ok(path_buf.len())
 }

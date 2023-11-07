@@ -2,12 +2,14 @@ use core::mem::{self, size_of};
 use core::ptr::copy_nonoverlapping;
 
 use crate::interrupt::InterruptFrame;
+use crate::mm::user::verify::{verify_ptr, verify_ptr_mut};
 use crate::process::signal::sig_ctx::SigCtx;
 use crate::process::signal::sig_flag::SigFlag;
 use crate::process::signal::sig_handler::{SigAction, SigHandler};
 use crate::process::signal::sig_info::SigInfo;
 use crate::process::signal::sig_mask::SigMask;
 use crate::process::signal::sig_num::SigNum;
+use crate::scheduler::sleep::{sleep_and_yield, Sleep};
 use crate::{process::task::CURRENT, syscall::errno::Errno};
 
 use super::*;
@@ -27,7 +29,7 @@ pub fn sys_signal(num: usize, handler: usize) -> Result<usize, Errno> {
 	};
 
 	let mut table = unsafe { CURRENT.get_mut() }
-		.user_ext_ok_or(Errno::UnknownErrno)? // kernel task.
+		.user_ext_ok_or(Errno::ENOENT)? // kernel task.
 		.signal
 		.as_ref()
 		.table
@@ -51,7 +53,7 @@ pub fn sys_sigaction(
 	let num = validate_sig_num(num)?;
 
 	let mut table = unsafe { CURRENT.get_mut() }
-		.user_ext_ok_or(Errno::UnknownErrno)? // kernel task.
+		.user_ext_ok_or(Errno::ENOENT)? // kernel task.
 		.signal
 		.as_ref()
 		.table
@@ -85,7 +87,7 @@ pub fn sys_sigreturn(frame: &InterruptFrame, restart: &mut bool) -> Result<usize
 	unsafe {
 		// pr_debug!("sigreturn: {:p}, {}", sig_ctx, (*sig_ctx).intr);
 		let current = CURRENT.get_mut();
-		let signal = current.user_ext_ok_or(Errno::UnknownErrno)?.signal.as_ref();
+		let signal = current.user_ext_ok_or(Errno::ENOENT)?.signal.as_ref();
 
 		// restore the sig mask of the task.signal.
 		signal.overwrite_mask((*sig_ctx).mask);
@@ -101,6 +103,84 @@ pub fn sys_sigreturn(frame: &InterruptFrame, restart: &mut bool) -> Result<usize
 		restore_interrupt_frame(&(*sig_ctx).intr_frame);
 		restore_syscall_return((*sig_ctx).syscall_ret)
 	}
+}
+
+pub fn sys_sigsuspend(new_mask: usize) -> Result<usize, Errno> {
+	let current = unsafe { CURRENT.get_ref() };
+
+	let new_mask = *verify_ptr::<SigMask>(new_mask, current)?;
+
+	let old_mask = {
+		let mut curr_mask = current
+			.get_user_ext()
+			.expect("must be user process")
+			.signal
+			.lock_mask();
+
+		mem::replace(&mut *curr_mask, new_mask)
+	};
+
+	sleep_and_yield(Sleep::Light);
+
+	current
+		.get_user_ext()
+		.expect("must be user process")
+		.signal
+		.overwrite_mask(old_mask);
+
+	Err(Errno::EINTR)
+}
+
+enum SigProcMaskHow {
+	SigBlock,
+	SigUnblock,
+	SigSetMask,
+}
+
+impl TryFrom<usize> for SigProcMaskHow {
+	type Error = Errno;
+
+	fn try_from(value: usize) -> Result<Self, Self::Error> {
+		match value {
+			0 => Ok(Self::SigBlock),
+			1 => Ok(Self::SigUnblock),
+			2 => Ok(Self::SigSetMask),
+			_ => Err(Errno::EINVAL),
+		}
+	}
+}
+
+pub fn sys_sigprocmask(how: usize, set: usize, oldset: usize) -> Result<usize, Errno> {
+	let current = unsafe { CURRENT.get_ref() };
+
+	let how = SigProcMaskHow::try_from(how)?;
+
+	let set = verify_ptr::<SigMask>(set, current)?;
+
+	let mut mask = current
+		.get_user_ext()
+		.expect("must be user process")
+		.signal
+		.lock_mask();
+
+	let old_mask = *mask;
+
+	if oldset != 0 {
+		let oldset = verify_ptr_mut::<SigMask>(oldset, current)?;
+
+		*oldset = old_mask;
+	}
+
+	use SigProcMaskHow::*;
+	let new_mask = match how {
+		SigBlock => old_mask | *set,
+		SigUnblock => old_mask - *set,
+		SigSetMask => *set,
+	};
+
+	*mask = new_mask;
+
+	Ok(0)
 }
 
 unsafe fn restore_interrupt_frame(backup_frame: &InterruptFrame /* user stack */) {

@@ -20,7 +20,7 @@ pub enum Who {
 mod wait_option {
 	pub const WNOHANG: usize = 1 << 0;
 	pub const WUNTRACED: usize = 1 << 1; // not implemented.
-	pub const IMPLEMENTED_MASK: usize = WNOHANG;
+	pub const IMPLEMENTED_MASK: usize = WNOHANG + WUNTRACED; // TODO implement untraced
 }
 
 pub fn sys_waitpid(cpid: isize, stat_loc: *mut isize, option: usize) -> Result<usize, Errno> {
@@ -43,7 +43,7 @@ pub fn sys_waitpid(cpid: isize, stat_loc: *mut isize, option: usize) -> Result<u
 	let who = match cpid {
 		-1 => Who::Any,
 		0 => Who::Pgid(current.get_pgid()),
-		x if x < 0 => Who::Pgid(Pgid::from_raw(-x as usize)),
+		x if x < 0 => Who::Pgid(unsafe { Pgid::from_raw(-x as usize) }),
 		x if x > 0 => Who::Pid(Pid::from_raw(x as usize)),
 		_ => unreachable!("obviously unreachable..."),
 	};
@@ -52,7 +52,7 @@ pub fn sys_waitpid(cpid: isize, stat_loc: *mut isize, option: usize) -> Result<u
 
 	let ret = loop {
 		let result = current.waitpid(who);
-		if let Ok(z) = result {
+		if let Ok(z) = result.as_ref() {
 			unsafe { stat_loc.write(z.exit_status.as_raw() as isize) };
 		}
 

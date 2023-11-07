@@ -35,7 +35,7 @@ impl Pgid {
 		self.0
 	}
 
-	pub fn from_raw(raw: usize) -> Self {
+	pub unsafe fn from_raw(raw: usize) -> Self {
 		Pgid(raw)
 	}
 
@@ -66,7 +66,7 @@ impl Sid {
 		self.0
 	}
 
-	pub fn from_raw(raw: usize) -> Self {
+	pub unsafe fn from_raw(raw: usize) -> Self {
 		Sid(raw)
 	}
 

@@ -4,6 +4,7 @@ use bitflags::bitflags;
 use kfs_macro::interrupt_handler;
 
 use crate::interrupt::InterruptFrame;
+use crate::mm::alloc::virt::kmap;
 use crate::mm::alloc::Zone;
 use crate::mm::constant::PAGE_MASK;
 use crate::mm::page::PageFlag;
@@ -12,6 +13,7 @@ use crate::process::exit::exit_with_signal;
 use crate::process::signal::sig_num::SigNum;
 use crate::process::task::CURRENT;
 use crate::ptr::PageBox;
+use crate::PAGE_SIZE;
 use crate::{pr_err, pr_info, register};
 
 bitflags! {
@@ -95,6 +97,10 @@ fn handle_user_page_fault(vaddr: usize, error_code: ErrorCode) -> Result<(), ()>
 		.lock_memory();
 
 	let page = PageBox::new(Zone::High).map_err(|_| ())?;
+
+	let temp = kmap(page.as_phys_addr()).map_err(|_| ())?;
+
+	unsafe { temp.as_ptr().write_bytes(0, PAGE_SIZE) };
 
 	let (base, page_flags) = lookup_page_info(memory.get_vma(), vaddr, flags)?;
 

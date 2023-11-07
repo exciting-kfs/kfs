@@ -2,12 +2,12 @@ use core::mem::{self};
 
 use alloc::sync::Arc;
 
-use crate::config::{USTACK_BASE, USTACK_PAGES};
 use crate::elf::Elf;
 use crate::fs::path::Path;
 use crate::fs::vfs::{lookup_entry_follow, AccessFlag, IOFlag, Permission, RealEntry};
 use crate::interrupt::InterruptFrame;
 use crate::mm::user::memory::Memory;
+use crate::mm::user::string_vec::StringVec;
 use crate::mm::user::verify::verify_path;
 use crate::process::task::{Task, CURRENT};
 use crate::ptr::VirtPageBox;
@@ -46,10 +46,10 @@ pub fn sys_execve(
 	let elf = Elf::new(raw_bin.as_slice()).map_err(|_| Errno::ENOEXEC)?;
 	let entry_point = elf.get_entry_point();
 
-	let mut new_memory = Memory::from_elf(USTACK_BASE, USTACK_PAGES, elf)?;
+	let argv = StringVec::new(argv, current)?;
+	let envp = StringVec::new(envp, current)?;
 
-	let argv = new_memory.push_string_array(argv, current)?;
-	let envp = new_memory.push_string_array(envp, current)?;
+	let new_memory = Memory::from_elf(elf, argv, envp)?;
 
 	new_memory.pick_up();
 
@@ -58,23 +58,14 @@ pub fn sys_execve(
 		.expect("must be user process")
 		.lock_memory();
 
-	mem::drop(mem::replace(&mut *memory, new_memory));
-
 	unsafe {
-		frame.copy_from_nonoverlapping(&InterruptFrame::new_user(entry_point, USTACK_BASE), 1);
-
-		let argc = argv.len() - 1;
-		for x in Some(argc)
-			.into_iter()
-			.chain(argv.into_iter())
-			.chain(envp.into_iter())
-			.chain(Some(0))
-			.rev()
-		{
-			(*frame).esp -= 4;
-			((*frame).esp as *mut usize).write(x);
-		}
+		frame.copy_from_nonoverlapping(
+			&InterruptFrame::new_user(entry_point, new_memory.get_stack_pointer()),
+			1,
+		);
 	};
+
+	mem::drop(mem::replace(&mut *memory, new_memory));
 
 	Ok(0)
 }

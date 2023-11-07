@@ -62,6 +62,14 @@ impl VfsHandle {
 		}
 	}
 
+	pub fn ioctl(&self, request: usize, argp: usize) -> Result<usize, Errno> {
+		use VfsHandle::*;
+		match self {
+			File(f) => f.ioctl(request, argp),
+			Socket(_) | Dir(_) => Err(Errno::ENOTTY),
+		}
+	}
+
 	pub fn as_entry(&self) -> Option<VfsEntry> {
 		use VfsHandle::*;
 		match self {
@@ -134,6 +142,10 @@ impl VfsFileHandle {
 
 	pub fn lseek(&self, offset: isize, whence: Whence) -> Result<usize, Errno> {
 		self.inner.lseek(offset, whence)
+	}
+
+	pub fn ioctl(&self, request: usize, argp: usize) -> Result<usize, Errno> {
+		self.inner.ioctl(request, argp)
 	}
 
 	pub fn close(&self) -> Result<(), Errno> {
@@ -274,6 +286,9 @@ pub trait FileHandle {
 	fn read(&self, buf: &mut [u8], flags: IOFlag) -> Result<usize, Errno>;
 	fn write(&self, buf: &[u8], flags: IOFlag) -> Result<usize, Errno>;
 	fn lseek(&self, offset: isize, whence: Whence) -> Result<usize, Errno>;
+	fn ioctl(&self, _request: usize, _argp: usize) -> Result<usize, Errno> {
+		Err(Errno::ENOTTY)
+	}
 	fn close(&self) -> Result<(), Errno> {
 		Ok(())
 	}

@@ -10,7 +10,7 @@ const FDTABLE_SIZE: usize = 256;
 pub struct Fd(usize);
 
 impl Fd {
-	#[inline(always)]
+	#[inline]
 	pub fn index(&self) -> usize {
 		self.0
 	}
@@ -49,8 +49,27 @@ impl FdTable {
 
 	pub fn close(&mut self, fd: Fd) -> Result<VfsHandle, Errno> {
 		let entry = self.0.index_mut(fd.index());
-		let entry = take(entry);
-		entry.ok_or(Errno::EBADF)
+
+		take(entry).ok_or(Errno::EBADF)
+	}
+
+	pub fn dup2(&mut self, src: Fd, dst: Fd) -> Result<(), Errno> {
+		let src = self.0[src.index()].clone().ok_or(Errno::EBADF)?;
+
+		// FIXME: close handle
+		self.close(dst.clone())?;
+
+		self.0[dst.index()] = Some(src);
+
+		Ok(())
+	}
+
+	pub fn dup(&mut self, src: Fd) -> Result<Fd, Errno> {
+		let src = self.0[src.index()].clone().ok_or(Errno::EBADF)?;
+
+		let new_fd = self.alloc_fd(src).ok_or(Errno::EMFILE)?;
+
+		Ok(new_fd)
 	}
 
 	pub fn clear(&mut self) {

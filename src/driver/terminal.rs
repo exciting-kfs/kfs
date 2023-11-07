@@ -2,6 +2,7 @@ pub mod ascii;
 
 mod console;
 mod cursor;
+mod termios;
 mod tty;
 
 pub use tty::TTYFile;

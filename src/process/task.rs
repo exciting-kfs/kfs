@@ -3,12 +3,13 @@ use core::sync::atomic::{AtomicBool, Ordering};
 
 use alloc::sync::Arc;
 
-use crate::config::{USTACK_BASE, USTACK_PAGES};
+use crate::config::USTACK_BASE;
 use crate::elf::Elf;
 use crate::fs::vfs::{VfsDirEntry, ROOT_DIR_ENTRY};
 use crate::fs::{create_task_node, delete_task_node};
 use crate::interrupt::InterruptFrame;
 use crate::mm::user::memory::Memory;
+use crate::mm::user::string_vec::StringVec;
 use crate::process::relation::family::zombie::Zombie;
 use crate::process::signal::sig_info::SigInfo;
 use crate::process::signal::sig_num::SigNum;
@@ -104,7 +105,7 @@ impl Task {
 
 		let kstack =
 			Stack::new_user(elf.get_entry_point(), USTACK_BASE - 32).map_err(|_| Errno::ENOMEM)?;
-		let memory = Memory::from_elf(USTACK_BASE, USTACK_PAGES, elf)?;
+		let memory = Memory::from_elf(elf, StringVec::new_null(), StringVec::new_null())?;
 
 		let task = Arc::new_cyclic(|w| Task {
 			kstack,
@@ -181,6 +182,7 @@ impl Task {
 		let memory = user_ext.lock_memory().clone()?;
 		let fd_table = user_ext.lock_fd_table().clone_for_fork();
 		let signal = user_ext.signal.clone_for_fork();
+		let tls = user_ext.tls.lock().clone();
 
 		let new_task = Arc::new_cyclic(|w| {
 			let relation = user_ext
@@ -200,7 +202,7 @@ impl Task {
 					relation: Locked::new(relation),
 					fd_table: Arc::new(Locked::new(fd_table)),
 					signal: Arc::new(signal),
-					tls: Locked::new([SystemDesc::new_null(); 3]),
+					tls: Locked::new(tls),
 				}),
 			}
 		});
@@ -298,7 +300,7 @@ impl Task {
 			.lock_relation();
 
 		let result = relation.waitpid(who);
-		if let Ok(z) = result {
+		if let Ok(z) = result.as_ref() {
 			Pid::deallocate(z.pid);
 		}
 
