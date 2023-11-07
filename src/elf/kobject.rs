@@ -9,9 +9,7 @@ pub use module::{
 
 use alloc::collections::BTreeMap;
 
-use crate::elf::check_size_and_deref_array;
 use crate::elf::relocation::RelocationType;
-use crate::elf::StringTable;
 use crate::elf::{Relocation, SectionHdrNdx, SectionType};
 
 use crate::ptr::VirtPageBox;
@@ -92,16 +90,7 @@ impl<'a> KernelObject<'a> {
 	}
 
 	fn get_section_offset_by_name(&self, name: &str) -> Result<usize, ElfError> {
-		let sh_strtab =
-			self.load_sections.elf.section_hdrs[self.load_sections.elf.elf_hdr.e_shstrndx as usize];
-
-		let raw = check_size_and_deref_array::<u8>(
-			self.load_sections.elf.raw,
-			sh_strtab.sh_offset,
-			sh_strtab.sh_size as usize,
-		)?;
-		let tab = StringTable::new(raw);
-
+		let tab = &self.load_sections.elf.sh_string_table;
 		for (i, hdr) in self.load_sections.elf.section_hdrs.iter().enumerate() {
 			let section_name = tab.lookup_by_idx(hdr.sh_name as usize)?;
 			if section_name == name {

@@ -6,6 +6,8 @@ use crate::mm::alloc::virt::{kmap, kunmap};
 use crate::mm::alloc::Zone;
 use crate::{mm::constant::PAGE_SIZE, ptr::PageBox, syscall::errno::Errno};
 
+use super::auxv::AuxEntry;
+
 pub struct UserStack {
 	pages: VecDeque<PageBox>,
 	next_offset: usize,
@@ -38,6 +40,16 @@ impl UserStack {
 		}
 
 		kunmap(page.as_ptr() as usize);
+
+		Ok(())
+	}
+
+	pub fn push_aux_entry(&mut self, aux: AuxEntry) -> Result<(), Errno> {
+		let data = aux.serialize();
+
+		for x in data {
+			self.push(x)?;
+		}
 
 		Ok(())
 	}

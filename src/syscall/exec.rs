@@ -15,7 +15,7 @@ use crate::syscall::errno::Errno;
 
 const PATH_MAX: usize = 128;
 
-fn read_user_binary(path: Path, task: &Arc<Task>) -> Result<VirtPageBox, Errno> {
+pub fn read_user_binary(path: Path, task: &Arc<Task>) -> Result<VirtPageBox, Errno> {
 	let entry = lookup_entry_follow(&path, task).and_then(|x| x.downcast_file())?;
 
 	entry.access(Permission::ANY_EXECUTE, task)?;
@@ -44,7 +44,6 @@ pub fn sys_execve(
 
 	let raw_bin = read_user_binary(path, current)?;
 	let elf = Elf::new(raw_bin.as_slice()).map_err(|_| Errno::ENOEXEC)?;
-	let entry_point = elf.get_entry_point();
 
 	let argv = StringVec::new(argv, current)?;
 	let envp = StringVec::new(envp, current)?;
@@ -60,7 +59,7 @@ pub fn sys_execve(
 
 	unsafe {
 		frame.copy_from_nonoverlapping(
-			&InterruptFrame::new_user(entry_point, new_memory.get_stack_pointer()),
+			&InterruptFrame::new_user(new_memory.entry_point, new_memory.get_stack_pointer()),
 			1,
 		);
 	};

@@ -15,7 +15,7 @@ pub use segment::{ProgramHdr, SegmentFlag, SegmentType};
 pub use strtab::StringTable;
 pub use symtab::{SectionHdrNdx, Symbol};
 
-use crate::{mm::user::vma::AreaFlag, syscall::errno::Errno};
+use crate::{fs::path::Path, mm::user::vma::AreaFlag, syscall::errno::Errno};
 use core::{mem::size_of, slice::from_raw_parts};
 
 pub struct Elf<'a> {
@@ -25,6 +25,7 @@ pub struct Elf<'a> {
 	pub section_hdrs: &'a [SectionHdr],
 	pub symbol_table: &'a [Symbol],
 	pub string_table: StringTable<'a>,
+	pub sh_string_table: StringTable<'a>,
 }
 
 #[derive(Debug)]
@@ -94,6 +95,13 @@ impl<'a> Elf<'a> {
 			elf_hdr.e_shnum as usize,
 		)?;
 
+		let sh_string_table_hdr = section_hdrs[elf_hdr.e_shstrndx as usize];
+		let sh_string_table = StringTable::new(check_size_and_deref_array::<u8>(
+			raw,
+			sh_string_table_hdr.sh_offset,
+			sh_string_table_hdr.sh_size as usize,
+		)?);
+
 		let string_table = StringTable::new(
 			section_hdrs
 				.iter()
@@ -125,6 +133,7 @@ impl<'a> Elf<'a> {
 			section_hdrs,
 			symbol_table,
 			string_table,
+			sh_string_table,
 		})
 	}
 
@@ -138,6 +147,29 @@ impl<'a> Elf<'a> {
 
 	pub fn get_entry_point(&self) -> usize {
 		self.elf_hdr.e_entry
+	}
+
+	pub fn get_interpreter(&self) -> Option<Path> {
+		let interp_section = self.section_hdrs.iter().find(|hdr| {
+			self.sh_string_table
+				.lookup_by_idx(hdr.sh_name as usize)
+				.is_ok_and(|name| name == ".interp")
+		})?;
+
+		if interp_section.sh_offset + interp_section.sh_size as usize >= self.raw.len() {
+			return None;
+		}
+
+		Some(Path::new(
+			&self.raw[interp_section.sh_offset
+				..interp_section.sh_offset + interp_section.sh_size as usize - 1],
+		))
+	}
+
+	pub fn is_position_independent(&self) -> bool {
+		self.loadable_sections()
+			.next()
+			.is_some_and(|x| x.vaddr == 0)
 	}
 }
 
