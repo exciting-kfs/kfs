@@ -8,7 +8,7 @@ use crate::{
 	},
 	syscall::errno::Errno,
 };
-
+#[repr(u8)]
 enum Cmd {
 	DupFd,
 	GetFd,
