@@ -4,7 +4,7 @@ use alloc::sync::Arc;
 
 use crate::elf::Elf;
 use crate::fs::path::Path;
-use crate::fs::vfs::{lookup_entry_follow, AccessFlag, IOFlag, Permission, RealEntry};
+use crate::fs::vfs::{lookup_entry_follow, AccessFlag, Entry, IOFlag, Permission};
 use crate::interrupt::InterruptFrame;
 use crate::mm::user::memory::Memory;
 use crate::mm::user::string_vec::StringVec;

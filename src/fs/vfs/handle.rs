@@ -88,7 +88,6 @@ impl VfsHandle {
 
 	pub fn deep_copy(&self) -> Result<Self, Errno> {
 		let ent = self.as_entry().ok_or(Errno::EINVAL)?;
-		let real = ent.downcast_real()?;
 
 		use VfsHandle::*;
 		let (io_flags, access_flags) = match self {
@@ -97,7 +96,7 @@ impl VfsHandle {
 			Dir(d) => (d.io_flags, d.access_flags),
 		};
 
-		real.open(io_flags, access_flags, unsafe { CURRENT.get_ref() })
+		ent.open(io_flags, access_flags, unsafe { CURRENT.get_ref() })
 	}
 
 	pub fn set_io_flags(&self, new_flags: IOFlag) -> Result<(), Errno> {

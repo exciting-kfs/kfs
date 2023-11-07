@@ -9,7 +9,7 @@ use crate::{
 		ide::ide_id::NR_IDE_DEV,
 		partition::{get_block_device, Partition, NR_PRIMARY},
 	},
-	fs::vfs::{Permission, RawStat, RealInode, TimeSpec, VfsInode},
+	fs::vfs::{Inode, Permission, RawStat, TimeSpec, VfsInode},
 	syscall::errno::Errno,
 };
 
@@ -42,7 +42,7 @@ impl DevPart {
 	}
 }
 
-impl RealInode for DevPart {
+impl Inode for DevPart {
 	fn stat(&self) -> Result<RawStat, Errno> {
 		Ok(RawStat {
 			perm: 0o666,

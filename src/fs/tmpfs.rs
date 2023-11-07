@@ -7,8 +7,8 @@ use alloc::{boxed::Box, collections::BTreeMap};
 
 use super::path::Path;
 use super::vfs::{
-	DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident, MemoryFileSystem,
-	RawStat, RealInode, SuperBlock, SymLinkInode, TimeSpec, VfsInode, Whence,
+	DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident, Inode, MemoryFileSystem,
+	RawStat, SuperBlock, SymLinkInode, TimeSpec, VfsInode, Whence,
 };
 use crate::fs::vfs::{KfsDirent, Permission};
 use crate::mm::util::next_align;
@@ -88,7 +88,7 @@ impl FileInode for TmpFileInode {
 	}
 }
 
-impl RealInode for TmpFileInode {
+impl Inode for TmpFileInode {
 	fn stat(&self) -> Result<RawStat, Errno> {
 		Ok(RawStat {
 			perm: self.perm.lock().bits(),
@@ -235,7 +235,7 @@ impl TmpDirInode {
 	}
 }
 
-impl RealInode for Locked<TmpDirInode> {
+impl Inode for Locked<TmpDirInode> {
 	fn stat(&self) -> Result<RawStat, Errno> {
 		let this = self.lock();
 
@@ -409,6 +409,29 @@ pub struct TmpSymLink {
 impl TmpSymLink {
 	pub fn new(target: Path) -> Self {
 		Self { target }
+	}
+}
+
+impl Inode for TmpSymLink {
+	fn stat(&self) -> Result<RawStat, Errno> {
+		Ok(RawStat {
+			perm: 0,
+			uid: 0,
+			gid: 0,
+			size: 0,
+			file_type: 7,
+			access_time: TimeSpec::default(),
+			modify_fime: TimeSpec::default(),
+			change_time: TimeSpec::default(),
+		})
+	}
+
+	fn chown(&self, _owner: usize, _group: usize) -> Result<(), Errno> {
+		Ok(())
+	}
+
+	fn chmod(&self, _perm: Permission) -> Result<(), Errno> {
+		Ok(())
 	}
 }
 

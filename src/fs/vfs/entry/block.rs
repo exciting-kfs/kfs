@@ -7,14 +7,12 @@ use alloc::{
 use crate::{
 	fs::{
 		devfs::partition::{DevPart, PartBorrow},
-		vfs::RealInode,
+		vfs::Inode,
 	},
 	syscall::errno::Errno,
 };
 
-use super::{Entry, Ident, RealEntry, VfsDirEntry};
-
-pub type ArcVfsBlockEntry = Arc<VfsBlockEntry>;
+use super::{Entry, Ident, VfsDirEntry};
 
 pub struct VfsBlockEntry {
 	name: Rc<Vec<u8>>,
@@ -37,14 +35,11 @@ impl Entry for Arc<VfsBlockEntry> {
 		Ident(self.name.clone())
 	}
 
+	fn get_inode(&self) -> &dyn Inode {
+		&*self.dev
+	}
+
 	fn parent_weak(&self) -> Weak<VfsDirEntry> {
 		self.parent.clone()
-	}
-}
-
-impl RealEntry for Arc<VfsBlockEntry> {
-	fn real_inode(&self) -> Arc<dyn RealInode> {
-		let dev = self.dev.clone();
-		dev
 	}
 }

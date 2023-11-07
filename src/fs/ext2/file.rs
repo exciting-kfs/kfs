@@ -207,7 +207,7 @@ impl FileInode {
 	}
 }
 
-impl vfs::RealInode for FileInode {
+impl vfs::Inode for FileInode {
 	fn stat(&self) -> Result<vfs::RawStat, Errno> {
 		Ok(self.inner().info().stat())
 	}

@@ -16,7 +16,7 @@ use crate::{
 
 use super::path::{format_path, Path};
 use super::vfs::{
-	self, lookup_entry_at_follow, Entry, FileSystem, RealInode, SuperBlock, TimeSpec, VfsDirEntry,
+	self, lookup_entry_at_follow, Entry, FileSystem, Inode, SuperBlock, TimeSpec, VfsDirEntry,
 	VfsHandle,
 };
 use super::{
@@ -188,7 +188,7 @@ impl ProcFdDirInode {
 	}
 }
 
-impl RealInode for Locked<ProcFdDirInode> {
+impl Inode for Locked<ProcFdDirInode> {
 	fn stat(&self) -> Result<RawStat, Errno> {
 		let this = self.lock();
 		Ok(RawStat {
@@ -283,7 +283,7 @@ impl ProcDirInode {
 	}
 }
 
-impl RealInode for Locked<ProcDirInode> {
+impl Inode for Locked<ProcDirInode> {
 	fn stat(&self) -> Result<RawStat, Errno> {
 		let this = self.lock();
 
@@ -381,7 +381,7 @@ impl Locked<ProcRootDirInode> {
 	}
 }
 
-impl RealInode for Locked<ProcRootDirInode> {
+impl Inode for Locked<ProcRootDirInode> {
 	fn stat(&self) -> Result<RawStat, Errno> {
 		Ok(RawStat {
 			perm: 0o555,

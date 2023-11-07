@@ -2,7 +2,7 @@ use alloc::boxed::Box;
 
 use crate::{
 	driver::terminal::TTYFile,
-	fs::vfs::{FileHandle, FileInode, Permission, RawStat, RealInode, TimeSpec},
+	fs::vfs::{FileHandle, FileInode, Inode, Permission, RawStat, TimeSpec},
 	process::task::CURRENT,
 	syscall::errno::Errno,
 };
@@ -17,7 +17,7 @@ impl DevTTY {
 	}
 }
 
-impl RealInode for DevTTY {
+impl Inode for DevTTY {
 	fn stat(&self) -> Result<RawStat, Errno> {
 		Ok(RawStat {
 			perm: 0o666,

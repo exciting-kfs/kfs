@@ -293,7 +293,7 @@ impl DirInode {
 	}
 }
 
-impl vfs::RealInode for DirInode {
+impl vfs::Inode for DirInode {
 	fn stat(&self) -> Result<vfs::RawStat, Errno> {
 		Ok(self.inner().info().stat())
 	}

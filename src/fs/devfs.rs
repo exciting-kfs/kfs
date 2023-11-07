@@ -20,8 +20,8 @@ use self::{null::DevNull, partition::PARTITIONS, tty::DevTTY, zero::DevZero};
 use super::{
 	tmpfs::{TmpDir, TmpSb},
 	vfs::{
-		DirHandle, DirInode, FileInode, FileSystem, Ident, MemoryFileSystem, Permission, RawStat,
-		RealInode, SuperBlock, SymLinkInode, TimeSpec, VfsDirEntry, VfsInode,
+		DirHandle, DirInode, FileInode, FileSystem, Ident, Inode, MemoryFileSystem, Permission,
+		RawStat, SuperBlock, SymLinkInode, TimeSpec, VfsDirEntry, VfsInode,
 	},
 };
 
@@ -119,7 +119,7 @@ impl DevDirInode {
 	}
 }
 
-impl RealInode for DevDirInode {
+impl Inode for DevDirInode {
 	fn stat(&self) -> Result<RawStat, Errno> {
 		Ok(RawStat {
 			perm: 0o555,

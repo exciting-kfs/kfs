@@ -4,7 +4,7 @@ use alloc::{
 };
 use kernel::{
 	elf::kobject::KernelModule,
-	fs::vfs::{FileHandle, FileInode, Permission, RawStat, RealInode, TimeSpec},
+	fs::vfs::{FileHandle, FileInode, Inode, Permission, RawStat, TimeSpec},
 	syscall::errno::Errno,
 };
 
@@ -22,7 +22,7 @@ impl TimestampInode {
 	}
 }
 
-impl RealInode for TimestampInode {
+impl Inode for TimestampInode {
 	fn stat(&self) -> Result<RawStat, Errno> {
 		Ok(RawStat {
 			perm: 0o666,

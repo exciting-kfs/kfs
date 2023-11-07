@@ -8,16 +8,15 @@ use alloc::{
 };
 
 use crate::{
-	fs::vfs::{entry::block::VfsBlockEntry, RealInode},
+	fs::vfs::{entry::block::VfsBlockEntry, Inode},
 	process::task::Task,
 	sync::{LocalLocked, Locked},
 	syscall::errno::Errno,
 };
 
 use super::{
-	real::RealEntry, AccessFlag, DirInode, Entry, IOFlag, Ident, Permission, SuperBlock,
-	VfsDirHandle, VfsEntry, VfsFileEntry, VfsInode, VfsSocketEntry, VfsSymLinkEntry,
-	ROOT_DIR_ENTRY,
+	AccessFlag, DirInode, Entry, IOFlag, Ident, Permission, SuperBlock, VfsDirHandle, VfsEntry,
+	VfsFileEntry, VfsInode, VfsSocketEntry, VfsSymLinkEntry, ROOT_DIR_ENTRY,
 };
 
 pub struct VfsDirEntry {
@@ -158,7 +157,7 @@ impl VfsDirEntry {
 				Weak::default(),
 				Arc::downgrade(self),
 			))),
-			SymLink(inode) => VfsEntry::Symlink(Arc::new(VfsSymLinkEntry::new(
+			SymLink(inode) => VfsEntry::SymLink(Arc::new(VfsSymLinkEntry::new(
 				Rc::new(name.to_vec()),
 				inode,
 				Arc::downgrade(self),
@@ -312,16 +311,15 @@ impl VfsDirEntry {
 }
 
 impl Entry for Arc<VfsDirEntry> {
-	fn parent_weak(&self) -> Weak<VfsDirEntry> {
-		self.parent.clone()
-	}
 	fn get_name(&self) -> Ident {
 		Ident(self.name.clone())
 	}
-}
 
-impl RealEntry for Arc<VfsDirEntry> {
-	fn real_inode(&self) -> Arc<dyn RealInode> {
-		self.inode.clone()
+	fn get_inode(&self) -> &dyn Inode {
+		&*self.inode
+	}
+
+	fn parent_weak(&self) -> Weak<VfsDirEntry> {
+		self.parent.clone()
 	}
 }

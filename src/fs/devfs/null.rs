@@ -1,13 +1,13 @@
 use alloc::boxed::Box;
 
 use crate::{
-	fs::vfs::{FileHandle, FileInode, IOFlag, Permission, RawStat, RealInode, TimeSpec, Whence},
+	fs::vfs::{FileHandle, FileInode, IOFlag, Inode, Permission, RawStat, TimeSpec, Whence},
 	syscall::errno::Errno,
 };
 
 pub struct DevNull;
 
-impl RealInode for DevNull {
+impl Inode for DevNull {
 	fn stat(&self) -> Result<RawStat, Errno> {
 		Ok(RawStat {
 			perm: 0o666,

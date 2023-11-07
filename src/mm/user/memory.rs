@@ -14,7 +14,7 @@ use core::slice::{from_raw_parts, from_raw_parts_mut};
 use crate::config::{TRAMPOLINE_BASE, USTACK_BASE, USTACK_PAGES};
 use crate::elf::{Elf, ProgramHdr};
 use crate::fs::path::Path;
-use crate::fs::vfs::{RealEntry, VfsHandle, Whence};
+use crate::fs::vfs::{Entry, VfsHandle, Whence};
 use crate::mm::alloc::page::free_pages;
 use crate::mm::alloc::virt::{kmap, kunmap};
 use crate::mm::alloc::Zone;
@@ -186,8 +186,7 @@ impl Memory {
 
 		let file_end_from_offset = file
 			.as_entry()
-			.and_then(|e| e.downcast_real().ok())
-			.and_then(|real| real.stat().ok())
+			.and_then(|ent| ent.stat().ok())
 			.and_then(|stat| stat.size.checked_sub(offset))
 			.unwrap_or_default();
 

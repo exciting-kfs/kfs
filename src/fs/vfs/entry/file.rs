@@ -4,11 +4,10 @@ use alloc::{
 	vec::Vec,
 };
 
-use crate::{fs::vfs::RealInode, process::task::Task, syscall::errno::Errno};
+use crate::{fs::vfs::Inode, process::task::Task, syscall::errno::Errno};
 
 use super::{
-	real::RealEntry, AccessFlag, Entry, FileInode, IOFlag, Ident, Permission, SuperBlock,
-	VfsDirEntry, VfsFileHandle,
+	AccessFlag, Entry, FileInode, IOFlag, Ident, Permission, SuperBlock, VfsDirEntry, VfsFileHandle,
 };
 
 pub struct VfsFileEntry {
@@ -55,17 +54,15 @@ impl VfsFileEntry {
 }
 
 impl Entry for Arc<VfsFileEntry> {
-	fn parent_weak(&self) -> Weak<VfsDirEntry> {
-		self.parent.clone()
-	}
-
 	fn get_name(&self) -> Ident {
 		Ident(self.name.clone())
 	}
-}
 
-impl RealEntry for Arc<VfsFileEntry> {
-	fn real_inode(&self) -> Arc<dyn RealInode> {
-		self.inode.clone()
+	fn get_inode(&self) -> &dyn Inode {
+		&*self.inode
+	}
+
+	fn parent_weak(&self) -> Weak<VfsDirEntry> {
+		self.parent.clone()
 	}
 }

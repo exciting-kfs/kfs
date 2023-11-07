@@ -144,6 +144,37 @@ pub struct RawStat {
 	pub change_time: TimeSpec,
 }
 
+#[repr(C)]
+pub struct StatxTimeStamp {
+	pub sec: i64,
+	pub nsec: u32,
+	pub pad: i32,
+}
+
+#[repr(C)]
+pub struct Statx {
+	pub mask: u32,
+	pub blksize: u32,
+	pub attributes: u64,
+	pub nlink: u32,
+	pub uid: u32,
+	pub gid: u32,
+	pub mode: u16,
+	pub pad1: u16,
+	pub ino: u64,
+	pub size: u64,
+	pub blocks: u64,
+	pub attributes_mask: u64,
+	pub atime: StatxTimeStamp,
+	pub btime: StatxTimeStamp,
+	pub ctime: StatxTimeStamp,
+	pub mtime: StatxTimeStamp,
+	pub rdev_major: u32,
+	pub rdev_minor: u32,
+	pub dev_major: u32,
+	pub dev_minor: u32,
+}
+
 fn default_access(
 	file_uid: usize,
 	file_gid: usize,
@@ -167,7 +198,7 @@ fn default_access(
 	return false;
 }
 
-pub trait RealInode {
+pub trait Inode {
 	fn stat(&self) -> Result<RawStat, Errno>;
 	fn chown(&self, owner: usize, group: usize) -> Result<(), Errno>;
 	fn chmod(&self, perm: Permission) -> Result<(), Errno>;
@@ -183,7 +214,7 @@ pub trait RealInode {
 	}
 }
 
-pub trait DirInode: RealInode {
+pub trait DirInode: Inode {
 	fn open(&self) -> Result<Box<dyn DirHandle>, Errno>;
 	fn lookup(&self, name: &[u8]) -> Result<VfsInode, Errno>;
 	fn mkdir(&self, name: &[u8], perm: Permission) -> Result<Arc<dyn DirInode>, Errno>;
@@ -193,12 +224,12 @@ pub trait DirInode: RealInode {
 	fn symlink(&self, target: &[u8], name: &[u8]) -> Result<Arc<dyn SymLinkInode>, Errno>;
 }
 
-pub trait FileInode: RealInode {
+pub trait FileInode: Inode {
 	fn open(&self) -> Result<Box<dyn FileHandle>, Errno>;
 	fn truncate(&self, length: isize) -> Result<(), Errno>;
 }
 
-pub trait SymLinkInode {
+pub trait SymLinkInode: Inode {
 	fn target(&self) -> Result<Path, Errno>;
 }
 
@@ -224,7 +255,7 @@ impl SocketInode {
 	}
 }
 
-impl RealInode for SocketInode {
+impl Inode for SocketInode {
 	fn stat(&self) -> Result<RawStat, Errno> {
 		Ok(RawStat {
 			perm: self.perm.lock().bits(),

@@ -2,7 +2,7 @@ use alloc::sync::Arc;
 
 use crate::fs::change_cwd;
 use crate::fs::path::Path;
-use crate::fs::vfs::{lookup_entry_follow, Permission, RealEntry, VfsDirEntry};
+use crate::fs::vfs::{lookup_entry_follow, Entry, Permission, VfsDirEntry};
 use crate::process::task::Task;
 use crate::{mm::user::verify::verify_path, process::task::CURRENT, syscall::errno::Errno};
 

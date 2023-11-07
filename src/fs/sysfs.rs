@@ -8,7 +8,7 @@ use crate::sync::Locked;
 use crate::syscall::errno::Errno;
 
 use super::tmpfs::TmpDirInode;
-use super::vfs::{self, FileSystem, RealInode, SuperBlock, TimeSpec, VfsDirEntry};
+use super::vfs::{self, FileSystem, Inode, SuperBlock, TimeSpec, VfsDirEntry};
 use super::{
 	tmpfs::TmpDir,
 	vfs::{
@@ -82,7 +82,7 @@ impl ModuleDirInode {
 	}
 }
 
-impl RealInode for ModuleDirInode {
+impl Inode for ModuleDirInode {
 	fn stat(&self) -> Result<RawStat, Errno> {
 		Ok(RawStat {
 			perm: 0o500,
@@ -164,7 +164,7 @@ impl SysRootDirInode {
 	}
 }
 
-impl RealInode for Locked<SysRootDirInode> {
+impl Inode for Locked<SysRootDirInode> {
 	fn stat(&self) -> Result<RawStat, Errno> {
 		Ok(RawStat {
 			perm: 0o555,

@@ -30,7 +30,7 @@ pub use mkdir::sys_mkdir;
 pub use mount::{sys_mount, sys_umount};
 pub use open::{sys_creat, sys_open};
 pub use read::sys_read;
-pub use stat::{sys_fstat, sys_stat};
+pub use stat::sys_statx;
 pub use symlink::sys_symlink;
 pub use truncate::sys_truncate;
 pub use unlink::{sys_rmdir, sys_unlink};
@@ -50,3 +50,7 @@ pub fn get_file(fd: isize) -> Result<VfsHandle, Errno> {
 
 	fd_table.get_file(fd).ok_or(Errno::EBADF)
 }
+
+pub const AT_FDCWD: isize = -100;
+pub const AT_EMPTY_PATH: usize = 0x1000;
+pub const AT_SYMLINK_NOFOLLOW: usize = 0x100;

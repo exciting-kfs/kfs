@@ -4,7 +4,10 @@ use alloc::{
 	vec::Vec,
 };
 
-use crate::{fs::path::Path, syscall::errno::Errno};
+use crate::{
+	fs::{path::Path, vfs::Inode},
+	syscall::errno::Errno,
+};
 
 use super::{Entry, Ident, SuperBlock, SymLinkInode, VfsDirEntry};
 
@@ -38,10 +41,15 @@ impl VfsSymLinkEntry {
 }
 
 impl Entry for Arc<VfsSymLinkEntry> {
-	fn parent_weak(&self) -> Weak<VfsDirEntry> {
-		self.parent.clone()
-	}
 	fn get_name(&self) -> Ident {
 		Ident(self.name.clone())
+	}
+
+	fn get_inode(&self) -> &dyn Inode {
+		&*self.inode
+	}
+
+	fn parent_weak(&self) -> Weak<VfsDirEntry> {
+		self.parent.clone()
 	}
 }

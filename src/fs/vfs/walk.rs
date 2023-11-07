@@ -5,7 +5,7 @@ use crate::fs::vfs::{Entry, ROOT_DIR_ENTRY};
 use crate::process::task::Task;
 use crate::syscall::errno::Errno;
 
-use super::{VfsDirEntry, VfsEntry, VfsRealEntry};
+use super::{VfsDirEntry, VfsEntry};
 
 fn do_lookup_base_entry(
 	base_kind: Base,
@@ -43,8 +43,7 @@ fn do_lookup_entry_at(
 	for comp in path.components() {
 		use VfsEntry::*;
 		curr = match curr {
-			Real(r) => r.downcast_dir(),
-			Symlink(ref s) => match follow_mid_symlink {
+			SymLink(ref s) => match follow_mid_symlink {
 				true => curr.parent_dir(task).and_then(|pdir| {
 					do_lookup_entry_at(
 						pdir,
@@ -58,13 +57,15 @@ fn do_lookup_entry_at(
 				}),
 				false => Err(Errno::ELOOP),
 			},
+			Dir(d) => Ok(d),
+			_ => Err(Errno::ENOTDIR),
 		}
 		.and_then(|dir| dir.lookup(comp, task))?;
 	}
 
 	if follow_last_symlink {
 		use VfsEntry::*;
-		if let Symlink(s) = curr {
+		if let SymLink(s) = curr {
 			curr = do_lookup_entry_at(
 				s.parent_dir(task)?,
 				&s.target()?,
@@ -79,15 +80,25 @@ fn do_lookup_entry_at(
 	Ok(curr)
 }
 
+pub fn lookup_entry(
+	base: Arc<VfsDirEntry>,
+	path: &Path,
+	task: &Arc<Task>,
+	follow_mid_symlink: bool,
+	follow_last_symlink: bool,
+) -> Result<VfsEntry, Errno> {
+	do_lookup_entry_at(base, path, task, follow_mid_symlink, follow_last_symlink, 0)
+}
+
 pub fn lookup_entry_at_follow(
 	base: Arc<VfsDirEntry>,
 	path: &Path,
 	task: &Arc<Task>,
-) -> Result<VfsRealEntry, Errno> {
-	do_lookup_entry_at(base, path, task, true, true, 0).map(|x| x.unwrap_real())
+) -> Result<VfsEntry, Errno> {
+	do_lookup_entry_at(base, path, task, true, true, 0)
 }
 
-pub fn lookup_entry_follow(path: &Path, task: &Arc<Task>) -> Result<VfsRealEntry, Errno> {
+pub fn lookup_entry_follow(path: &Path, task: &Arc<Task>) -> Result<VfsEntry, Errno> {
 	let cwd = task
 		.get_user_ext()
 		.ok_or(Errno::ENOENT)
