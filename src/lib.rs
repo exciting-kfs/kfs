@@ -18,6 +18,7 @@
 #![feature(trait_upcasting)]
 #![feature(slice_range)]
 #![feature(exact_size_is_empty)]
+#![feature(btree_extract_if)]
 
 extern crate alloc;
 

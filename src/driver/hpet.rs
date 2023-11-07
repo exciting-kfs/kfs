@@ -138,10 +138,13 @@ pub fn init() -> Result<(), HpetInitError> {
 	Ok(())
 }
 
-pub fn get_timestamp_nano() -> u64 {
-	let elapsed = HPET.get_counter() * (HPET.clock_speed() as u64 / 1_000_000);
+#[inline]
+pub fn get_time_elapsed() -> u64 {
+	HPET.get_counter() * (HPET.clock_speed() as u64 / 1_000_000)
+}
 
-	unsafe { BOOT_TIMESTAMP + elapsed }
+pub fn get_timestamp_nano() -> u64 {
+	unsafe { BOOT_TIMESTAMP + get_time_elapsed() }
 }
 
 pub fn get_timestamp_mili() -> u64 {

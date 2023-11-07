@@ -4,6 +4,7 @@ use crate::driver::apic::local::LOCAL_APIC;
 use crate::interrupt::InterruptFrame;
 use crate::process::task::CURRENT;
 use crate::scheduler::context::yield_now;
+use crate::scheduler::nano_sleep::ALARM;
 use crate::scheduler::preempt::preemptable;
 use crate::sync::CpuLocal;
 
@@ -11,6 +12,8 @@ use crate::sync::CpuLocal;
 pub unsafe extern "C" fn handle_timer_impl(frame: InterruptFrame) {
 	*JIFFIES.get_mut() += 1;
 	LOCAL_APIC.end_of_interrupt();
+
+	ALARM.lock().wake_up();
 
 	if !preemptable() {
 		return;

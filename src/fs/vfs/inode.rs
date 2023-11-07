@@ -117,19 +117,16 @@ pub enum VfsInode {
 	Block(Arc<DevPart>),
 }
 
+#[repr(C)]
 #[derive(Default, Clone)]
 pub struct TimeSpec {
 	seconds: isize,
 	nanoseconds: isize,
 }
 
-impl Into<StatxTimeStamp> for TimeSpec {
-	fn into(self) -> StatxTimeStamp {
-		StatxTimeStamp {
-			sec: self.seconds as i64,
-			nsec: self.nanoseconds as u32,
-			pad: 0,
-		}
+impl TimeSpec {
+	pub fn nano(&self) -> u64 {
+		self.seconds as u64 * 1_000_000_000 + self.nanoseconds as u64
 	}
 }
 
@@ -138,6 +135,16 @@ impl From<u64> for TimeSpec {
 		Self {
 			seconds: (value / 1_000_000_000) as isize,
 			nanoseconds: (value % 1_000_000_000) as isize,
+		}
+	}
+}
+
+impl Into<StatxTimeStamp> for TimeSpec {
+	fn into(self) -> StatxTimeStamp {
+		StatxTimeStamp {
+			sec: self.seconds as i64,
+			nsec: self.nanoseconds as u32,
+			pad: 0,
 		}
 	}
 }

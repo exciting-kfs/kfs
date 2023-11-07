@@ -122,7 +122,7 @@ impl Signal {
 			x => self.do_signal_default(x, info.num),
 		};
 
-		is_syscall_restart(syscall_ret, handler.get_flag()).then_some(Restart)
+		is_syscall_restart(frame.eax, syscall_ret, handler.get_flag()).then_some(Restart)
 	}
 
 	pub fn do_signal_repeat(&self, frame: &InterruptFrame) -> Option<()> {
