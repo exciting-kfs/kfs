@@ -1,3 +1,5 @@
+use core::mem::replace;
+
 use alloc::{
 	collections::BTreeMap,
 	sync::{Arc, Weak},
@@ -48,7 +50,9 @@ impl Alarm {
 
 	pub fn wake_up(&mut self) {
 		let current_time = get_timestamp_nano();
-		let elapsed = self.by_time.extract_if(|k, _| *k < current_time);
+
+		let not = self.by_time.split_off(&current_time);
+		let elapsed = replace(&mut self.by_time, not);
 
 		elapsed
 			.into_iter()
