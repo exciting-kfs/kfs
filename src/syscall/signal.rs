@@ -3,6 +3,7 @@ use core::ptr::copy_nonoverlapping;
 
 use crate::interrupt::InterruptFrame;
 use crate::mm::user::verify::{verify_ptr, verify_ptr_mut};
+use crate::process::signal::poll_signal_queue;
 use crate::process::signal::sig_ctx::SigCtx;
 use crate::process::signal::sig_flag::SigFlag;
 use crate::process::signal::sig_handler::{SigAction, SigHandler};
@@ -98,7 +99,7 @@ pub fn sys_sigreturn(frame: &InterruptFrame, restart: &mut bool) -> Result<usize
 		// else
 		let syscall_ret = (*sig_ctx).syscall_ret;
 		let flag = signal.get_handler(&(*sig_info).num).get_flag();
-		*restart = is_syscall_restart(syscall_ret, flag);
+		*restart = is_syscall_restart((*sig_ctx).intr_frame.eax, syscall_ret, flag);
 
 		restore_interrupt_frame(&(*sig_ctx).intr_frame);
 		restore_syscall_return((*sig_ctx).syscall_ret)
@@ -120,15 +121,18 @@ pub fn sys_sigsuspend(new_mask: usize) -> Result<usize, Errno> {
 		mem::replace(&mut *curr_mask, new_mask)
 	};
 
-	sleep_and_yield(Sleep::Light);
+	loop {
+		sleep_and_yield(Sleep::Light);
 
-	current
-		.get_user_ext()
-		.expect("must be user process")
-		.signal
-		.overwrite_mask(old_mask);
-
-	Err(Errno::EINTR)
+		if let Err(e) = unsafe { poll_signal_queue() } {
+			current
+				.get_user_ext()
+				.expect("must be user process")
+				.signal
+				.overwrite_mask(old_mask);
+			return Err(e);
+		}
+	}
 }
 
 enum SigProcMaskHow {
@@ -217,7 +221,11 @@ fn validate_user_addr(addr: usize) -> Result<(), Errno> {
 	Ok(())
 }
 
-#[inline(always)]
-pub fn is_syscall_restart(syscall_ret: isize, flag: SigFlag) -> bool {
-	syscall_ret == Errno::EINTR.as_ret() && flag.contains(SigFlag::Restart)
+#[inline]
+pub fn is_syscall_restart(syscall_no: usize, syscall_ret: isize, flag: SigFlag) -> bool {
+	if let Ok(_) = IGNORE_SYSCALL_RESTART.binary_search(&syscall_no) {
+		false
+	} else {
+		syscall_ret == Errno::EINTR.as_ret() && flag.contains(SigFlag::Restart)
+	}
 }

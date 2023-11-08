@@ -1,4 +1,5 @@
 pub mod context;
+pub mod nano_sleep;
 pub mod preempt;
 pub mod sleep;
 pub mod work;

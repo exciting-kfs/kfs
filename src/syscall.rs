@@ -1,3 +1,4 @@
+pub mod clock;
 pub mod errno;
 pub mod exec;
 pub mod fork;
@@ -26,9 +27,11 @@ use crate::process::set_thread_area::sys_set_thread_area;
 use crate::process::signal::sig_handler::SigAction;
 use crate::process::task::CURRENT;
 use crate::process::uid::{sys_getuid, sys_setuid};
+use crate::scheduler::nano_sleep::sys_nanosleep;
 use crate::scheduler::sys_sched_yield;
 use crate::{pr_info, pr_warn, trace_feature};
 
+use self::clock::sys_clock_gettime;
 use self::dup::{sys_dup, sys_dup2};
 use self::errno::Errno;
 use self::exec::*;
@@ -40,6 +43,9 @@ use self::relation::{
 };
 use self::signal::{sys_sigaction, sys_signal, sys_sigprocmask, sys_sigreturn, sys_sigsuspend};
 use self::wait::sys_waitpid;
+
+/// `syscall no` must be sorted.
+const IGNORE_SYSCALL_RESTART: [usize; 2] = [162, 179];
 
 #[no_mangle]
 pub extern "C" fn handle_syscall_impl(mut frame: InterruptFrame) {
@@ -594,6 +600,7 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		146 => sys_writev(frame.ebx as isize, frame.ecx, frame.edx),
 		147 => sys_getsid(frame.ebx),
 		158 => sys_sched_yield(),
+		162 => sys_nanosleep(frame.ebx, frame.ecx),
 		// TODO: rt_sigprocmask
 		175 => sys_sigprocmask(frame.ebx, frame.ecx, frame.edx),
 		// TODO: rt_sigsuspend
@@ -608,6 +615,7 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		243 => sys_set_thread_area(frame.ebx),
 		// TODO: exit_group
 		252 => sys_exit(frame.ebx),
+		265 => sys_clock_gettime(frame.ebx, frame.ecx),
 		359 => sys_socket(frame.ebx as i32, frame.ecx as i32, frame.edx as i32),
 		361 => sys_bind(frame.ebx, frame.ecx, frame.edx),
 		362 => sys_connect(frame.ebx, frame.ecx, frame.edx),

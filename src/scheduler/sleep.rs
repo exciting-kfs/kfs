@@ -7,7 +7,7 @@ use crate::{
 		task::{State, Task, CURRENT},
 	},
 	scheduler::{context::yield_now, schedule_last},
-	sync::Locked,
+	sync::{Locked, LockedGuard},
 	syscall::errno::Errno,
 	trace_feature,
 };
@@ -27,6 +27,19 @@ pub fn sleep_and_yield(sleep: Sleep) {
 		Sleep::Light => State::Sleeping,
 	};
 
+	yield_now();
+}
+
+pub fn sleep_and_yield_lock<'a, T>(sleep: Sleep, lock: LockedGuard<'a, T>) {
+	let current = unsafe { CURRENT.get_mut() };
+	*current.lock_state() = match sleep {
+		Sleep::Deep => State::DeepSleep,
+		Sleep::Light => State::Sleeping,
+	};
+
+	trace_feature!("sleep_atomic", "sleep: {:?}", current.get_pid());
+
+	drop(lock);
 	yield_now();
 }
 
@@ -72,6 +85,12 @@ pub fn wake_up(task: &Arc<Task>, sleep: Sleep) {
 	match sleep {
 		Sleep::Deep => wake_up_deep_sleep(task),
 		Sleep::Light => wake_up_sleep(task),
+	}
+}
+
+pub fn wake_up_weak(task: Weak<Task>, sleep: Sleep) {
+	if let Some(task) = task.upgrade() {
+		wake_up(&task, sleep)
 	}
 }
 
