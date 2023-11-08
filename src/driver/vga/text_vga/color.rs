@@ -4,6 +4,7 @@
 pub enum Color {
 	Black = 0,
 	Blue = 1,
+	LightBlue = 9,
 	Green = 2,
 	Cyan = 3,
 	Red = 4,

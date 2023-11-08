@@ -1,4 +1,4 @@
-use core::mem::{size_of, transmute};
+use core::mem::transmute;
 use core::ptr::addr_of_mut;
 
 use alloc::sync::Arc;
@@ -504,7 +504,7 @@ impl DirHandle for TmpDir {
 		for i in *last..self.dirents.len() {
 			let (kind, name) = &self.dirents[i];
 
-			let curr_size = next_align(size_of::<KfsDirent>() + name.len() + 1 + 1, 8);
+			let curr_size = next_align(KfsDirent::total_len(name), 8);
 
 			if curr_buf.len() < curr_size {
 				break;
