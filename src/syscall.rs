@@ -4,6 +4,7 @@ pub mod exec;
 pub mod fork;
 pub mod kill;
 pub mod relation;
+pub mod sendfile;
 pub mod signal;
 pub mod wait;
 
