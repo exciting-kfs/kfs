@@ -4,9 +4,9 @@ use alloc::{
 	vec::Vec,
 };
 
-use crate::{fs::vfs::RealInode, syscall::errno::Errno};
+use crate::{fs::vfs::Inode, syscall::errno::Errno};
 
-use super::{real::RealEntry, Entry, Ident, SocketInode, VfsDirEntry, VfsSocketHandle};
+use super::{Entry, Ident, SocketInode, VfsDirEntry, VfsSocketHandle};
 
 pub struct VfsSocketEntry {
 	name: Rc<Vec<u8>>,
@@ -36,16 +36,15 @@ impl VfsSocketEntry {
 }
 
 impl Entry for Arc<VfsSocketEntry> {
-	fn parent_weak(&self) -> Weak<VfsDirEntry> {
-		self.parent.clone()
-	}
 	fn get_name(&self) -> Ident {
 		Ident(self.name.clone())
 	}
-}
 
-impl RealEntry for Arc<VfsSocketEntry> {
-	fn real_inode(&self) -> Arc<dyn RealInode> {
-		self.inode.clone()
+	fn get_inode(&self) -> &dyn Inode {
+		&*self.inode
+	}
+
+	fn parent_weak(&self) -> Weak<VfsDirEntry> {
+		self.parent.clone()
 	}
 }

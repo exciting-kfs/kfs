@@ -532,7 +532,6 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		11 => sys_execve(frame, frame.ebx, frame.ecx, frame.edx),
 		12 => sys_chdir(frame.ebx),
 		15 => sys_chmod(frame.ebx, frame.ecx as u32),
-		18 => sys_stat(frame.ebx, frame.ecx),
 		19 => sys_lseek(frame.ebx as isize, frame.ecx as isize, frame.edx as isize),
 		20 => sys_getpid(),
 		21 => sys_mount(frame.ebx, frame.ecx, frame.edx),
@@ -605,6 +604,7 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		212 => sys_chown(frame.ebx, frame.ecx, frame.edx),
 		213 => sys_setuid(frame.ebx),
 		214 => sys_setgid(frame.ebx),
+		220 => sys_getdents(frame.ebx as isize, frame.ecx, frame.edx),
 		243 => sys_set_thread_area(frame.ebx),
 		// TODO: exit_group
 		252 => sys_exit(frame.ebx),
@@ -629,11 +629,15 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		),
 		// vfork
 		190 => sys_fork(frame),
-		// stat64
-		195 => sys_stat(frame.ebx, frame.ecx),
 
 		// statx
-		383 => Err(Errno::ENOSYS),
+		383 => sys_statx(
+			frame.ebx as isize,
+			frame.ecx,
+			frame.edx,
+			frame.esi,
+			frame.edi,
+		),
 		_ => {
 			pr_warn!(
 				"unimplemented syscall: {}(no={})",

@@ -1,4 +1,4 @@
-use core::mem::{size_of, transmute};
+use core::mem::{offset_of, size_of, transmute};
 
 use alloc::{boxed::Box, sync::Arc};
 
@@ -88,7 +88,6 @@ impl VfsHandle {
 
 	pub fn deep_copy(&self) -> Result<Self, Errno> {
 		let ent = self.as_entry().ok_or(Errno::EINVAL)?;
-		let real = ent.downcast_real()?;
 
 		use VfsHandle::*;
 		let (io_flags, access_flags) = match self {
@@ -97,7 +96,7 @@ impl VfsHandle {
 			Dir(d) => (d.io_flags, d.access_flags),
 		};
 
-		real.open(io_flags, access_flags, unsafe { CURRENT.get_ref() })
+		ent.open(io_flags, access_flags, unsafe { CURRENT.get_ref() })
 	}
 
 	pub fn set_io_flags(&self, new_flags: IOFlag) -> Result<(), Errno> {
@@ -327,9 +326,10 @@ pub trait FileHandle {
 }
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct KfsDirent {
-	pub ino: u32,
-	pub private: u32,
+	pub ino: u64,
+	pub private: u64,
 	pub size: u16,
 	pub file_type: FileType,
 	pub name: (),
@@ -338,12 +338,12 @@ pub struct KfsDirent {
 impl KfsDirent {
 	#[inline]
 	pub fn header_len() -> usize {
-		size_of::<KfsDirent>() - 1
+		size_of::<KfsDirent>()
 	}
 
 	#[inline]
 	pub fn total_len(name: &[u8]) -> usize {
-		Self::header_len() + name.len() + 1
+		Self::header_len().max(name.len() + offset_of!(KfsDirent, name) + 1)
 	}
 }
 

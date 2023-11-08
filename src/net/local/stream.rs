@@ -2,7 +2,7 @@ use alloc::collections::LinkedList;
 use alloc::sync::{Arc, Weak};
 
 use crate::collection::WrapQueue;
-use crate::fs::vfs::{lookup_entry_follow, AccessFlag, IOFlag, VfsRealEntry, VfsSocketHandle};
+use crate::fs::vfs::{lookup_entry_follow, AccessFlag, IOFlag, VfsEntry, VfsSocketHandle};
 use crate::net::address::{ReadOnly, UnknownSocketAddress, WriteOnly};
 use crate::net::socket::{Socket, SocketHandle};
 use crate::scheduler::context::yield_now;
@@ -185,7 +185,7 @@ impl Socket for LocalStreamSocket {
 		let ent = lookup_entry_follow(&addr.path, task)?;
 
 		let sock = match ent {
-			VfsRealEntry::Socket(sock) => sock,
+			VfsEntry::Socket(sock) => sock,
 			_ => return Err(Errno::ECONNREFUSED),
 		};
 

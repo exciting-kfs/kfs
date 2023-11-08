@@ -1,23 +1,20 @@
 mod block;
 mod dir;
 mod file;
-mod real;
 mod socket;
 mod symlink;
 
 pub use dir::VfsDirEntry;
 pub use file::VfsFileEntry;
-pub use real::{RealEntry, VfsRealEntry};
 pub use socket::VfsSocketEntry;
 pub use symlink::VfsSymLinkEntry;
-
-use core::borrow::Borrow;
 
 use alloc::{
 	rc::Rc,
 	sync::{Arc, Weak},
 	vec::Vec,
 };
+use core::borrow::Borrow;
 use enum_dispatch::enum_dispatch;
 
 use crate::{
@@ -29,7 +26,7 @@ use crate::{
 use self::block::VfsBlockEntry;
 
 use super::{
-	AccessFlag, DirInode, FileInode, IOFlag, Permission, RawStat, SocketInode, SuperBlock,
+	AccessFlag, DirInode, FileInode, IOFlag, Inode, Permission, SocketInode, Statx, SuperBlock,
 	SymLinkInode, VfsDirHandle, VfsFileHandle, VfsHandle, VfsInode, VfsSocketHandle,
 	ROOT_DIR_ENTRY,
 };
@@ -53,76 +50,129 @@ impl Borrow<[u8]> for Ident {
 	}
 }
 
-use crate::fs::vfs::entry::symlink::ArcVfsSymlinkEntry;
-
 #[enum_dispatch(Entry)]
 #[derive(Clone)]
 pub enum VfsEntry {
-	Real(VfsRealEntry),
-	Symlink(ArcVfsSymlinkEntry),
+	File(Arc<VfsFileEntry>),
+	Dir(Arc<VfsDirEntry>),
+	Socket(Arc<VfsSocketEntry>),
+	Block(Arc<VfsBlockEntry>),
+	SymLink(Arc<VfsSymLinkEntry>),
 }
 
 impl VfsEntry {
-	pub fn unwrap_real(self) -> VfsRealEntry {
-		use VfsEntry::*;
-		match self {
-			Real(r) => r,
-			Symlink(_) => panic!("expected Real(..) but got SymLink(..)"),
-		}
-	}
-
 	pub fn new_dir(dir: Arc<VfsDirEntry>) -> Self {
-		VfsEntry::Real(dir.into())
+		VfsEntry::Dir(dir)
 	}
 
 	pub fn new_file(file: Arc<VfsFileEntry>) -> Self {
-		VfsEntry::Real(file.into())
+		VfsEntry::File(file)
 	}
 
 	pub fn new_socket(sock: Arc<VfsSocketEntry>) -> Self {
-		VfsEntry::Real(sock.into())
+		VfsEntry::Socket(sock)
 	}
 
 	pub fn new_block(block: Arc<VfsBlockEntry>) -> Self {
-		VfsEntry::Real(block.into())
-	}
-
-	pub fn downcast_real(self) -> Result<VfsRealEntry, Errno> {
-		use VfsEntry::*;
-		match self {
-			Real(r) => Ok(r),
-			Symlink(_) => Err(Errno::EISDIR),
-		}
+		VfsEntry::Block(block)
 	}
 
 	pub fn downcast_dir(self) -> Result<Arc<VfsDirEntry>, Errno> {
 		use VfsEntry::*;
 		match self {
-			Real(r) => r.downcast_dir(),
-			Symlink(_) => Err(Errno::ENOTDIR),
+			Dir(d) => Ok(d),
+			_ => Err(Errno::ENOTDIR),
 		}
 	}
 
 	pub fn downcast_file(self) -> Result<Arc<VfsFileEntry>, Errno> {
 		use VfsEntry::*;
 		match self {
-			Real(r) => r.downcast_file(),
-			Symlink(_) => Err(Errno::EISDIR),
+			File(f) => Ok(f),
+			Dir(_) => Err(Errno::EISDIR),
+			_ => Err(Errno::ESPIPE),
+		}
+	}
+
+	pub fn downcast_socket(self) -> Result<Arc<VfsSocketEntry>, Errno> {
+		use VfsEntry::*;
+		match self {
+			Socket(s) => Ok(s),
+			_ => Err(Errno::ECONNREFUSED),
 		}
 	}
 
 	pub fn downcast_block(self) -> Result<Arc<VfsBlockEntry>, Errno> {
 		use VfsEntry::*;
 		match self {
-			Real(r) => r.downcast_block(),
-			Symlink(_) => Err(Errno::EISDIR),
+			Block(b) => Ok(b),
+			Dir(_) => Err(Errno::EISDIR),
+			_ => Err(Errno::ESPIPE),
+		}
+	}
+
+	pub fn open(
+		&self,
+		io_flags: IOFlag,
+		access_flags: AccessFlag,
+		task: &Arc<Task>,
+	) -> Result<VfsHandle, Errno> {
+		let read_perm = access_flags
+			.read_ok()
+			.then_some(Permission::ANY_READ)
+			.unwrap_or(Permission::empty());
+
+		let write_perm = access_flags
+			.write_ok()
+			.then_some(Permission::ANY_WRITE)
+			.unwrap_or(Permission::empty());
+
+		let perm = read_perm | write_perm;
+		self.access(perm, task)?;
+
+		use VfsEntry::*;
+		match self {
+			File(f) => Ok(VfsHandle::File(f.open(io_flags, access_flags)?)),
+			Dir(d) => Ok(VfsHandle::Dir(d.open(io_flags, access_flags)?)),
+			_ => Err(Errno::ENOENT),
 		}
 	}
 }
 
 #[enum_dispatch]
 pub trait Entry {
+	fn get_inode(&self) -> &dyn Inode;
+
+	fn statx(&self) -> Result<Statx, Errno> {
+		self.get_inode().stat()
+	}
+
+	fn access(&self, perm: Permission, task: &Arc<Task>) -> Result<(), Errno> {
+		self.get_inode()
+			.access(task.get_uid(), task.get_gid(), perm)
+	}
+
+	fn chmod(&self, perm: Permission, task: &Arc<Task>) -> Result<(), Errno> {
+		let owner = self.statx()?.uid;
+
+		let uid = task.get_uid();
+		if uid != 0 && uid != owner {
+			return Err(Errno::EPERM);
+		}
+
+		self.get_inode().chmod(perm)
+	}
+
+	fn chown(&self, owner: usize, group: usize, task: &Arc<Task>) -> Result<(), Errno> {
+		if task.get_uid() != 0 {
+			return Err(Errno::EPERM);
+		}
+
+		self.get_inode().chown(owner, group)
+	}
+
 	fn get_name(&self) -> Ident;
+
 	fn parent_weak(&self) -> Weak<VfsDirEntry>;
 
 	fn parent_dir(&self, task: &Arc<Task>) -> Result<Arc<VfsDirEntry>, Errno> {

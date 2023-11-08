@@ -1,6 +1,7 @@
 mod entry;
 mod handle;
 mod inode;
+mod stat;
 mod walk;
 
 use alloc::boxed::Box;
@@ -9,6 +10,7 @@ use alloc::vec::Vec;
 pub use entry::*;
 pub use handle::*;
 pub use inode::*;
+pub use stat::*;
 pub use walk::*;
 
 use crate::sync::Locked;

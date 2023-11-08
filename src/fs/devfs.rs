@@ -20,8 +20,8 @@ use self::{null::DevNull, partition::PARTITIONS, tty::DevTTY, zero::DevZero};
 use super::{
 	tmpfs::{TmpDir, TmpSb},
 	vfs::{
-		DirHandle, DirInode, FileInode, FileSystem, Ident, MemoryFileSystem, Permission, RawStat,
-		RealInode, SuperBlock, SymLinkInode, TimeSpec, VfsDirEntry, VfsInode,
+		DirHandle, DirInode, FileInode, FileSystem, Ident, Inode, MemoryFileSystem, Permission,
+		Statx, StatxMode, StatxTimeStamp, SuperBlock, SymLinkInode, VfsDirEntry, VfsInode,
 	},
 };
 
@@ -119,17 +119,29 @@ impl DevDirInode {
 	}
 }
 
-impl RealInode for DevDirInode {
-	fn stat(&self) -> Result<RawStat, Errno> {
-		Ok(RawStat {
-			perm: 0o555,
+impl Inode for DevDirInode {
+	fn stat(&self) -> Result<Statx, Errno> {
+		Ok(Statx {
+			mask: Statx::MASK_ALL,
+			blksize: 0,
+			attributes: 0,
+			nlink: 0,
 			uid: 0,
 			gid: 0,
+			mode: StatxMode::new(StatxMode::DIRECTORY, 0o555),
+			pad1: 0,
+			ino: 0,
 			size: 0,
-			file_type: 2,
-			access_time: TimeSpec::default(),
-			modify_fime: TimeSpec::default(),
-			change_time: TimeSpec::default(),
+			blocks: 0,
+			attributes_mask: 0,
+			atime: StatxTimeStamp::default(),
+			btime: StatxTimeStamp::default(),
+			ctime: StatxTimeStamp::default(),
+			mtime: StatxTimeStamp::default(),
+			rdev_major: 0,
+			rdev_minor: 0,
+			dev_major: 0,
+			dev_minor: 0,
 		})
 	}
 

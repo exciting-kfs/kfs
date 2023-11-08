@@ -293,8 +293,8 @@ impl DirInode {
 	}
 }
 
-impl vfs::RealInode for DirInode {
-	fn stat(&self) -> Result<vfs::RawStat, Errno> {
+impl vfs::Inode for DirInode {
+	fn stat(&self) -> Result<vfs::Statx, Errno> {
 		Ok(self.inner().info().stat())
 	}
 
@@ -323,7 +323,7 @@ impl vfs::DirInode for DirInode {
 		// 	}
 		// }
 
-		Ok(Box::new(DirFile::new(self.clone())))
+		Ok(Box::new(DirFile::new(self)))
 	}
 
 	fn lookup(&self, name: &[u8]) -> Result<vfs::VfsInode, Errno> {

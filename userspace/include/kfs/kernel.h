@@ -7,14 +7,14 @@
 DEFINE_SYSCALL(sched_yield, 158, int, void);
 
 struct kfs_dirent {
-	unsigned int ino;
-	unsigned int private;
+	unsigned long long ino;
+	unsigned long long private;
 	unsigned short size;
 	unsigned char file_type;
 	char name[0];
 };
 
-DEFINE_SYSCALL(getdents, 141, ssize_t, int, fd, void *, dirp, size_t, len);
+DEFINE_SYSCALL(getdents64, 220, ssize_t, int, fd, void *, dirp, size_t, len);
 
 #define	KFS_POWER_OFF 0x4321fedc
 #define	KFS_RESTART 0x1234567

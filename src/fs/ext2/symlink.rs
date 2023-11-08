@@ -122,6 +122,20 @@ impl SymLinkInode {
 	}
 }
 
+impl vfs::Inode for SymLinkInode {
+	fn stat(&self) -> Result<vfs::Statx, Errno> {
+		Ok(self.inner().info().stat())
+	}
+
+	fn chown(&self, _owner: usize, _group: usize) -> Result<(), Errno> {
+		Ok(())
+	}
+
+	fn chmod(&self, _perm: Permission) -> Result<(), Errno> {
+		Ok(())
+	}
+}
+
 impl vfs::SymLinkInode for SymLinkInode {
 	fn target(&self) -> Result<Path, Errno> {
 		if let Some(path) = self.path.lock().as_ref() {

@@ -83,13 +83,14 @@ void builtin_ls(int idx) {
 		buf[0] = '.';
 		buf[1] = '\0';
 	}
+
 	int fd = open(buf, O_DIRECTORY | O_RDONLY | O_CLOEXEC, 0777);
 	if (fd < 0) {
 		show_error("ls: open", fd);
 		return;
 	}
 
-	int end = getdents(fd, buf, 4096);
+	int end = getdents64(fd, buf, 4096);
 	int curr = 0;
 	while (curr < end) {
 		struct kfs_dirent *dir = (struct kfs_dirent *)&buf[curr];
@@ -343,36 +344,36 @@ void builtin_stat(int idx) {
 
 	idx = extract(idx, buf);
 
-	struct stat st;
-	int ret = stat(buf, &st);
+	struct statx stx;
+	int ret = statx(AT_FDCWD, buf, 0, STATX_ALL, &stx);
 	if (ret != 0) {
 		show_error("stat: stat", ret);
 		return;
 	}
 
-	ft_printf("  uid: %d\n  gid: %d\n  size: %d\n  mode: ", st.uid, st.gid, st.size);
-	ft_putnbr_o(st.perm);
+	ft_printf("  uid: %d\n  gid: %d\n  size: %d\n  mode: ", stx.uid, stx.gid, stx.size);
+	ft_putnbr_o(stx.mode & ~S_IFMT);
 	ft_putstr("\n  type: ");
-	switch (st.file_type) {
-	case 1:
+	switch (stx.mode & S_IFMT) {
+	case S_IFREG:
 		ft_printf("regular file\n");
 		break;
-	case 2:
+	case S_IFDIR:
 		ft_printf("directory\n");
 		break;
-	case 3:
+	case S_IFCHR:
 		ft_printf("character special\n");
 		break;
-	case 4:
+	case S_IFBLK:
 		ft_printf("block special\n");
 		break;
-	case 5:
+	case S_IFIFO:
 		ft_printf("fifo\n");
 		break;
-	case 6:
+	case S_IFSOCK:
 		ft_printf("socket\n");
 		break;
-	case 7:
+	case S_IFLNK:
 		ft_printf("symbolic link\n");
 		break;
 	default:
@@ -476,7 +477,8 @@ void builtin_symlink(int idx) {
 void builtin_pwd(void) {
 	char buf[4096];
 
-	ft_printf("%s\n", getcwd(buf, sizeof(buf)));
+	getcwd(buf, sizeof(buf));
+	ft_printf("%s\n", buf);
 }
 
 void builtin_test(void) {
@@ -547,7 +549,7 @@ void builtin_lsmod() {
 		return;
 	}
 
-	int end = getdents(fd, buf, 4096);
+	int end = getdents64(fd, buf, 4096);
 	int curr = 0;
 	while (curr < end) {
 		struct kfs_dirent *dir = (struct kfs_dirent *)&buf[curr];

@@ -7,8 +7,8 @@ use alloc::{boxed::Box, collections::BTreeMap};
 
 use super::path::Path;
 use super::vfs::{
-	DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident, MemoryFileSystem,
-	RawStat, RealInode, SuperBlock, SymLinkInode, TimeSpec, VfsInode, Whence,
+	DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident, Inode, MemoryFileSystem,
+	Statx, StatxMode, StatxTimeStamp, SuperBlock, SymLinkInode, VfsInode, Whence,
 };
 use crate::fs::vfs::{KfsDirent, Permission};
 use crate::mm::util::next_align;
@@ -88,17 +88,29 @@ impl FileInode for TmpFileInode {
 	}
 }
 
-impl RealInode for TmpFileInode {
-	fn stat(&self) -> Result<RawStat, Errno> {
-		Ok(RawStat {
-			perm: self.perm.lock().bits(),
+impl Inode for TmpFileInode {
+	fn stat(&self) -> Result<Statx, Errno> {
+		Ok(Statx {
+			mask: Statx::MASK_ALL,
+			blksize: 0,
+			attributes: 0,
+			nlink: 0,
 			uid: *self.owner.lock(),
 			gid: *self.group.lock(),
-			size: self.data.lock().len() as isize,
-			file_type: 1,
-			access_time: TimeSpec::default(),
-			modify_fime: TimeSpec::default(),
-			change_time: TimeSpec::default(),
+			mode: StatxMode::new(StatxMode::REGULAR, self.perm.lock().bits() as u16),
+			pad1: 0,
+			ino: 0,
+			size: self.data.lock().len() as u64,
+			blocks: 0,
+			attributes_mask: 0,
+			atime: StatxTimeStamp::default(),
+			btime: StatxTimeStamp::default(),
+			ctime: StatxTimeStamp::default(),
+			mtime: StatxTimeStamp::default(),
+			rdev_major: 0,
+			rdev_minor: 0,
+			dev_major: 0,
+			dev_minor: 0,
 		})
 	}
 
@@ -235,19 +247,31 @@ impl TmpDirInode {
 	}
 }
 
-impl RealInode for Locked<TmpDirInode> {
-	fn stat(&self) -> Result<RawStat, Errno> {
+impl Inode for Locked<TmpDirInode> {
+	fn stat(&self) -> Result<Statx, Errno> {
 		let this = self.lock();
 
-		Ok(RawStat {
-			perm: this.perm.bits(),
+		Ok(Statx {
+			mask: Statx::MASK_ALL,
+			blksize: 0,
+			attributes: 0,
+			nlink: 0,
 			uid: this.owner,
 			gid: this.group,
-			size: this.sub_files.len() as isize,
-			file_type: 2,
-			access_time: TimeSpec::default(),
-			modify_fime: TimeSpec::default(),
-			change_time: TimeSpec::default(),
+			mode: StatxMode::new(StatxMode::DIRECTORY, this.perm.bits() as u16),
+			pad1: 0,
+			ino: 0,
+			size: 0,
+			blocks: 0,
+			attributes_mask: 0,
+			atime: StatxTimeStamp::default(),
+			btime: StatxTimeStamp::default(),
+			ctime: StatxTimeStamp::default(),
+			mtime: StatxTimeStamp::default(),
+			rdev_major: 0,
+			rdev_minor: 0,
+			dev_major: 0,
+			dev_minor: 0,
 		})
 	}
 
@@ -412,6 +436,41 @@ impl TmpSymLink {
 	}
 }
 
+impl Inode for TmpSymLink {
+	fn stat(&self) -> Result<Statx, Errno> {
+		Ok(Statx {
+			mask: Statx::MASK_ALL,
+			blksize: 0,
+			attributes: 0,
+			nlink: 0,
+			uid: 0,
+			gid: 0,
+			mode: StatxMode::new(StatxMode::SYMLINK, 0o777),
+			pad1: 0,
+			ino: 0,
+			size: 0,
+			blocks: 0,
+			attributes_mask: 0,
+			atime: StatxTimeStamp::default(),
+			btime: StatxTimeStamp::default(),
+			ctime: StatxTimeStamp::default(),
+			mtime: StatxTimeStamp::default(),
+			rdev_major: 0,
+			rdev_minor: 0,
+			dev_major: 0,
+			dev_minor: 0,
+		})
+	}
+
+	fn chown(&self, _owner: usize, _group: usize) -> Result<(), Errno> {
+		Ok(())
+	}
+
+	fn chmod(&self, _perm: Permission) -> Result<(), Errno> {
+		Ok(())
+	}
+}
+
 impl SymLinkInode for TmpSymLink {
 	fn target(&self) -> Result<Path, Errno> {
 		Ok(self.target.clone())
@@ -445,7 +504,7 @@ impl DirHandle for TmpDir {
 		for i in *last..self.dirents.len() {
 			let (kind, name) = &self.dirents[i];
 
-			let curr_size = next_align(size_of::<KfsDirent>() + name.len() + 1 + 1, 4);
+			let curr_size = next_align(size_of::<KfsDirent>() + name.len() + 1 + 1, 8);
 
 			if curr_buf.len() < curr_size {
 				break;

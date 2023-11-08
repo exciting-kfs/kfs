@@ -3,7 +3,7 @@ use alloc::sync::Arc;
 use crate::elf::kobject::{load_kernel_module, KernelModule, KernelObject};
 use crate::elf::{Elf, ElfError};
 use crate::fs::path::Path;
-use crate::fs::vfs::{lookup_entry_follow, AccessFlag, IOFlag, RealEntry};
+use crate::fs::vfs::{lookup_entry_follow, AccessFlag, Entry, IOFlag};
 use crate::mm::user::verify::verify_path;
 use crate::process::task::CURRENT;
 use crate::ptr::VirtPageBox;
@@ -21,7 +21,7 @@ pub fn sys_init_module(path_ptr: usize) -> Result<usize, Errno> {
 
 	let entry = lookup_entry_follow(&path, current)?;
 
-	let stat = entry.stat()?;
+	let stat = entry.statx()?;
 
 	let file = entry.downcast_file()?;
 

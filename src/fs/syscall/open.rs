@@ -4,7 +4,7 @@ use crate::fs::create_fd_node;
 use crate::fs::path::Path;
 use crate::fs::vfs::{
 	lookup_entry_at_follow, lookup_entry_follow, AccessFlag, CreationFlag, IOFlag, Permission,
-	VfsRealEntry,
+	VfsEntry,
 };
 
 use crate::mm::user::verify::verify_path;
@@ -16,7 +16,7 @@ fn lookup_or_create(
 	creation_flags: CreationFlag,
 	perm: Permission,
 	task: &Arc<Task>,
-) -> Result<VfsRealEntry, Errno> {
+) -> Result<VfsEntry, Errno> {
 	let file = path.pop_component();
 
 	let base_entry = lookup_entry_follow(&path, task)?;
@@ -40,7 +40,7 @@ fn lookup_or_create(
 			Errno::ENOENT => base_entry.downcast_dir().and_then(|dir| {
 				let file = dir.create(&file.unwrap(), perm, task)?;
 
-				Ok(VfsRealEntry::File(file))
+				Ok(VfsEntry::File(file))
 			}),
 			// other errors (EPERM, EACCESS, ....)
 			_ => Err(e),

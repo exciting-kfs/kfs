@@ -9,7 +9,7 @@ use crate::{
 		ide::ide_id::NR_IDE_DEV,
 		partition::{get_block_device, Partition, NR_PRIMARY},
 	},
-	fs::vfs::{Permission, RawStat, RealInode, TimeSpec, VfsInode},
+	fs::vfs::{Inode, Permission, Statx, StatxMode, StatxTimeStamp, VfsInode},
 	syscall::errno::Errno,
 };
 
@@ -42,17 +42,29 @@ impl DevPart {
 	}
 }
 
-impl RealInode for DevPart {
-	fn stat(&self) -> Result<RawStat, Errno> {
-		Ok(RawStat {
-			perm: 0o666,
+impl Inode for DevPart {
+	fn stat(&self) -> Result<Statx, Errno> {
+		Ok(Statx {
+			mask: Statx::MASK_ALL,
+			blksize: 0,
+			attributes: 0,
+			nlink: 0,
 			uid: 0,
 			gid: 0,
+			mode: StatxMode::new(StatxMode::BLOCKDEV, 0o666),
+			pad1: 0,
+			ino: 0,
 			size: 0,
-			file_type: 1, // HMM?
-			access_time: TimeSpec::default(),
-			modify_fime: TimeSpec::default(),
-			change_time: TimeSpec::default(),
+			blocks: 0,
+			attributes_mask: 0,
+			atime: StatxTimeStamp::default(),
+			btime: StatxTimeStamp::default(),
+			ctime: StatxTimeStamp::default(),
+			mtime: StatxTimeStamp::default(),
+			rdev_major: 0,
+			rdev_minor: 0,
+			dev_major: 0,
+			dev_minor: 0,
 		})
 	}
 
