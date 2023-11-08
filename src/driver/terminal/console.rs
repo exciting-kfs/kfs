@@ -21,6 +21,8 @@
 //! 	- CSI N m: alter character display properties. (see console/ascii)
 //! 	- CSI N ~: pc style extra keys. (see driver/tty)
 
+use alloc::vec::Vec;
+
 use super::ascii::{constants::*, Ascii, AsciiParser};
 use super::cursor::Cursor;
 
@@ -140,21 +142,21 @@ impl Console {
 		self.cursor.move_abs_x(0);
 	}
 
-	fn cursor_left(&mut self, n: u8) {
+	fn cursor_left(&mut self, n: u16) {
 		self.cursor.move_rel_x(-(n.max(1) as isize));
 	}
 
-	fn cursor_right(&mut self, n: u8) {
+	fn cursor_right(&mut self, n: u16) {
 		self.cursor.move_rel_x(n.max(1) as isize);
 		self.cursor.fixup_line_end();
 	}
 
-	fn cursor_down(&mut self, n: u8) {
+	fn cursor_down(&mut self, n: u16) {
 		self.cursor.move_rel_y(n.max(1) as isize);
 		self.cursor.fixup_line_end();
 	}
 
-	fn cursor_up(&mut self, n: u8) {
+	fn cursor_up(&mut self, n: u16) {
 		self.cursor.move_rel_y(-(n.max(1) as isize));
 		self.cursor.fixup_line_end();
 	}
@@ -193,7 +195,7 @@ impl Console {
 		}
 	}
 
-	fn line_erase(&mut self, param: u8) {
+	fn line_erase(&mut self, param: u16) {
 		let (y, x) = self.cursor.to_tuple();
 
 		let (b, e) = match param {
@@ -206,7 +208,7 @@ impl Console {
 		self.erase_by_iterater((y * BUFFER_WIDTH + b)..=(y * BUFFER_WIDTH + e));
 	}
 
-	fn screen_erase(&mut self, param: u8) {
+	fn screen_erase(&mut self, param: u16) {
 		let range = match param {
 			0 => self.cursor.into_flat()..=(WINDOW_SIZE - 1),
 			1 => 0..=self.cursor.into_flat(),
@@ -256,13 +258,13 @@ impl Console {
 	}
 
 	/// change color of text.
-	fn handle_color(&mut self, color: u8) {
+	fn handle_color(&mut self, color: u16) {
 		match color {
 			FG_BLACK => self.set_fg_color(Color::Black),
 			FG_RED => self.set_fg_color(Color::Red),
 			FG_GREEN => self.set_fg_color(Color::Green),
 			FG_BROWN => self.set_fg_color(Color::Brown),
-			FG_BLUE => self.set_fg_color(Color::Blue),
+			FG_BLUE => self.set_fg_color(Color::LightBlue),
 			FG_MAGENTA => self.set_fg_color(Color::Magenta),
 			FG_CYAN => self.set_fg_color(Color::Cyan),
 			FG_WHITE => self.set_fg_color(Color::White),
@@ -276,12 +278,16 @@ impl Console {
 			BG_CYAN => self.set_bg_color(Color::Cyan),
 			BG_WHITE => self.set_bg_color(Color::White),
 			BG_DEFAULT => self.reset_bg_color(),
+			RESET_COLOR => {
+				self.reset_bg_color();
+				self.reset_fg_color();
+			}
 			_ => (),
 		}
 	}
 
 	/// handle pc style extra keys (pgup, pgdn, del, ...)
-	fn handle_key(&mut self, key: u8) {
+	fn handle_key(&mut self, key: u16) {
 		match key {
 			3 => self.delete_char(),
 			5 => self.line_up(WINDOW_HEIGHT / 2),
@@ -291,23 +297,25 @@ impl Console {
 	}
 
 	/// handle ascii control escape sequences
-	fn handle_ctlseq(&mut self, param: u8, kind: u8) {
-		match kind {
-			b'~' => self.handle_key(param),
-			b'A' => self.cursor_up(param),
-			b'B' => self.cursor_down(param),
-			b'C' => self.cursor_right(param),
-			b'D' => self.cursor_left(param),
-			b'H' => self.cursor_home(),
-			b'F' => self.cursor_end(),
-			b'm' => self.handle_color(param),
-			b's' => self.cursor_save(),
-			b'u' => self.cursor_restore(),
-			b'K' => self.line_erase(param),
-			b'J' => self.screen_erase(param),
-			b'G' => self.cursor.move_abs_x(param as isize),
-			_ => (),
-		};
+	fn handle_ctlseq(&mut self, kind: u8, params: Vec<u16>) {
+		for param in params {
+			match kind {
+				b'~' => self.handle_key(param),
+				b'A' => self.cursor_up(param),
+				b'B' => self.cursor_down(param),
+				b'C' => self.cursor_right(param),
+				b'D' => self.cursor_left(param),
+				b'H' => self.cursor_home(),
+				b'F' => self.cursor_end(),
+				b'm' => self.handle_color(param),
+				b's' => self.cursor_save(),
+				b'u' => self.cursor_restore(),
+				b'K' => self.line_erase(param),
+				b'J' => self.screen_erase(param),
+				b'G' => self.cursor.move_abs_x(param as isize),
+				_ => (),
+			};
+		}
 	}
 }
 
@@ -317,9 +325,8 @@ impl ChWrite<u8> for Console {
 			match v {
 				Ascii::Text(ch) => self.handle_text(ch),
 				Ascii::Control(ctl) => self.handle_ctl(ctl),
-				Ascii::CtlSeq(p, k) => self.handle_ctlseq(p, k),
+				Ascii::CtlSeq(kind, params) => self.handle_ctlseq(kind, params),
 			}
-			self.parser.reset();
 		}
 		Ok(())
 	}

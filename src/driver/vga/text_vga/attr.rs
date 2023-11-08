@@ -9,7 +9,7 @@ const BG_OFFSET: u8 = 4;
 const BLINK_OFFSET: u8 = 7;
 const BRIGHT_OFFSET: u8 = 3;
 
-const FG_MASK: u8 = 0b111 << FG_OFFSET;
+const FG_MASK: u8 = 0b1111 << FG_OFFSET;
 const BG_MASK: u8 = 0b111 << BG_OFFSET;
 const BLINK_MASK: u8 = 1 << BLINK_OFFSET;
 const BRIGHT_MASK: u8 = 1 << BRIGHT_OFFSET;
@@ -18,17 +18,14 @@ const DEFAULT_FG: Color = Color::White;
 const DEFAULT_BG: Color = Color::Black;
 
 impl Attr {
-	pub const fn new(blink: bool, bg: Color, bright: bool, fg: Color) -> Self {
+	pub const fn new(blink: bool, bg: Color, fg: Color) -> Self {
 		Attr(
-			((blink as u8) << BLINK_OFFSET)
-				| ((bg as u8) << BG_OFFSET)
-				| ((bright as u8) << BRIGHT_OFFSET)
-				| ((fg as u8) << FG_OFFSET),
+			((blink as u8) << BLINK_OFFSET) | ((bg as u8) << BG_OFFSET) | ((fg as u8) << FG_OFFSET),
 		)
 	}
 
 	pub const fn default() -> Self {
-		Self::new(false, DEFAULT_BG, false, DEFAULT_FG)
+		Self::new(false, DEFAULT_BG, DEFAULT_FG)
 	}
 
 	pub fn toggle_blink(&mut self) {

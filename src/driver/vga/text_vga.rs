@@ -44,7 +44,7 @@ pub fn putc(y: usize, x: usize, c: Char) {
 }
 
 pub fn clear() {
-	let attr = Attr::new(false, Color::Black, false, Color::Black);
+	let attr = Attr::new(false, Color::Black, Color::Black);
 	let black = Char::styled(attr, b' ');
 
 	for y in 0..(HEIGHT) {

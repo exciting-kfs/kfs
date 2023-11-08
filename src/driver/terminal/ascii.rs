@@ -14,48 +14,51 @@ pub mod constants {
 	pub const CR: u8 = b'\x0d';
 	pub const DEL: u8 = b'\x7f';
 
-	pub const FG_BLACK: u8 = 30;
-	pub const FG_RED: u8 = 31;
-	pub const FG_GREEN: u8 = 32;
-	pub const FG_BROWN: u8 = 33;
-	pub const FG_BLUE: u8 = 34;
-	pub const FG_MAGENTA: u8 = 35;
-	pub const FG_CYAN: u8 = 36;
-	pub const FG_WHITE: u8 = 37;
-	pub const FG_DEFAULT: u8 = 39;
+	pub const FG_BLACK: u16 = 30;
+	pub const FG_RED: u16 = 31;
+	pub const FG_GREEN: u16 = 32;
+	pub const FG_BROWN: u16 = 33;
+	pub const FG_BLUE: u16 = 34;
+	pub const FG_MAGENTA: u16 = 35;
+	pub const FG_CYAN: u16 = 36;
+	pub const FG_WHITE: u16 = 37;
+	pub const FG_DEFAULT: u16 = 39;
 
-	pub const BG_BLACK: u8 = 40;
-	pub const BG_RED: u8 = 41;
-	pub const BG_GREEN: u8 = 42;
-	pub const BG_BROWN: u8 = 43;
-	pub const BG_BLUE: u8 = 44;
-	pub const BG_MAGENTA: u8 = 45;
-	pub const BG_CYAN: u8 = 46;
-	pub const BG_WHITE: u8 = 47;
-	pub const BG_DEFAULT: u8 = 49;
+	pub const BG_BLACK: u16 = 40;
+	pub const BG_RED: u16 = 41;
+	pub const BG_GREEN: u16 = 42;
+	pub const BG_BROWN: u16 = 43;
+	pub const BG_BLUE: u16 = 44;
+	pub const BG_MAGENTA: u16 = 45;
+	pub const BG_CYAN: u16 = 46;
+	pub const BG_WHITE: u16 = 47;
+	pub const BG_DEFAULT: u16 = 49;
+
+	pub const RESET_COLOR: u16 = 0;
 }
 
-use constants::*;
+use core::mem;
 
-use crate::collection::WrapQueue;
+use alloc::vec::Vec;
+use constants::*;
 
 #[derive(Debug)]
 pub enum Ascii {
 	Text(u8),
 	Control(u8),
-	CtlSeq(u8, u8),
+	CtlSeq(u8, Vec<u16>),
 }
 
 enum State {
 	Start,
 	Escape,
-	Csi,
-	Param,
+	Param { index: u8 },
 }
+
 pub struct AsciiParser {
 	state: State,
-	buf: WrapQueue<u8, 16>,
-	param: u8,
+	buf: [u8; 5],
+	params: Vec<u16>,
 }
 
 impl Default for AsciiParser {
@@ -77,90 +80,99 @@ impl AsciiParser {
 	pub fn new() -> Self {
 		Self {
 			state: State::Start,
-			buf: WrapQueue::new(),
-			param: 0,
+			buf: [0; 5],
+			params: Vec::new(),
 		}
 	}
 
 	/// continue or start parsing process.
 	/// invalid sequence is silently ignored.
-	///
-	/// Even after `Some(x)` is returned, internal state is not automatically reset.
-	/// So, in order to keep parsing properly,
-	/// you have to call `reset()` after each `Some(x)` return.
 	pub fn parse(&mut self, c: u8) -> Option<Ascii> {
-		if self.buf.full() {
-			self.reset();
-			return None;
-		}
-		self.buf.push(c);
+		use State::*;
 		match self.state {
-			State::Start => self.parse_start(c),
-			State::Escape => self.parse_escape(c),
-			State::Csi => self.parse_csi(c),
-			State::Param => self.parse_param(c),
+			Start => self.parse_start(c),
+			Escape => self.parse_escape(c),
+			Param { index } => self.parse_csi(index, c),
 		}
 	}
 
-	/// reset internal buffer and state.
-	pub fn reset(&mut self) {
-		self.buf.reset();
+	fn parse_error(&mut self) -> (State, Option<Ascii>) {
 		self.state = State::Start;
-		self.param = 0;
-	}
+		self.params = Vec::new();
 
-	/// inspect internal buffer
-	pub fn as_mut_buf(&mut self) -> &mut WrapQueue<u8, 16> {
-		&mut self.buf
+		(State::Start, None)
 	}
 
 	fn parse_start(&mut self, c: u8) -> Option<Ascii> {
-		if b' ' <= c && c <= b'~' {
-			Some(Ascii::Text(c))
-		} else if c == ESC {
-			self.state = State::Escape;
-			None
-		} else {
-			Some(Ascii::Control(c))
-		}
+		let (next_state, ret) = match c {
+			ESC => (State::Escape, None),
+			b' '..=b'~' => (State::Start, Some(Ascii::Text(c))),
+			_ => (State::Start, Some(Ascii::Control(c))),
+		};
+
+		self.state = next_state;
+
+		ret
 	}
 
 	fn parse_escape(&mut self, c: u8) -> Option<Ascii> {
-		if c == b'[' {
-			self.state = State::Csi;
-			None
-		} else {
-			self.handle_invaild(c)
-		}
+		let (next_state, ret) = match c {
+			b'[' => (State::Param { index: 0 }, None),
+			_ => (State::Start, None),
+		};
+
+		self.state = next_state;
+
+		ret
 	}
 
-	fn parse_csi(&mut self, c: u8) -> Option<Ascii> {
-		if c.is_ascii_digit() {
-			let value = self
-				.param
-				.checked_mul(10)
-				.and_then(|x| x.checked_add(c - b'0'));
-			match value {
-				Some(x) => self.param = x,
-				None => return self.handle_invaild(c),
-			}
-			None
-		} else {
-			self.state = State::Param;
-			self.parse_param(c)
-		}
+	fn parse_csi(&mut self, index: u8, c: u8) -> Option<Ascii> {
+		let (next_state, ret) = match c {
+			b'0'..=b'9' => self.parse_param(index, c),
+			b';' => (self.parse_param_sep(index), None),
+			x if is_ctlseq_terminator(x) => self.parse_ctlseq_terminator(index, c),
+			_ => self.parse_error(),
+		};
+
+		self.state = next_state;
+
+		ret
 	}
 
-	fn parse_param(&mut self, c: u8) -> Option<Ascii> {
-		if is_ctlseq_terminator(c) {
-			Some(Ascii::CtlSeq(self.param, c))
+	fn parse_ctlseq_terminator(&mut self, index: u8, c: u8) -> (State, Option<Ascii>) {
+		if (index as usize) < self.buf.len() {
+			self.parse_param_sep(index);
 		} else {
-			self.handle_invaild(c)
+			return self.parse_error();
 		}
+
+		(
+			State::Start,
+			Some(Ascii::CtlSeq(c, mem::take(&mut self.params))),
+		)
 	}
 
-	fn handle_invaild(&mut self, c: u8) -> Option<Ascii> {
-		self.reset();
-		self.parse(c)
+	fn parse_param(&mut self, index: u8, c: u8) -> (State, Option<Ascii>) {
+		if index as usize >= self.buf.len() {
+			return self.parse_error();
+		}
+
+		self.buf[index as usize] = c;
+
+		(State::Param { index: index + 1 }, None)
+	}
+
+	fn parse_param_sep(&mut self, index: u8) -> State {
+		use core::str;
+
+		let string = str::from_utf8(&self.buf[0..index as usize]).unwrap();
+		let param: u16 = match string.len() {
+			0 => 0,
+			_ => string.parse().unwrap(),
+		};
+
+		self.params.push(param);
+
+		State::Param { index: 0 }
 	}
 }
