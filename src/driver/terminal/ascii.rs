@@ -166,13 +166,17 @@ impl AsciiParser {
 		use core::str;
 
 		let string = str::from_utf8(&self.buf[0..index as usize]).unwrap();
-		let param: u16 = match string.len() {
-			0 => 0,
-			_ => string.parse().unwrap(),
+		let param = match string.len() {
+			0 => Ok(0),
+			_ => string.parse(),
 		};
 
-		self.params.push(param);
-
-		State::Param { index: 0 }
+		match param {
+			Ok(x) => {
+				self.params.push(x);
+				State::Param { index: 0 }
+			}
+			Err(_) => self.parse_error().0,
+		}
 	}
 }
