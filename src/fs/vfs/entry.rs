@@ -143,7 +143,7 @@ impl VfsEntry {
 pub trait Entry {
 	fn get_inode(&self) -> &dyn Inode;
 
-	fn stat(&self) -> Result<Statx, Errno> {
+	fn statx(&self) -> Result<Statx, Errno> {
 		self.get_inode().stat()
 	}
 
@@ -153,7 +153,7 @@ pub trait Entry {
 	}
 
 	fn chmod(&self, perm: Permission, task: &Arc<Task>) -> Result<(), Errno> {
-		let owner = self.stat()?.uid;
+		let owner = self.statx()?.uid;
 
 		let uid = task.get_uid();
 		if uid != 0 && uid != owner {

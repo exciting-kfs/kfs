@@ -186,7 +186,7 @@ impl Memory {
 
 		let file_end_from_offset = file
 			.as_entry()
-			.and_then(|ent| ent.stat().ok())
+			.and_then(|ent| ent.statx().ok())
 			.and_then(|stat| {
 				offset
 					.try_into()

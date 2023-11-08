@@ -20,6 +20,20 @@
 #define O_NONBLOCK (04000)
 #define O_SYNC (010000)
 
+#define AT_FDCWD (-100)
+#define AT_EMPTY_PATH (0x1000)
+#define AT_SYMLINK_NOFOLLOW (0x100)
+
+#define S_IFMT (0170000)
+
+#define S_IFSOCK (0140000)
+#define S_IFLNK (0120000)
+#define S_IFREG (0100000)
+#define S_IFBLK (0060000)
+#define S_IFDIR (0040000)
+#define S_IFCHR (0020000)
+#define S_IFIFO (0010000)
+
 static inline int open(const char *path, int flags, ...) {
 	mode_t mode = 0;
 

@@ -20,7 +20,7 @@ pub fn read_user_binary(path: Path, task: &Arc<Task>) -> Result<VirtPageBox, Err
 
 	entry.access(Permission::ANY_EXECUTE, task)?;
 
-	let stat = entry.stat()?;
+	let stat = entry.statx()?;
 
 	let mut buffer = VirtPageBox::new(stat.size as usize).map_err(|_| Errno::ENOMEM)?;
 

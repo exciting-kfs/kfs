@@ -21,7 +21,7 @@ pub fn sys_init_module(path_ptr: usize) -> Result<usize, Errno> {
 
 	let entry = lookup_entry_follow(&path, current)?;
 
-	let stat = entry.stat()?;
+	let stat = entry.statx()?;
 
 	let file = entry.downcast_file()?;
 
