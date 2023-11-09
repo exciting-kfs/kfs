@@ -10,6 +10,7 @@ pub mod wait;
 
 mod dup;
 mod reboot;
+mod uname;
 
 use core::fmt::{self, Display};
 use core::mem::transmute;
@@ -44,6 +45,7 @@ use self::relation::{
 };
 use self::sendfile::sys_sendfile;
 use self::signal::{sys_sigaction, sys_signal, sys_sigprocmask, sys_sigreturn, sys_sigsuspend};
+use self::uname::sys_uname;
 use self::wait::sys_waitpid;
 
 /// `syscall no` must be sorted.
@@ -596,6 +598,7 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 			// pr_info!("syscall: sigreturn: {:p}", &frame);
 			sys_sigreturn(frame, restart)
 		}
+		122 => sys_uname(frame.ebx),
 		128 => sys_init_module(frame.ebx),
 		129 => sys_cleanup_module(frame.ebx),
 		132 => sys_getpgid(frame.ebx),
