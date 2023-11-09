@@ -1,3 +1,5 @@
+use core::fmt::{self, Display};
+
 use alloc::{
 	collections::{vec_deque, VecDeque},
 	vec::Vec,
@@ -182,6 +184,18 @@ impl Path {
 		}
 
 		buf
+	}
+}
+
+impl Display for Path {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		use core::str;
+
+		write!(
+			f,
+			"{}",
+			str::from_utf8(&self.to_buffer()).unwrap_or("[unknown]")
+		)
 	}
 }
 

@@ -1,5 +1,7 @@
+use core::ffi::CStr;
 use core::mem::{self};
 
+use alloc::borrow::ToOwned;
 use alloc::sync::Arc;
 
 use crate::elf::Elf;
@@ -49,6 +51,10 @@ pub fn sys_execve(
 	let argv = StringVec::new(argv, current)?;
 	let envp = StringVec::new(envp, current)?;
 
+	let new_cmd = CStr::from_bytes_until_nul(&argv.data)
+		.map(|s| s.to_owned().into_bytes())
+		.unwrap_or_default();
+
 	let new_memory = Memory::from_elf(elf, argv, envp)?;
 
 	new_memory.pick_up();
@@ -66,6 +72,8 @@ pub fn sys_execve(
 	};
 
 	mem::drop(mem::replace(&mut *memory, new_memory));
+
+	*current.lock_cmd() = new_cmd;
 
 	Ok(0)
 }

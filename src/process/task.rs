@@ -2,6 +2,7 @@ use core::alloc::AllocError;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 use crate::config::USTACK_BASE;
 use crate::elf::Elf;
@@ -45,6 +46,7 @@ pub struct Task {
 	// caution: kstack must always be offset = 0x0
 	kstack: Stack,
 	state: Locked<State>,
+	cmd: Locked<Vec<u8>>,
 	pid: Pid,
 	uid: Uid,
 	gid: Gid,
@@ -113,6 +115,7 @@ impl Task {
 			pid,
 			uid: Uid::from_raw(0),
 			gid: Gid::from_raw(0),
+			cmd: Locked::new(b"init".to_vec()),
 			user_ext: Some(UserTaskExt {
 				exec_called: AtomicBool::new(false),
 				cwd: Locked::new(ROOT_DIR_ENTRY.lock().as_ref().unwrap().clone()),
@@ -148,6 +151,7 @@ impl Task {
 			pid,
 			uid: Uid::from_raw(0),
 			gid: Gid::from_raw(0),
+			cmd: Locked::new(b"kthread".to_vec()),
 			user_ext: None,
 		});
 
@@ -175,6 +179,7 @@ impl Task {
 		let pid = Pid::allocate();
 		let uid = self.uid.clone();
 		let gid = self.gid.clone();
+		let cmd = self.cmd.lock().clone();
 
 		let user_ext = self.get_user_ext().unwrap();
 
@@ -195,6 +200,7 @@ impl Task {
 				pid,
 				uid,
 				gid,
+				cmd: Locked::new(cmd),
 				user_ext: Some(UserTaskExt {
 					exec_called: AtomicBool::new(false),
 					cwd: Locked::new(cwd),
@@ -215,7 +221,11 @@ impl Task {
 		Ok(new_task)
 	}
 
-	#[inline(always)]
+	pub fn lock_cmd(&self) -> LockedGuard<'_, Vec<u8>> {
+		self.cmd.lock()
+	}
+
+	#[inline]
 	pub fn get_pid(&self) -> Pid {
 		self.pid
 	}
