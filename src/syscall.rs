@@ -467,6 +467,7 @@ fn get_syscall_info(n: usize) -> (&'static str, usize) {
 		382 => ("pkey_free", 1),
 		383 => ("statx", 5),
 		384 => ("arch_prctl", 6),
+		403 => ("clock_gettime64", 2),
 		_ => ("unknown", 6),
 	}
 }
@@ -637,7 +638,7 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		),
 		// vfork
 		190 => sys_fork(frame),
-
+		320 => sys_utimensat(frame.ebx as isize, frame.ecx, frame.edx, frame.esi),
 		// statx
 		383 => sys_statx(
 			frame.ebx as isize,
@@ -646,6 +647,8 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 			frame.esi,
 			frame.edi,
 		),
+		// clock_gettime64
+		403 => Err(Errno::ENOSYS),
 		_ => {
 			pr_warn!(
 				"unimplemented syscall: {}(no={})",

@@ -1,7 +1,9 @@
 use alloc::sync::Arc;
 
 use crate::fs::path::{Base, Path};
+use crate::fs::syscall::AT_FDCWD;
 use crate::fs::vfs::{Entry, ROOT_DIR_ENTRY};
+use crate::process::fd_table::Fd;
 use crate::process::task::Task;
 use crate::syscall::errno::Errno;
 
@@ -142,4 +144,27 @@ pub fn lookup_entry_follow_except_last(path: &Path, task: &Arc<Task>) -> Result<
 		.unwrap_or_else(|_| ROOT_DIR_ENTRY.lock().clone().unwrap());
 
 	lookup_entry_at_follow_except_last(cwd, path, task)
+}
+
+pub fn lookup_entry_by_dirfd(dirfd: isize, task: &Arc<Task>) -> Result<VfsEntry, Errno> {
+	let user_ext = task.get_user_ext().expect("must be user process");
+	match dirfd {
+		AT_FDCWD => Ok(VfsEntry::new_dir(user_ext.lock_cwd().clone())),
+		x => user_ext
+			.lock_fd_table()
+			.get_file(Fd::from(x as usize).ok_or(Errno::EBADF)?)
+			.ok_or(Errno::ENOENT)
+			.and_then(|f| f.as_entry().ok_or(Errno::ENOENT)),
+	}
+}
+
+pub fn lookup_entry_by_dirfd_path(
+	dirfd: isize,
+	path: &Path,
+	task: &Arc<Task>,
+	follow_last_link: bool,
+) -> Result<VfsEntry, Errno> {
+	let base = lookup_entry_by_dirfd(dirfd, task).and_then(|x| x.downcast_dir())?;
+
+	lookup_entry(base, &path, task, true, follow_last_link)
 }
