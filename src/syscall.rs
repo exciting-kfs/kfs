@@ -4,6 +4,7 @@ pub mod exec;
 pub mod fork;
 pub mod kill;
 pub mod relation;
+pub mod sendfile;
 pub mod signal;
 pub mod wait;
 
@@ -41,6 +42,7 @@ use self::reboot::sys_reboot;
 use self::relation::{
 	sys_getpgid, sys_getpgrp, sys_getpid, sys_getppid, sys_getsid, sys_setpgid, sys_setsid,
 };
+use self::sendfile::sys_sendfile;
 use self::signal::{sys_sigaction, sys_signal, sys_sigprocmask, sys_sigreturn, sys_sigsuspend};
 use self::wait::sys_waitpid;
 
@@ -613,6 +615,7 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		213 => sys_setuid(frame.ebx),
 		214 => sys_setgid(frame.ebx),
 		220 => sys_getdents(frame.ebx as isize, frame.ecx, frame.edx),
+		239 => sys_sendfile(frame.ebx as isize, frame.ecx as isize, frame.edx, frame.esi),
 		243 => sys_set_thread_area(frame.ebx),
 		// TODO: exit_group
 		252 => sys_exit(frame.ebx),
