@@ -549,6 +549,7 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		21 => sys_mount(frame.ebx, frame.ecx, frame.edx),
 		22 => sys_umount(frame.ebx),
 		37 => sys_kill(frame.ebx as isize, frame.ecx as isize),
+		38 => sys_rename(frame.ebx, frame.ecx),
 		39 => sys_mkdir(frame.ebx, frame.ecx as u32),
 		40 => sys_rmdir(frame.ebx),
 		41 => sys_dup(frame.ebx),

@@ -81,22 +81,12 @@ impl DirInode {
 		&self.0
 	}
 
-	fn is_empty(&self) -> Result<bool, Errno> {
-		let mut iter = dir::Iter::new(self, 0);
-
-		let mut count = 0;
-
-		loop {
-			if count > 2 {
-				return Ok(false);
-			}
-
-			match iter.next_block() {
-				Ok(_) => count += 1,
-				Err(e) => handle_iterblock_error!(e),
-			}
+	fn is_empty(&self) -> bool {
+		if self.inner().info().links_count == 2 {
+			true
+		} else {
+			false
 		}
-		Ok(true)
 	}
 
 	fn super_block(&self) -> Arc<SuperBlock> {
@@ -268,6 +258,8 @@ impl DirInode {
 	}
 
 	fn remove_child(&self, child: &Arc<LockRW<Inode>>) -> Result<(), Errno> {
+		child.load_bid()?;
+
 		let sb = self.super_block();
 		let inum = child.read_lock().inum();
 		let inum_staged = sb.dealloc_inum_staged(inum)?;
@@ -300,6 +292,12 @@ impl DirInode {
 			FileType::Socket => todo!(),
 			_ => vfs::VfsInode::File(Arc::new(FileInode::from_inode(inode))),
 		}
+	}
+
+	fn ino_to_inode(&self, ino: usize) -> Result<Arc<LockRW<Inode>>, Errno> {
+		Inum::new(ino)
+			.ok_or(Errno::EINVAL)
+			.and_then(|inum| self.super_block().read_inode_dma(inum))
 	}
 }
 
@@ -407,7 +405,6 @@ impl vfs::DirInode for DirInode {
 	}
 
 	fn create(&self, name: &[u8], perm: vfs::Permission) -> Result<Arc<dyn vfs::FileInode>, Errno> {
-		// pr_warn!("dir_inode: create");
 		if let Ok(_) = self.find_dirent(name) {
 			return Err(Errno::EEXIST);
 		}
@@ -416,6 +413,7 @@ impl vfs::DirInode for DirInode {
 		let inum = self.new_child(name, FileType::Regular)?;
 		let child = FileInode::new_shared(&sb, inum, perm);
 
+		self.inner().info_mut().links_count += 1;
 		vfs::SuperBlock::sync(sb.as_ref());
 
 		Ok(child)
@@ -432,7 +430,7 @@ impl vfs::DirInode for DirInode {
 		let child = sb.read_inode_dma(inum)?;
 		let dir = child.clone().downcast_dir().unwrap();
 
-		if !dir.is_empty()? {
+		if !dir.is_empty() {
 			return Err(Errno::ENOTEMPTY);
 		}
 
@@ -444,36 +442,34 @@ impl vfs::DirInode for DirInode {
 	}
 
 	fn unlink(&self, name: &[u8]) -> Result<(), Errno> {
-		let (ino, mut record) = self.remove_dirent_staged(name, |file_type| match file_type {
-			FileType::Directory => Err(Errno::EISDIR),
-			_ => Ok(()),
-		})?;
+		let (ino, mut record) = self.remove_dirent_staged(name, |_| Ok(()))?;
 
 		let inum = unsafe { Inum::new_unchecked(ino) };
 		let sb = self.super_block();
-
 		let child = sb.read_inode_dma(inum)?;
-		child.load_bid()?;
 
-		self.remove_child(&child)?;
+		{
+			if child.info().links_count == 1 {
+				self.remove_child(&child)?;
+			} else {
+				child.info_mut().links_count -= 1;
+			}
+		}
+
 		record.commit(());
 
 		vfs::SuperBlock::sync(self.super_block().as_ref());
 		Ok(())
 	}
 
-	fn link(&self, target: vfs::VfsEntry, link_name: &[u8]) -> Result<vfs::VfsInode, Errno> {
-		if let Ok(_) = self.find_dirent(link_name) {
-			return Err(Errno::EEXIST);
-		}
-
+	fn link(&self, src: &vfs::VfsEntry, link_name: &[u8]) -> Result<vfs::VfsInode, Errno> {
 		trace_feature!( "ext2-hard_link"
 			"HARD LINK from: {:?} to {:?}",
 			String::from_utf8(target.get_name().to_vec()),
 			String::from_utf8(link_name.to_vec())
 		);
 
-		let stat = target.statx()?;
+		let stat = src.statx()?;
 		let file_type = stat.get_type();
 
 		let inum = Inum::new(stat.ino as usize).ok_or(Errno::EINVAL)?;
@@ -493,6 +489,50 @@ impl vfs::DirInode for DirInode {
 		}
 
 		Ok(self.inode_to_vfs(inode, file_type))
+	}
+
+	fn overwrite(&self, src: &vfs::VfsEntry, link_name: &[u8]) -> Result<vfs::VfsInode, Errno> {
+		let sb = self.super_block();
+		let stat = src.statx()?;
+		let file_type = stat.get_type();
+
+		let mut iter = self.find_dirent(link_name)?;
+		let mut dirent = unsafe { iter.next_mut_block_unchecked() }?;
+		let mut record = dirent.get_record();
+
+		let old_child = self.ino_to_inode(record.ino as usize)?;
+		let new_child = self.ino_to_inode(stat.ino as usize)?;
+
+		if new_child.info().links_count >= LINK_MAX {
+			return Err(Errno::EMLINK);
+		}
+
+		trace_feature!(
+			"ext2-overwrite",
+			"OVERWRITE: src: ino:{}, record: name: {:?} ino: {}",
+			stat.ino,
+			alloc::string::String::from_utf8(link_name.to_vec()),
+			record.ino
+		);
+
+		let is_unique = old_child.info().is_unique();
+		match (file_type, is_unique) {
+			(FileType::Directory | FileType::Regular | FileType::SymLink, true) => {
+				self.remove_child(&old_child)
+			}
+			(FileType::Regular | FileType::SymLink, true) => {
+				old_child.info_mut().links_count -= 1;
+				Ok(())
+			}
+			(FileType::Directory, false) => Err(Errno::ENOTEMPTY),
+			_ => Err(Errno::EPERM),
+		}?;
+
+		record.ino = stat.ino as u32;
+		record.file_type = file_type;
+		new_child.info_mut().links_count += 1;
+
+		Ok(self.inode_to_vfs(new_child, file_type))
 	}
 }
 

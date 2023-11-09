@@ -95,6 +95,14 @@ impl VfsEntry {
 		}
 	}
 
+	pub fn is_mount_point(&self) -> bool {
+		use VfsEntry::*;
+		match self {
+			Dir(d) => d.is_mount_point(),
+			_ => false,
+		}
+	}
+
 	pub fn downcast_dir(self) -> Result<Arc<VfsDirEntry>, Errno> {
 		use VfsEntry::*;
 		match self {

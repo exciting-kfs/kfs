@@ -142,6 +142,14 @@ impl InodeInfo {
 
 		Ok(())
 	}
+
+	pub fn is_unique(&self) -> bool {
+		use FileType::*;
+		match FileType::from_mode(self.mode) {
+			Directory => self.links_count == 2,
+			_ => self.links_count == 1,
+		}
+	}
 }
 
 pub struct InodeInfoRef<'a> {

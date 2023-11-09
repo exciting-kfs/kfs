@@ -14,11 +14,13 @@ pub fn sys_unlink(path: usize) -> Result<usize, Errno> {
 
 	let entry = lookup_entry_follow_except_last(&path, current)?;
 
-	let parent_dir = entry.parent_dir(current)?;
-
-	parent_dir.unlink(entry.get_name().borrow(), current)?;
-
-	Ok(0)
+	if entry.is_dir() {
+		Err(Errno::EISDIR)
+	} else {
+		let parent_dir = entry.parent_dir(current)?;
+		parent_dir.unlink(entry.get_name().borrow(), current)?;
+		Ok(0)
+	}
 }
 
 pub fn sys_rmdir(path: usize) -> Result<usize, Errno> {
