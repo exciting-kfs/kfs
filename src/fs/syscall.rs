@@ -15,6 +15,7 @@ mod statx;
 mod symlink;
 mod truncate;
 mod unlink;
+mod utimensat;
 mod write;
 
 pub use chmod::sys_chmod;
@@ -34,6 +35,7 @@ pub use statx::sys_statx;
 pub use symlink::sys_symlink;
 pub use truncate::sys_truncate;
 pub use unlink::{sys_rmdir, sys_unlink};
+pub use utimensat::sys_utimensat;
 pub use write::{sys_write, sys_writev};
 
 use crate::process::{fd_table::Fd, task::CURRENT};
