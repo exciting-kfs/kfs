@@ -477,7 +477,7 @@ impl vfs::DirInode for DirInode {
 		let file_type = stat.get_type();
 
 		let inum = Inum::new(stat.ino as usize).ok_or(Errno::EINVAL)?;
-		let inode = self.super_block().read_inode_dma(inum)?; // TODO link inc
+		let inode = self.super_block().read_inode_dma(inum)?;
 
 		if inode.info().links_count >= LINK_MAX {
 			return Err(Errno::EMLINK);

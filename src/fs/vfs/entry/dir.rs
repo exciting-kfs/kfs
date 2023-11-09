@@ -212,6 +212,10 @@ impl VfsDirEntry {
 		self.is_mount_point
 	}
 
+	pub fn super_block(&self) -> &Arc<dyn SuperBlock> {
+		&self.super_block
+	}
+
 	fn do_absolute_root_mount(mut self) -> Arc<VfsDirEntry> {
 		let new_dentry = Arc::new_cyclic(|parent| {
 			self.parent = parent.clone();
