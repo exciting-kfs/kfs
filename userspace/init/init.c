@@ -31,7 +31,9 @@ int main(void) {
 	if (pid == 0) {
 		signal(SIGINT, SIG_IGN);
 		signal(SIGQUIT, SIG_IGN);
-		execve("/bin/getty", NULL, NULL);
+		char *argv[] = {"getty", NULL};
+		char *envp[] = {NULL};
+		execve("/bin/getty", argv, envp);
 		_exit(128);
 	}
 

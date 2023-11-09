@@ -2,13 +2,15 @@ use core::mem::MaybeUninit;
 use core::str;
 
 use alloc::collections::BTreeMap;
+use alloc::string::String;
 use alloc::{boxed::Box, string::ToString, sync::Arc, vec::Vec};
 use alloc::{format, vec};
 
 use crate::process::fd_table::Fd;
 use crate::process::relation::Pid;
+use crate::process::task::State;
 use crate::process::{get_idle_task, get_init_task};
-use crate::sync::Locked;
+use crate::sync::{LocalLocked, Locked};
 use crate::{
 	process::{process_tree::PROCESS_TREE, task::Task},
 	syscall::errno::Errno,
@@ -16,8 +18,8 @@ use crate::{
 
 use super::path::{format_path, Path};
 use super::vfs::{
-	self, lookup_entry_at_follow, Entry, FileSystem, Inode, StatxMode, StatxTimeStamp, SuperBlock,
-	VfsDirEntry, VfsHandle,
+	self, lookup_entry_at_follow, Entry, FileHandle, FileSystem, Inode, StatxMode, StatxTimeStamp,
+	SuperBlock, VfsDirEntry, VfsHandle,
 };
 use super::{
 	tmpfs::{TmpDir, TmpSymLink},
@@ -337,6 +339,7 @@ impl DirInode for Locked<ProcDirInode> {
 		let v = vec![
 			(7, b"cwd".to_vec()),
 			(2, b"fd".to_vec()),
+			(1, b"stat".to_vec()),
 			(2, b".".to_vec()),
 			(2, b"..".to_vec()),
 		];
@@ -348,6 +351,9 @@ impl DirInode for Locked<ProcDirInode> {
 		match name {
 			b"cwd" => Ok(VfsInode::SymLink(self.lock().cwd.clone())),
 			b"fd" => Ok(VfsInode::Dir(self.lock().fds.clone())),
+			b"stat" => Ok(VfsInode::File(Arc::new(ProcStatInode(
+				self.lock().task.clone(),
+			)))),
 			_ => Err(Errno::ENOENT),
 		}
 	}
@@ -370,6 +376,108 @@ impl DirInode for Locked<ProcDirInode> {
 
 	fn symlink(&self, _target: &[u8], _name: &[u8]) -> Result<Arc<dyn SymLinkInode>, Errno> {
 		Err(Errno::EPERM)
+	}
+}
+
+struct ProcStatInode(Arc<Task>);
+
+impl Inode for ProcStatInode {
+	fn stat(&self) -> Result<Statx, Errno> {
+		Ok(Statx {
+			mask: Statx::MASK_ALL,
+			blksize: 0,
+			attributes: 0,
+			nlink: 0,
+			uid: self.0.get_uid(),
+			gid: self.0.get_gid(),
+			mode: StatxMode::new(StatxMode::REGULAR, 0o444),
+			pad1: 0,
+			ino: 0,
+			size: 0,
+			blocks: 0,
+			attributes_mask: 0,
+			atime: StatxTimeStamp::default(),
+			btime: StatxTimeStamp::default(),
+			ctime: StatxTimeStamp::default(),
+			mtime: StatxTimeStamp::default(),
+			rdev_major: 0,
+			rdev_minor: 0,
+			dev_major: 0,
+			dev_minor: 0,
+		})
+	}
+
+	fn chown(&self, _owner: usize, _group: usize) -> Result<(), Errno> {
+		Err(Errno::EPERM)
+	}
+
+	fn chmod(&self, _perm: Permission) -> Result<(), Errno> {
+		Err(Errno::EPERM)
+	}
+}
+
+impl FileInode for ProcStatInode {
+	fn open(&self) -> Result<Box<dyn vfs::FileHandle>, Errno> {
+		let pid = self.0.get_pid().as_raw();
+		let cmd = self.0.lock_cmd();
+		let cmd: &str = core::str::from_utf8(&*cmd).unwrap_or_default();
+		let ppid = self.0.get_ppid().as_raw();
+		let pgrp = self.0.get_pgid().as_raw();
+		let sess = self.0.get_sid().as_raw();
+		let zeros = core::iter::repeat("0").take(46).intersperse(" ");
+
+		use State::*;
+		let state = match &*self.0.lock_state() {
+			Running => "R",
+			Sleeping => "S",
+			DeepSleep => "D",
+			Exited => "Z",
+		};
+
+		Ok(Box::new(LocalLocked::new(ProcStatHandle {
+			data: format!(
+				"{pid} ({cmd}) {state} {ppid} {pgrp} {sess} {}\n",
+				zeros.collect::<String>()
+			)
+			.into_bytes(),
+			cursor: 0,
+		})))
+	}
+
+	fn truncate(&self, _length: isize) -> Result<(), Errno> {
+		Err(Errno::EPERM)
+	}
+}
+
+struct ProcStatHandle {
+	data: Vec<u8>,
+	cursor: usize,
+}
+
+impl FileHandle for LocalLocked<ProcStatHandle> {
+	fn read(&self, buf: &mut [u8], _flags: vfs::IOFlag) -> Result<usize, Errno> {
+		let mut this = self.lock();
+
+		if this.data.len() <= this.cursor {
+			return Ok(0);
+		}
+
+		let source = &this.data[this.cursor..];
+		let size = source.len().min(buf.len());
+
+		buf[..size].copy_from_slice(&source[..size]);
+
+		this.cursor += size;
+
+		Ok(size)
+	}
+
+	fn write(&self, _buf: &[u8], _flags: vfs::IOFlag) -> Result<usize, Errno> {
+		Err(Errno::EBADF)
+	}
+
+	fn lseek(&self, _offset: isize, _whence: vfs::Whence) -> Result<usize, Errno> {
+		Err(Errno::EBADF)
 	}
 }
 
