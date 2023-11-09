@@ -7,7 +7,7 @@ use crate::{
 	syscall::errno::Errno,
 };
 
-use super::{DirHandle, FileHandle, Statx, StatxMode, StatxTimeStamp};
+use super::{DirHandle, FileHandle, Statx, StatxMode, StatxTimeStamp, VfsEntry};
 
 #[derive(Copy, Clone, Debug)]
 pub struct AccessFlag(i32);
@@ -196,6 +196,7 @@ pub trait DirInode: Inode {
 	fn create(&self, name: &[u8], perm: Permission) -> Result<Arc<dyn FileInode>, Errno>;
 	fn unlink(&self, name: &[u8]) -> Result<(), Errno>;
 	fn symlink(&self, target: &[u8], name: &[u8]) -> Result<Arc<dyn SymLinkInode>, Errno>;
+	fn link(&self, target: VfsEntry, link_name: &[u8]) -> Result<VfsInode, Errno>;
 }
 
 pub trait FileInode: Inode {

@@ -22,11 +22,11 @@ use super::{
 pub struct VfsDirEntry {
 	name: Rc<Vec<u8>>,
 	pub(super) inode: Arc<dyn DirInode>,
+	pub(super) super_block: Arc<dyn SuperBlock>,
 	parent: Weak<VfsDirEntry>,
 	sub_tree: Locked<BTreeMap<Ident, VfsEntry>>,
 	sub_mount: LocalLocked<BTreeMap<Ident, VfsEntry>>,
 	next_mount: Option<Arc<VfsDirEntry>>,
-	super_block: Arc<dyn SuperBlock>,
 	is_mount_point: bool,
 }
 
@@ -135,6 +135,22 @@ impl VfsDirEntry {
 		)))
 	}
 
+	pub fn link(
+		self: &Arc<Self>,
+		target: VfsEntry,
+		link_name: &[u8],
+		task: &Arc<Task>,
+	) -> Result<(), Errno> {
+		self.access(Permission::ANY_EXECUTE | Permission::ANY_WRITE, task)?;
+
+		let inode = self.inode.link(target, link_name)?;
+		let entry = self.inode_to_entry(link_name, inode);
+
+		self.insert_child_force(entry);
+
+		Ok(())
+	}
+
 	pub fn inode_to_entry(self: &Arc<Self>, name: &[u8], inode: VfsInode) -> VfsEntry {
 		use VfsInode::*;
 		match inode {
@@ -194,6 +210,10 @@ impl VfsDirEntry {
 
 	pub fn is_mount_point(&self) -> bool {
 		self.is_mount_point
+	}
+
+	pub fn super_block(&self) -> &Arc<dyn SuperBlock> {
+		&self.super_block
 	}
 
 	fn do_absolute_root_mount(mut self) -> Arc<VfsDirEntry> {

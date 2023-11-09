@@ -47,6 +47,7 @@ use super::{
 };
 
 const MAGIC: u16 = 0xef53;
+const LINK_MAX: u16 = 65000;
 
 static SB_POOL: Locked<BTreeMap<Vec<u8>, Arc<SuperBlock>>> = Locked::new(BTreeMap::new());
 

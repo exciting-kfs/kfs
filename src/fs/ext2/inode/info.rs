@@ -8,7 +8,7 @@ use crate::{
 		hpet::{get_timestamp_nano, get_timestamp_second},
 		partition::BlockId,
 	},
-	fs::vfs::{self, FileType, Permission, Statx, StatxMode, StatxTimeStamp},
+	fs::vfs::{self, FileType, Permission},
 	mm::constant::SECTOR_SIZE,
 	process::task::CURRENT,
 	sync::{ReadLockGuard, WriteLockGuard},
@@ -125,35 +125,6 @@ impl InodeInfo {
 		let blocks = self.blocks as usize - delta_bytes / SECTOR_SIZE;
 
 		self.blocks = blocks as u32;
-	}
-
-	pub fn stat(&self) -> vfs::Statx {
-		let uid = self.uid as usize;
-		let gid = self.gid as usize;
-		let size = self.get_size();
-
-		Statx {
-			mask: Statx::MASK_ALL,
-			blksize: 0,
-			attributes: 0,
-			nlink: 0,
-			uid,
-			gid,
-			mode: StatxMode(self.mode),
-			pad1: 0,
-			ino: 0,
-			size: size as u64,
-			blocks: 0,
-			attributes_mask: 0,
-			atime: StatxTimeStamp::default(),
-			btime: StatxTimeStamp::default(),
-			ctime: StatxTimeStamp::default(),
-			mtime: StatxTimeStamp::default(),
-			rdev_major: 0,
-			rdev_minor: 0,
-			dev_major: 0,
-			dev_minor: 0,
-		}
 	}
 
 	pub fn chmod(&mut self, perm: vfs::Permission) -> Result<(), Errno> {

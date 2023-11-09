@@ -1,4 +1,4 @@
-use super::Permission;
+use super::{FileType, Permission};
 
 #[repr(C)]
 #[derive(Default, Debug)]
@@ -65,5 +65,9 @@ impl Statx {
 	pub const MASK_ALL: usize = 0x00000fff;
 	pub fn get_perm(&self) -> Permission {
 		Permission::from_bits_truncate(self.mode.get_perm() as u32)
+	}
+
+	pub fn get_type(&self) -> FileType {
+		FileType::from_mode(self.mode.get_type())
 	}
 }

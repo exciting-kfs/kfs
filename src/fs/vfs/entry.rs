@@ -77,6 +77,24 @@ impl VfsEntry {
 		VfsEntry::Block(block)
 	}
 
+	pub fn super_block(&self) -> Option<&Arc<dyn SuperBlock>> {
+		use VfsEntry::*;
+		match self {
+			File(f) => Some(&f.super_block),
+			Dir(d) => Some(&d.super_block),
+			SymLink(s) => Some(&s.super_block),
+			_ => None,
+		}
+	}
+
+	pub fn is_dir(&self) -> bool {
+		use VfsEntry::*;
+		match self {
+			Dir(_) => true,
+			_ => false,
+		}
+	}
+
 	pub fn downcast_dir(self) -> Result<Arc<VfsDirEntry>, Errno> {
 		use VfsEntry::*;
 		match self {

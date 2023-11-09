@@ -17,7 +17,7 @@ pub struct VfsSymLinkEntry {
 	name: Rc<Vec<u8>>,
 	inode: Arc<dyn SymLinkInode>,
 	parent: Weak<VfsDirEntry>,
-	super_block: Arc<dyn SuperBlock>,
+	pub(super) super_block: Arc<dyn SuperBlock>,
 }
 
 impl VfsSymLinkEntry {

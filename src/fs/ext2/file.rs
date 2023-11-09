@@ -209,7 +209,7 @@ impl FileInode {
 
 impl vfs::Inode for FileInode {
 	fn stat(&self) -> Result<vfs::Statx, Errno> {
-		Ok(self.inner().info().stat())
+		Ok(self.inner().read_lock().stat())
 	}
 
 	fn chmod(&self, perm: vfs::Permission) -> Result<(), Errno> {

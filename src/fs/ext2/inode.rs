@@ -11,7 +11,7 @@ use alloc::{sync::Arc, vec::Vec};
 
 use crate::{
 	driver::partition::BlockId,
-	fs::vfs::{self, FileType, Permission},
+	fs::vfs::{self, FileType, Permission, Statx, StatxMode, StatxTimeStamp},
 	sync::{LocalLocked, LockRW},
 	syscall::errno::Errno,
 	trace_feature,
@@ -123,6 +123,37 @@ impl Inode {
 	pub fn dirty(&self) {
 		let inum = self.inum;
 		self.sb.dirty_inode(inum);
+	}
+
+	pub fn stat(&self) -> vfs::Statx {
+		let info = &self.info;
+		let uid = info.uid as usize;
+		let gid = info.gid as usize;
+		let size = info.get_size();
+		let blksize = self.block_size();
+
+		Statx {
+			mask: Statx::MASK_ALL,
+			blksize,
+			attributes: 0,
+			nlink: info.links_count as usize,
+			uid,
+			gid,
+			mode: StatxMode(info.mode),
+			pad1: 0,
+			ino: self.inum.ino() as u64,
+			size: size as u64,
+			blocks: info.blocks as u64,
+			attributes_mask: 0,
+			atime: StatxTimeStamp::default(),
+			btime: StatxTimeStamp::default(),
+			ctime: StatxTimeStamp::default(),
+			mtime: StatxTimeStamp::default(),
+			rdev_major: 0,
+			rdev_minor: 0,
+			dev_major: 0,
+			dev_minor: 0,
+		}
 	}
 }
 
