@@ -20,7 +20,7 @@ done
 mkdir $SYSROOT/lib/modules
 
 cat << 'EOF' > $SYSROOT/etc/passwd
-root::0:0::/root:/bin/shell
+root::0:0::/root:/bin/sh
 cjeon:$6$xKfGiVIDU2eFHpz9$CIrn5g9ODPQM1VznJ941RjEeoPvaKNHak1o7rrUJR1jXg/kZL7bmQcv5xD3GFLCn39dhWRlsMmbNam59tDIgh0:1000:1000::/home/cjeon:/bin/shell
 EOF
 
