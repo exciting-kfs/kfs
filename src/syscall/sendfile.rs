@@ -28,7 +28,10 @@ pub fn sys_sendfile(
 		(dst, src)
 	};
 
-	if let Ok(offset) = verify_ptr_mut::<isize>(offset_ptr, current) {
+	if offset_ptr == 0 {
+		__sendfile(src, dst, count)
+	} else {
+		let offset = verify_ptr_mut::<isize>(offset_ptr, current)?;
 		let prev_off = src.lseek(0, Whence::Current)?;
 		src.lseek(*offset, Whence::Begin)?;
 
@@ -37,8 +40,6 @@ pub fn sys_sendfile(
 		src.lseek(prev_off as isize, Whence::Begin)?;
 		*offset += ret as isize;
 		Ok(ret)
-	} else {
-		__sendfile(src, dst, count)
 	}
 }
 
