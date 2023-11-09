@@ -21,7 +21,8 @@ use super::{
 	tmpfs::{TmpDir, TmpSb},
 	vfs::{
 		DirHandle, DirInode, FileInode, FileSystem, Ident, Inode, MemoryFileSystem, Permission,
-		Statx, StatxMode, StatxTimeStamp, SuperBlock, SymLinkInode, VfsDirEntry, VfsInode,
+		Statx, StatxMode, StatxTimeStamp, SuperBlock, SymLinkInode, VfsDirEntry, VfsEntry,
+		VfsInode,
 	},
 };
 
@@ -189,6 +190,10 @@ impl DirInode for DevDirInode {
 	}
 
 	fn symlink(&self, _target: &[u8], _name: &[u8]) -> Result<Arc<dyn SymLinkInode>, Errno> {
+		Err(Errno::EPERM)
+	}
+
+	fn link(&self, _target: VfsEntry, _link_name: &[u8]) -> Result<VfsInode, Errno> {
 		Err(Errno::EPERM)
 	}
 }

@@ -8,7 +8,7 @@ use alloc::{boxed::Box, collections::BTreeMap};
 use super::path::Path;
 use super::vfs::{
 	DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident, Inode, MemoryFileSystem,
-	Statx, StatxMode, StatxTimeStamp, SuperBlock, SymLinkInode, VfsInode, Whence,
+	Statx, StatxMode, StatxTimeStamp, SuperBlock, SymLinkInode, VfsEntry, VfsInode, Whence,
 };
 use crate::fs::vfs::{KfsDirent, Permission};
 use crate::mm::util::next_align;
@@ -423,6 +423,10 @@ impl DirInode for Locked<TmpDirInode> {
 		};
 
 		Ok(symlink)
+	}
+
+	fn link(&self, _target: VfsEntry, _link_name: &[u8]) -> Result<VfsInode, Errno> {
+		Err(Errno::EPERM)
 	}
 }
 

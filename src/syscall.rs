@@ -539,6 +539,7 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		6 => sys_close(frame.ebx as isize),
 		7 => sys_waitpid(frame.ebx as isize, frame.ecx as *mut isize, frame.edx),
 		8 => sys_creat(frame.ebx, frame.ecx as u32),
+		9 => sys_link(frame.ebx, frame.ecx),
 		10 => sys_unlink(frame.ebx),
 		11 => sys_execve(frame, frame.ebx, frame.ecx, frame.edx),
 		12 => sys_chdir(frame.ebx),

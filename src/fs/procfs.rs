@@ -19,7 +19,7 @@ use crate::{
 use super::path::{format_path, Path};
 use super::vfs::{
 	self, lookup_entry_at_follow, Entry, FileHandle, FileSystem, Inode, StatxMode, StatxTimeStamp,
-	SuperBlock, VfsDirEntry, VfsHandle,
+	SuperBlock, VfsDirEntry, VfsEntry, VfsHandle,
 };
 use super::{
 	tmpfs::{TmpDir, TmpSymLink},
@@ -273,6 +273,10 @@ impl DirInode for Locked<ProcFdDirInode> {
 	fn symlink(&self, _target: &[u8], _name: &[u8]) -> Result<Arc<dyn SymLinkInode>, Errno> {
 		Err(Errno::EPERM)
 	}
+
+	fn link(&self, _target: VfsEntry, _link_name: &[u8]) -> Result<VfsInode, Errno> {
+		Err(Errno::EPERM)
+	}
 }
 
 pub struct ProcDirInode {
@@ -375,6 +379,10 @@ impl DirInode for Locked<ProcDirInode> {
 	}
 
 	fn symlink(&self, _target: &[u8], _name: &[u8]) -> Result<Arc<dyn SymLinkInode>, Errno> {
+		Err(Errno::EPERM)
+	}
+
+	fn link(&self, _target: VfsEntry, _link_name: &[u8]) -> Result<VfsInode, Errno> {
 		Err(Errno::EPERM)
 	}
 }
@@ -591,6 +599,10 @@ impl DirInode for Locked<ProcRootDirInode> {
 	}
 
 	fn symlink(&self, _target: &[u8], _name: &[u8]) -> Result<Arc<dyn SymLinkInode>, Errno> {
+		Err(Errno::EPERM)
+	}
+
+	fn link(&self, _target: VfsEntry, _link_name: &[u8]) -> Result<VfsInode, Errno> {
 		Err(Errno::EPERM)
 	}
 }

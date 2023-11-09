@@ -5,6 +5,7 @@ use core::{
 
 use alloc::{boxed::Box, collections::VecDeque, sync::Arc};
 
+use crate::fs::{ext2::LINK_MAX, vfs::Entry};
 use crate::{
 	fs::{
 		ext2::{
@@ -291,11 +292,20 @@ impl DirInode {
 
 		Ok(())
 	}
+
+	fn inode_to_vfs(&self, inode: Arc<LockRW<Inode>>, file_type: FileType) -> vfs::VfsInode {
+		match file_type {
+			FileType::Directory => vfs::VfsInode::Dir(Arc::new(DirInode::from_inode(inode))),
+			FileType::SymLink => vfs::VfsInode::SymLink(Arc::new(SymLinkInode::from_inode(inode))),
+			FileType::Socket => todo!(),
+			_ => vfs::VfsInode::File(Arc::new(FileInode::from_inode(inode))),
+		}
+	}
 }
 
 impl vfs::Inode for DirInode {
 	fn stat(&self) -> Result<vfs::Statx, Errno> {
-		Ok(self.inner().info().stat())
+		Ok(self.inner().read_lock().stat())
 	}
 
 	fn chmod(&self, perm: vfs::Permission) -> Result<(), Errno> {
@@ -339,12 +349,7 @@ impl vfs::DirInode for DirInode {
 		let inode = self.super_block().read_inode_dma(inum)?;
 		inode.load_bid()?;
 
-		Ok(match file_type {
-			FileType::Directory => vfs::VfsInode::Dir(Arc::new(DirInode::from_inode(inode))),
-			FileType::SymLink => vfs::VfsInode::SymLink(Arc::new(SymLinkInode::from_inode(inode))),
-			FileType::Socket => todo!(),
-			_ => vfs::VfsInode::File(Arc::new(FileInode::from_inode(inode))), // hmm: symlink?
-		})
+		Ok(self.inode_to_vfs(inode, file_type))
 	}
 
 	fn symlink(&self, target: &[u8], name: &[u8]) -> Result<Arc<dyn vfs::SymLinkInode>, Errno> {
@@ -455,6 +460,39 @@ impl vfs::DirInode for DirInode {
 
 		vfs::SuperBlock::sync(self.super_block().as_ref());
 		Ok(())
+	}
+
+	fn link(&self, target: vfs::VfsEntry, link_name: &[u8]) -> Result<vfs::VfsInode, Errno> {
+		if let Ok(_) = self.find_dirent(link_name) {
+			return Err(Errno::EEXIST);
+		}
+
+		trace_feature!( "ext2-hard_link"
+			"HARD LINK from: {:?} to {:?}",
+			String::from_utf8(target.get_name().to_vec()),
+			String::from_utf8(link_name.to_vec())
+		);
+
+		let stat = target.statx()?;
+		let file_type = stat.get_type();
+
+		let inum = Inum::new(stat.ino as usize).ok_or(Errno::EINVAL)?;
+		let inode = self.super_block().read_inode_dma(inum)?; // TODO link inc
+
+		if inode.info().links_count >= LINK_MAX {
+			return Err(Errno::EMLINK);
+		}
+
+		let dirent = self.write_dirent_staged(link_name, file_type)?;
+
+		dirent.commit(inum);
+
+		{
+			let mut info = inode.info_mut();
+			info.links_count += 1;
+		}
+
+		Ok(self.inode_to_vfs(inode, file_type))
 	}
 }
 

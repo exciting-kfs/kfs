@@ -124,7 +124,7 @@ impl SymLinkInode {
 
 impl vfs::Inode for SymLinkInode {
 	fn stat(&self) -> Result<vfs::Statx, Errno> {
-		Ok(self.inner().info().stat())
+		Ok(self.inner().read_lock().stat())
 	}
 
 	fn chown(&self, _owner: usize, _group: usize) -> Result<(), Errno> {

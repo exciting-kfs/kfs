@@ -8,7 +8,9 @@ use crate::sync::Locked;
 use crate::syscall::errno::Errno;
 
 use super::tmpfs::TmpDirInode;
-use super::vfs::{self, FileSystem, Inode, StatxMode, StatxTimeStamp, SuperBlock, VfsDirEntry};
+use super::vfs::{
+	self, FileSystem, Inode, StatxMode, StatxTimeStamp, SuperBlock, VfsDirEntry, VfsEntry,
+};
 use super::{
 	tmpfs::TmpDir,
 	vfs::{
@@ -161,6 +163,10 @@ impl DirInode for ModuleDirInode {
 	fn symlink(&self, _target: &[u8], _name: &[u8]) -> Result<Arc<dyn SymLinkInode>, Errno> {
 		Err(Errno::EPERM)
 	}
+
+	fn link(&self, _target: VfsEntry, _link_name: &[u8]) -> Result<VfsInode, Errno> {
+		Err(Errno::EPERM)
+	}
 }
 
 pub struct SysRootDirInode {
@@ -246,6 +252,10 @@ impl DirInode for Locked<SysRootDirInode> {
 	}
 
 	fn symlink(&self, _target: &[u8], _name: &[u8]) -> Result<Arc<dyn SymLinkInode>, Errno> {
+		Err(Errno::EPERM)
+	}
+
+	fn link(&self, _target: VfsEntry, _link_name: &[u8]) -> Result<VfsInode, Errno> {
 		Err(Errno::EPERM)
 	}
 }
