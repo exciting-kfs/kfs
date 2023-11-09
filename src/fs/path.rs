@@ -1,13 +1,11 @@
 use core::fmt::{self, Display};
 
-use alloc::{
-	collections::{vec_deque, VecDeque},
-	vec::Vec,
-};
+use alloc::collections::{vec_deque, VecDeque};
+use alloc::vec::Vec;
 
 macro_rules! format_path {
 	($($arg:tt)*) => {
-		Path::new(format!($($arg)*).as_bytes())
+		Path::new(alloc::format!($($arg)*).as_bytes())
 	};
 }
 
