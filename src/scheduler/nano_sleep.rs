@@ -68,7 +68,7 @@ pub fn sys_nanosleep(req: usize, rem: usize) -> Result<usize, Errno> {
 
 	let mut alarm = ALARM.lock();
 
-	alarm.register(req.nano());
+	alarm.register(get_timestamp_nano() + req.nano());
 
 	sleep_and_yield_lock(Sleep::Light, alarm);
 
