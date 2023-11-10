@@ -1,21 +1,27 @@
+mod mounts;
 mod task;
 
+pub use mounts::{create_mount_entry, delete_mount_entry};
 pub use task::{change_cwd, create_fd_node, create_task_node, delete_fd_node, delete_task_node};
 
 use core::mem::MaybeUninit;
 
-use alloc::string::ToString;
+use alloc::string::{String, ToString};
 use alloc::{boxed::Box, collections::BTreeMap, sync::Arc, vec::Vec};
 
 use crate::process::{get_idle_task, get_init_task, process_tree::PROCESS_TREE, relation::Pid};
+use crate::sync::LocalLocked;
 use crate::{sync::Locked, syscall::errno::Errno};
 
 use task::ProcDirInode;
 
+use self::mounts::ProcMountsInode;
+
 use super::tmpfs::TmpDir;
 use super::vfs::{
-	DirHandle, DirInode, FileInode, FileSystem, Inode, MemoryFileSystem, Permission, Statx,
-	StatxMode, StatxTimeStamp, SuperBlock, SymLinkInode, VfsDirEntry, VfsEntry, VfsInode,
+	DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Inode, MemoryFileSystem,
+	Permission, Statx, StatxMode, StatxTimeStamp, SuperBlock, SymLinkInode, VfsDirEntry, VfsEntry,
+	VfsInode, Whence,
 };
 
 pub fn init() {
@@ -64,33 +70,39 @@ static PROCFS_ROOT_DIR_ENTRY: Locked<Option<Arc<VfsDirEntry>>> = Locked::new(Non
 
 pub struct ProcRootDirInode {
 	sub_files: BTreeMap<Pid, Arc<Locked<ProcDirInode>>>,
+	mounts: Arc<LocalLocked<ProcMountsInode>>,
 }
 
 impl ProcRootDirInode {
 	pub fn new() -> Self {
 		Self {
 			sub_files: BTreeMap::new(),
+			mounts: Arc::new(LocalLocked::new(ProcMountsInode::new())),
 		}
 	}
 }
 
 impl Locked<ProcRootDirInode> {
-	pub fn insert_inode(&self, pid: Pid, inode: Arc<Locked<ProcDirInode>>) {
+	pub fn insert_task_inode(&self, pid: Pid, inode: Arc<Locked<ProcDirInode>>) {
 		let mut this = self.lock();
 
 		this.sub_files.insert(pid, inode);
 	}
 
-	pub fn remove_inode(&self, pid: &Pid) {
+	pub fn remove_task_inode(&self, pid: &Pid) {
 		let mut this = self.lock();
 
 		this.sub_files.remove(&pid);
 	}
 
-	pub fn get_inode(&self, pid: &Pid) -> Option<Arc<Locked<ProcDirInode>>> {
+	pub fn get_task_inode(&self, pid: &Pid) -> Option<Arc<Locked<ProcDirInode>>> {
 		let this = self.lock();
 
 		this.sub_files.get(pid).cloned()
+	}
+
+	pub fn get_mounts(&self) -> Arc<LocalLocked<ProcMountsInode>> {
+		self.lock().mounts.clone()
 	}
 }
 
@@ -136,6 +148,7 @@ impl DirInode for Locked<ProcRootDirInode> {
 			.members()
 			.keys()
 			.map(|x| (2, x.as_raw().to_string().into()))
+			.chain(Some((1, String::from("mounts").into())))
 			.collect();
 
 		v.push((2, b".".to_vec()));
@@ -145,6 +158,9 @@ impl DirInode for Locked<ProcRootDirInode> {
 	}
 
 	fn lookup(&self, name: &[u8]) -> Result<VfsInode, Errno> {
+		if name == b"mounts" {
+			return Ok(VfsInode::File(self.get_mounts()));
+		}
 		let pid = core::str::from_utf8(name).map_err(|_| Errno::ESRCH)?;
 		let pid: usize = pid.to_string().parse().map_err(|_| Errno::ESRCH)?;
 		let pid = Pid::from_raw(pid);
@@ -177,5 +193,43 @@ impl DirInode for Locked<ProcRootDirInode> {
 
 	fn link(&self, _target: VfsEntry, _link_name: &[u8]) -> Result<VfsInode, Errno> {
 		Err(Errno::EPERM)
+	}
+}
+
+pub struct ProcFileHandle {
+	data: Vec<u8>,
+	cursor: usize,
+}
+
+impl ProcFileHandle {
+	pub fn new(data: Vec<u8>) -> Self {
+		Self { data, cursor: 0 }
+	}
+}
+
+impl FileHandle for LocalLocked<ProcFileHandle> {
+	fn read(&self, buf: &mut [u8], _flags: IOFlag) -> Result<usize, Errno> {
+		let mut this = self.lock();
+
+		if this.data.len() <= this.cursor {
+			return Ok(0);
+		}
+
+		let source = &this.data[this.cursor..];
+		let size = source.len().min(buf.len());
+
+		buf[..size].copy_from_slice(&source[..size]);
+
+		this.cursor += size;
+
+		Ok(size)
+	}
+
+	fn write(&self, _buf: &[u8], _flags: IOFlag) -> Result<usize, Errno> {
+		Err(Errno::EBADF)
+	}
+
+	fn lseek(&self, _offset: isize, _whence: Whence) -> Result<usize, Errno> {
+		Err(Errno::EBADF)
 	}
 }

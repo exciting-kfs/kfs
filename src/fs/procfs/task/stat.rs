@@ -1,8 +1,7 @@
-use alloc::{boxed::Box, format, string::String, sync::Arc, vec::Vec};
+use alloc::{boxed::Box, format, string::String, sync::Arc};
 
-use crate::fs::vfs::{
-	FileHandle, FileInode, IOFlag, Inode, Permission, Statx, StatxMode, StatxTimeStamp, Whence,
-};
+use crate::fs::procfs::ProcFileHandle;
+use crate::fs::vfs::{FileHandle, FileInode, Inode, Permission, Statx, StatxMode, StatxTimeStamp};
 use crate::process::task::{State, Task};
 use crate::{sync::LocalLocked, syscall::errno::Errno};
 
@@ -61,49 +60,16 @@ impl FileInode for ProcStatInode {
 			Exited => "Z",
 		};
 
-		Ok(Box::new(LocalLocked::new(ProcStatHandle {
-			data: format!(
+		Ok(Box::new(LocalLocked::new(ProcFileHandle::new(
+			format!(
 				"{pid} ({cmd}) {state} {ppid} {pgrp} {sess} {}\n",
 				zeros.collect::<String>()
 			)
 			.into_bytes(),
-			cursor: 0,
-		})))
+		))))
 	}
 
 	fn truncate(&self, _length: isize) -> Result<(), Errno> {
 		Err(Errno::EPERM)
-	}
-}
-
-struct ProcStatHandle {
-	data: Vec<u8>,
-	cursor: usize,
-}
-
-impl FileHandle for LocalLocked<ProcStatHandle> {
-	fn read(&self, buf: &mut [u8], _flags: IOFlag) -> Result<usize, Errno> {
-		let mut this = self.lock();
-
-		if this.data.len() <= this.cursor {
-			return Ok(0);
-		}
-
-		let source = &this.data[this.cursor..];
-		let size = source.len().min(buf.len());
-
-		buf[..size].copy_from_slice(&source[..size]);
-
-		this.cursor += size;
-
-		Ok(size)
-	}
-
-	fn write(&self, _buf: &[u8], _flags: IOFlag) -> Result<usize, Errno> {
-		Err(Errno::EBADF)
-	}
-
-	fn lseek(&self, _offset: isize, _whence: Whence) -> Result<usize, Errno> {
-		Err(Errno::EBADF)
 	}
 }

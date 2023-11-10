@@ -96,3 +96,10 @@ macro_rules! write_field {
 		write!($f, "\t{}: {:x?}\n", stringify!($field), $self.$field)
 	};
 }
+
+pub fn from_utf8_or<'a>(buf: &'a [u8], default: &'static str) -> &'a str {
+	match core::str::from_utf8(buf) {
+		Ok(s) => s,
+		Err(_) => default,
+	}
+}

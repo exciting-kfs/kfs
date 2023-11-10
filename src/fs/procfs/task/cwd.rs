@@ -9,7 +9,9 @@ use crate::{process::task::Task, syscall::errno::Errno};
 pub fn change_cwd(task: &Arc<Task>) -> Result<(), Errno> {
 	let procfs = unsafe { PROCFS_ROOT_DIR.assume_init_ref() };
 
-	let dir = procfs.get_inode(&task.get_pid()).ok_or(Errno::ENOENT)?;
+	let dir = procfs
+		.get_task_inode(&task.get_pid())
+		.ok_or(Errno::ENOENT)?;
 
 	let cwd = task
 		.get_user_ext()

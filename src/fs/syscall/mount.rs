@@ -1,5 +1,6 @@
 use alloc::sync::Arc;
 
+use crate::fs::procfs::{create_mount_entry, delete_mount_entry};
 use crate::fs::sysfs::SysFs;
 use crate::mm::user::verify::{verify_path, verify_string};
 use crate::process::task::CURRENT;
@@ -62,10 +63,10 @@ fn do_mount(
 pub fn sys_mount(dev_path: usize, mount_point: usize, fs_name: usize) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };
 
-	let dev_path = verify_path(dev_path, current)?;
-	let dev_path = Path::new(dev_path);
-	let mount_point = verify_path(mount_point, current)?;
-	let mount_point = Path::new(mount_point);
+	let dev_path_buf = verify_path(dev_path, current)?;
+	let dev_path = Path::new(dev_path_buf);
+	let mount_point_buf = verify_path(mount_point, current)?;
+	let mount_point = Path::new(mount_point_buf);
 	let fs_name = verify_string(fs_name, current, 256)?;
 
 	let entry = lookup_entry_nofollow(&mount_point, current).and_then(|x| x.downcast_dir())?;
@@ -73,15 +74,23 @@ pub fn sys_mount(dev_path: usize, mount_point: usize, fs_name: usize) -> Result<
 		.and_then(|x| x.downcast_block())
 		.and_then(|x| x.get_device());
 
-	do_mount(block_device, fs_name, entry, current)
+	let ret = do_mount(block_device, fs_name, entry, current)?;
+
+	create_mount_entry(dev_path_buf, mount_point_buf, fs_name);
+
+	Ok(ret)
 }
 
 pub fn sys_umount(path: usize) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_mut() };
 
-	let path = verify_path(path, current)?;
-	let path = Path::new(path);
+	let path_buf = verify_path(path, current)?;
+	let path = Path::new(path_buf);
 	let entry = lookup_entry_nofollow(&path, current).and_then(|x| x.downcast_dir())?;
 
-	entry.unmount(current).map(|_| 0)
+	entry.unmount(current)?;
+
+	_ = delete_mount_entry(path_buf);
+
+	Ok(0)
 }
