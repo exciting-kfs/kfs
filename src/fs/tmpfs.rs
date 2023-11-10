@@ -6,6 +6,7 @@ use alloc::vec::Vec;
 use alloc::{boxed::Box, collections::BTreeMap};
 
 use super::path::Path;
+use super::syscall::{FsMagic, StatFs};
 use super::vfs::{
 	DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Ident, Inode, MemoryFileSystem,
 	Statx, StatxMode, StatxTimeStamp, SuperBlock, SymLinkInode, VfsEntry, VfsInode, Whence,
@@ -33,6 +34,23 @@ pub struct TmpSb;
 impl SuperBlock for TmpSb {
 	fn filesystem(&self) -> Box<dyn FileSystem> {
 		Box::new(TmpFs)
+	}
+
+	fn statfs(&self) -> Result<StatFs, Errno> {
+		Ok(StatFs {
+			kind: FsMagic::Tmp,
+			block_size: 4096,
+			total_blocks: !0,
+			free_blocks: !0,
+			free_blocks_for_user: !0,
+			total_inodes: !0,
+			free_inodes: !0,
+			id: 0,
+			filename_max_length: 256,
+			fregment_size: 0,
+			mount_flags: 0,
+			reserved: [0; 4],
+		})
 	}
 }
 

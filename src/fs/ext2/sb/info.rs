@@ -1,14 +1,8 @@
-use core::{
-	fmt::{Debug, Display},
-	mem::size_of,
-};
+use core::fmt::{Debug, Display};
+use core::mem::size_of;
 
-use crate::{
-	driver::{hpet::get_timestamp_second, ide::block::BlockSize, partition::BlockId},
-	fs::ext2::inode::inum::Inum,
-	process::task::CURRENT,
-	write_field,
-};
+use crate::driver::{hpet::get_timestamp_second, ide::block::BlockSize, partition::BlockId};
+use crate::{fs::ext2::inode::inum::Inum, write_field};
 
 use super::bgd::BGD;
 
@@ -202,14 +196,24 @@ impl SuperBlockInfo {
 		self.free_inodes_count as usize
 	}
 
+	#[inline]
 	pub fn free_blocks_count(&self) -> usize {
-		let current = unsafe { CURRENT.get_ref() };
+		self.free_blocks_count as usize
+	}
 
-		if current.is_privileged() {
-			self.free_blocks_count as usize
-		} else {
-			(self.free_blocks_count - self.r_blocks_count) as usize
-		}
+	#[inline]
+	pub fn free_blocks_for_user_count(&self) -> usize {
+		(self.free_blocks_count - self.r_blocks_count) as usize
+	}
+
+	#[inline]
+	pub fn total_blocks_count(&self) -> usize {
+		self.blocks_count as usize
+	}
+
+	#[inline]
+	pub fn total_inodes_count(&self) -> usize {
+		self.inodes_count as usize
 	}
 }
 
