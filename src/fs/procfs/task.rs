@@ -24,7 +24,7 @@ use super::{PROCFS_ROOT_DIR, PROCFS_ROOT_DIR_ENTRY};
 pub fn create_task_node(task: &Arc<Task>) {
 	let procfs = unsafe { PROCFS_ROOT_DIR.assume_init_ref() };
 
-	procfs.insert_inode(
+	procfs.insert_task_inode(
 		task.get_pid(),
 		Arc::new(Locked::new(ProcDirInode::new(task))),
 	);
@@ -32,7 +32,7 @@ pub fn create_task_node(task: &Arc<Task>) {
 
 pub fn delete_task_node(pid: Pid) -> Result<(), Errno> {
 	let procfs = unsafe { PROCFS_ROOT_DIR.assume_init_ref() };
-	procfs.remove_inode(&pid);
+	procfs.remove_task_inode(&pid);
 
 	if let Some(ent) = &*PROCFS_ROOT_DIR_ENTRY.lock() {
 		ent.remove_child_force(format!("{}", pid.as_raw()).as_bytes());

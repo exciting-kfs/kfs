@@ -14,7 +14,7 @@ use crate::{sync::Locked, syscall::errno::Errno};
 pub fn create_fd_node(pid: Pid, fd: Fd, handle: VfsHandle) -> Result<(), Errno> {
 	let procfs = unsafe { PROCFS_ROOT_DIR.assume_init_ref() };
 
-	let fd_dir = procfs.get_inode(&pid).ok_or(Errno::ENOENT)?;
+	let fd_dir = procfs.get_task_inode(&pid).ok_or(Errno::ENOENT)?;
 
 	let idx = fd.index();
 	let symlink = TmpSymLink::new(
@@ -30,7 +30,7 @@ pub fn create_fd_node(pid: Pid, fd: Fd, handle: VfsHandle) -> Result<(), Errno> 
 
 pub fn delete_fd_node(pid: Pid, fd: Fd) -> Result<(), Errno> {
 	let procfs = unsafe { PROCFS_ROOT_DIR.assume_init_ref() };
-	let dir = procfs.get_inode(&pid).ok_or(Errno::ENOENT)?;
+	let dir = procfs.get_task_inode(&pid).ok_or(Errno::ENOENT)?;
 
 	dir.lock().fds.lock().remove_fd(fd.index());
 
