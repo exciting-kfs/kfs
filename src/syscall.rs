@@ -624,6 +624,7 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		// TODO: exit_group
 		252 => sys_exit(frame.ebx),
 		265 => sys_clock_gettime(frame.ebx, frame.ecx),
+		268 => sys_statfs64(frame.ebx, frame.ecx, frame.edx),
 		359 => sys_socket(frame.ebx as i32, frame.ecx as i32, frame.edx as i32),
 		361 => sys_bind(frame.ebx, frame.ecx, frame.edx),
 		362 => sys_connect(frame.ebx, frame.ecx, frame.edx),

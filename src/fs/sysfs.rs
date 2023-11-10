@@ -7,6 +7,7 @@ use crate::process::get_init_task;
 use crate::sync::Locked;
 use crate::syscall::errno::Errno;
 
+use super::syscall::{FsMagic, StatFs};
 use super::tmpfs::TmpDirInode;
 use super::vfs::{
 	self, FileSystem, Inode, StatxMode, StatxTimeStamp, SuperBlock, VfsDirEntry, VfsEntry,
@@ -53,6 +54,23 @@ impl vfs::SuperBlock for SysSb {
 		SYSFS_ROOT_DIR_ENTRY.lock().take();
 
 		Ok(())
+	}
+
+	fn statfs(&self) -> Result<StatFs, Errno> {
+		Ok(StatFs {
+			kind: FsMagic::Sys,
+			block_size: 4096,
+			total_blocks: !0,
+			free_blocks: !0,
+			free_blocks_for_user: !0,
+			total_inodes: !0,
+			free_inodes: !0,
+			id: 0,
+			filename_max_length: 256,
+			fregment_size: 0,
+			mount_flags: 0,
+			reserved: [0; 4],
+		})
 	}
 }
 

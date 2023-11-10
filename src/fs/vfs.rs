@@ -17,6 +17,7 @@ use crate::sync::Locked;
 use crate::syscall::errno::Errno;
 
 use super::devfs::partition::PartBorrow;
+use super::syscall::StatFs;
 
 pub trait FileSystem {
 	fn unmount(&self, sb: &Arc<dyn SuperBlock>) -> Result<(), Errno> {
@@ -47,6 +48,8 @@ pub trait SuperBlock {
 	}
 
 	fn filesystem(&self) -> Box<dyn FileSystem>;
+
+	fn statfs(&self) -> Result<StatFs, Errno>;
 }
 
 pub static ROOT_DIR_ENTRY: Locked<Option<Arc<VfsDirEntry>>> = Locked::new(None);

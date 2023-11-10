@@ -15,7 +15,10 @@ use alloc::{
 use crate::{
 	driver::hpet::get_timestamp_second,
 	driver::partition::BlockId,
-	fs::vfs,
+	fs::{
+		syscall::{FsMagic, StatFs},
+		vfs,
+	},
 	mm::util::next_align,
 	sync::{LocalLocked, LockRW, Locked},
 	syscall::errno::Errno,
@@ -429,5 +432,24 @@ impl vfs::SuperBlock for SuperBlock {
 
 	fn id(&self) -> Vec<u8> {
 		self.info.read_lock().uuid().to_vec()
+	}
+
+	fn statfs(&self) -> Result<StatFs, Errno> {
+		let info = self.info.read_lock();
+
+		Ok(StatFs {
+			kind: FsMagic::Ext2,
+			block_size: info.block_size().as_bytes(),
+			total_blocks: info.total_blocks_count() as u64,
+			free_blocks: info.free_blocks_count() as u64,
+			free_blocks_for_user: info.free_blocks_count() as u64,
+			total_inodes: info.total_inodes_count() as u64,
+			free_inodes: info.free_inodes_count() as u64,
+			id: 0,
+			filename_max_length: 256,
+			fregment_size: 0,
+			mount_flags: 0,
+			reserved: [0; 4],
+		})
 	}
 }

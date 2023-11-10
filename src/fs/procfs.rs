@@ -17,6 +17,7 @@ use task::ProcDirInode;
 
 use self::mounts::ProcMountsInode;
 
+use super::syscall::{FsMagic, StatFs};
 use super::tmpfs::TmpDir;
 use super::vfs::{
 	DirHandle, DirInode, FileHandle, FileInode, FileSystem, IOFlag, Inode, MemoryFileSystem,
@@ -62,6 +63,23 @@ impl SuperBlock for ProcSb {
 		PROCFS_ROOT_DIR_ENTRY.lock().take();
 
 		Ok(())
+	}
+
+	fn statfs(&self) -> Result<StatFs, Errno> {
+		Ok(StatFs {
+			kind: FsMagic::Proc,
+			block_size: 4096,
+			total_blocks: !0,
+			free_blocks: !0,
+			free_blocks_for_user: !0,
+			total_inodes: !0,
+			free_inodes: !0,
+			id: 0,
+			filename_max_length: 256,
+			fregment_size: 0,
+			mount_flags: 0,
+			reserved: [0; 4],
+		})
 	}
 }
 
