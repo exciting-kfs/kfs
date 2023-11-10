@@ -3,14 +3,14 @@
 
 use alloc::collections::VecDeque;
 use alloc::sync::{Arc, Weak};
-use bitflags::bitflags;
 
 use super::ascii::constants::*;
 use super::console::Console;
-use super::termios::WinSize;
+use super::termios::{InputFlag, LocalFlag, OutputFlag, Termios, WinSize};
 use super::{console_screen_draw, termios};
 
 use crate::collection::LineBuffer;
+use crate::driver::terminal::termios::{VINTR, VQUIT};
 use crate::driver::vga::text_vga::WINDOW_SIZE;
 use crate::fs::vfs::{FileHandle, IOFlag};
 use crate::input::key_event::*;
@@ -43,7 +43,7 @@ static ALPHA_LOWER: [u8; 26] = [
 static ALPHA_UPPER: [u8; 26] = [
 	b'A', b'B', b'C', b'D', b'E',
 	b'F', b'G', b'H', b'I', b'J',
-	b'K', b'L', b'M', b'n', b'O',
+	b'K', b'L', b'M', b'N', b'O',
 	b'P', b'Q', b'R', b'S', b'T',
 	b'U', b'V', b'W', b'X', b'Y',
 	b'Z',
@@ -165,8 +165,7 @@ fn convert_control(code: ControlCode) -> Option<&'static [u8]> {
 }
 
 pub struct TTY {
-	flag: TTYFlag,
-	control: ControlChars,
+	termios: Termios,
 	console: Console,
 	line_buffer: LineBuffer<4096>,
 	into_process: VecDeque<u8>,
@@ -174,59 +173,10 @@ pub struct TTY {
 	waitlist: WaitList,
 }
 
-struct ControlChars {
-	sig_intr: u8,
-	sig_quit: u8,
-	icanon_kill: u8,
-	icanon_erase: u8,
-	eof: u8,
-}
-
-impl Default for ControlChars {
-	fn default() -> Self {
-		ControlChars {
-			sig_intr: ETX,     // '^C'
-			sig_quit: FS,      // '^\'
-			icanon_kill: 0x15, // '^U'
-			icanon_erase: DEL, // '^?'
-			eof: EOF,          // '^D'
-		}
-	}
-}
-
-bitflags! {
-	#[repr(transparent)]
-	#[derive(Clone, Copy)]
-	pub struct TTYFlag: u32 {
-		const Echo = 1;
-		const EchoE = 2;
-		const EchoK = 4;
-		const EchoCtl = 8;
-		const Icanon = 16;
-		const Isig = 32;
-		const Icrnl = 64;
-		const Opost = 128;
-		const Onlcr = 256;
-	}
-}
-
-impl TTYFlag {
-	pub const RAW: Self = Self::Echo.union(Self::EchoCtl);
-	pub const SANE: Self = Self::RAW
-		.union(Self::EchoE)
-		.union(Self::EchoK)
-		.union(Self::Icanon)
-		.union(Self::Isig)
-		.union(Self::Icrnl)
-		.union(Self::Opost)
-		.union(Self::Onlcr);
-}
-
 impl TTY {
-	pub fn new(flag: TTYFlag) -> Self {
+	pub fn new(termios: Termios) -> Self {
 		Self {
-			flag,
-			control: ControlChars::default(),
+			termios,
 			line_buffer: LineBuffer::new(),
 			into_process: VecDeque::new(),
 			session: Weak::default(),
@@ -262,7 +212,7 @@ impl TTY {
 			buf[i] = *c;
 		}
 
-		if self.flag.contains(TTYFlag::Icrnl) {
+		if self.termios.iflag.contains(InputFlag::ICRNL) {
 			buf.iter_mut().filter(|b| **b == CR).for_each(|b| *b = LF);
 		}
 
@@ -272,7 +222,11 @@ impl TTY {
 	fn output_convert<'a>(&self, buf: &'a mut [u8], len: usize) -> &'a [u8] {
 		let mut cr_count = 0;
 
-		if self.flag.contains(TTYFlag::Opost | TTYFlag::Onlcr) {
+		if self
+			.termios
+			.oflag
+			.contains(OutputFlag::OPOST | OutputFlag::ONLCR)
+		{
 			for i in (0..len).rev() {
 				if buf[i] == LF {
 					unsafe {
@@ -303,10 +257,16 @@ impl TTY {
 	/// - 7f (DEL) => `^?`
 	fn do_echo(&mut self, buf: &[u8]) -> Result<(), NoSpace> {
 		let c = buf[0];
-		let echo_ctl = self.flag.contains(TTYFlag::EchoCtl);
-		let echo_e = self.flag.contains(TTYFlag::EchoE | TTYFlag::Icanon);
-		let echo_k = self.flag.contains(TTYFlag::EchoK | TTYFlag::Icanon);
-		let icanon = self.flag.contains(TTYFlag::Icanon);
+		let echo_ctl = self.termios.lflag.contains(LocalFlag::ECHOCTL);
+		let echo_e = self
+			.termios
+			.lflag
+			.contains(LocalFlag::ECHOE | LocalFlag::ICANON);
+		let echo_k = self
+			.termios
+			.lflag
+			.contains(LocalFlag::ECHOK | LocalFlag::ICANON);
+		let icanon = self.termios.lflag.contains(LocalFlag::ICANON);
 
 		if let (DEL, true) = (c, echo_e) {
 			self.console.write(&CURSOR[2]);
@@ -348,7 +308,7 @@ impl TTY {
 			EOF => {}
 			ESC => {
 				let code = code.identify();
-				let echo_ctl = self.flag.contains(TTYFlag::EchoCtl);
+				let echo_ctl = self.termios.lflag.contains(LocalFlag::ECHOCTL);
 
 				match (code, echo_ctl) {
 					(KeyKind::Cursor(_), true) => {
@@ -376,8 +336,8 @@ impl TTY {
 		// pr_debug!("tty: send signal: {}", c);
 
 		let num = match c {
-			x if x == self.control.sig_intr => SigNum::INT,
-			x if x == self.control.sig_quit => SigNum::QUIT,
+			x if x == self.termios.control_char[VINTR] => SigNum::INT,
+			x if x == self.termios.control_char[VQUIT] => SigNum::QUIT,
 			_ => unreachable!(),
 		};
 
@@ -385,8 +345,8 @@ impl TTY {
 	}
 
 	fn is_signal(&self, c: u8) -> bool {
-		self.flag.contains(TTYFlag::Isig)
-			&& (self.control.sig_intr == c || self.control.sig_quit == c)
+		self.termios.lflag.contains(LocalFlag::ISIG)
+			&& (self.termios.control_char[VINTR] == c || self.termios.control_char[VQUIT] == c)
 	}
 }
 
@@ -420,7 +380,7 @@ impl ChWrite<Code> for TTY {
 			self.send_signal(input[0]);
 		} else {
 			// Icanon
-			if self.flag.contains(TTYFlag::Icanon) {
+			if self.termios.lflag.contains(LocalFlag::ICANON) {
 				self.do_icanon(input, code);
 			} else {
 				self.into_process.extend(input);
@@ -432,7 +392,7 @@ impl ChWrite<Code> for TTY {
 		let output = self.output_convert(&mut buf, len);
 
 		// Echo
-		if self.flag.contains(TTYFlag::Echo) {
+		if self.termios.lflag.contains(LocalFlag::ECHO) {
 			self.do_echo(output)?
 		}
 
@@ -523,6 +483,26 @@ impl TTYFile {
 			.ok_or(Errno::ESRCH)
 			.and_then(|x| x.lock().set_foreground(pgid))
 	}
+
+	fn get_termios(&self, argp: usize) -> Result<(), Errno> {
+		let current = unsafe { CURRENT.get_ref() };
+
+		let dst = verify_ptr_mut::<Termios>(argp, current)?;
+
+		*dst = self.lock_tty().termios.clone();
+
+		Ok(())
+	}
+
+	fn set_termios(&self, argp: usize) -> Result<(), Errno> {
+		let current = unsafe { CURRENT.get_ref() };
+
+		let src = verify_ptr::<Termios>(argp, current)?;
+
+		self.lock_tty().termios = src.clone();
+
+		Ok(())
+	}
 }
 
 impl FileHandle for TTYFile {
@@ -570,6 +550,8 @@ impl FileHandle for TTYFile {
 			termios::TIOCGWINSZ => self.get_window_size(argp),
 			termios::TIOCGPGRP => self.get_foreground_group(argp),
 			termios::TIOCSPGRP => self.set_foreground_group(argp),
+			termios::TCGETS => self.get_termios(argp),
+			termios::TCSETSW | termios::TCSETS => self.set_termios(argp),
 			x => {
 				pr_warn!("tty: ioctl: unknown request: {}", x);
 				Err(Errno::EINVAL)

@@ -12,14 +12,16 @@ use core::mem::MaybeUninit;
 
 use crate::{config::NR_CONSOLES, scheduler::work, sync::Locked};
 
-use tty::{TTYFlag, TTY};
+use tty::TTY;
+
+use self::termios::Termios;
 
 static FOREGROUND_TTY: Locked<MaybeUninit<TTYFile>> = Locked::uninit();
 static mut TTYS: [MaybeUninit<TTYFile>; NR_CONSOLES] = MaybeUninit::uninit_array();
 
 pub fn init() {
 	for tty in unsafe { &mut TTYS } {
-		tty.write(TTYFile::new(Arc::new(Locked::new(TTY::new(TTYFlag::SANE)))));
+		tty.write(TTYFile::new(Arc::new(Locked::new(TTY::new(Termios::SANE)))));
 	}
 
 	unsafe {

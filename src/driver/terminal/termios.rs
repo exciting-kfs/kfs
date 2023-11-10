@@ -93,8 +93,159 @@ pub const SIOCATMARK: u32 = 35077;
 pub const SIOCGSTAMP: u32 = 35078;
 pub const SIOCGSTAMPNS: u32 = 35079;
 
+pub const VINTR: usize = 0;
+pub const VQUIT: usize = 1;
+pub const VERASE: usize = 2;
+pub const VKILL: usize = 3;
+pub const VEOF: usize = 4;
+pub const VTIME: usize = 5;
+pub const VMIN: usize = 6;
+pub const VSWTC: usize = 7;
+pub const VSTART: usize = 8;
+pub const VSTOP: usize = 9;
+pub const VSUSP: usize = 10;
+pub const VEOL: usize = 11;
+pub const VREPRINT: usize = 12;
+pub const VDISCARD: usize = 13;
+pub const VWERASE: usize = 14;
+pub const VLNEXT: usize = 15;
+pub const VEOL2: usize = 16;
+
 #[repr(C)]
 pub struct WinSize {
 	pub row: u16,
 	pub col: u16,
+}
+
+use bitflags::bitflags;
+
+use super::ascii::constants::{DEL, EOF, ETX, FS};
+
+bitflags! {
+	#[repr(transparent)]
+	#[derive(Clone, Copy, Debug)]
+	pub struct LocalFlag: u32 {
+		const ISIG = 0o000001;
+		const ICANON = 0o000002;
+		const XCASE = 0o000004;
+		const ECHO = 0o000010;
+		const ECHOE = 0o000020;
+		const ECHOK = 0o000040;
+		const ECHONL = 0o000100;
+		const NOFLSH = 0o000200;
+		const TOSTOP = 0o000400;
+		const ECHOCTL = 0o001000;
+		const ECHOPRT = 0o002000;
+		const ECHOKE = 0o004000;
+		const FLUSHO = 0o010000;
+		const PENDIN = 0o040000;
+		const IEXTEN = 0o100000;
+		const EXTPROC = 0o200000;
+	}
+}
+
+bitflags! {
+	#[repr(transparent)]
+	#[derive(Clone, Copy, Debug)]
+	pub struct InputFlag: u32 {
+		const IGNBRK = 0o000001;
+		const BRKINT = 0o000002;
+		const IGNPAR = 0o000004;
+		const PARMRK = 0o000010;
+		const INPCK = 0o000020;
+		const ISTRIP = 0o000040;
+		const INLCR = 0o000100;
+		const IGNCR = 0o000200;
+		const ICRNL = 0o000400;
+		const IUCLC = 0o001000;
+		const IXON = 0o002000;
+		const IXANY = 0o004000;
+		const IXOFF = 0o010000;
+		const IMAXBEL = 0o020000;
+		const IUTF8 = 0o040000;
+	}
+}
+
+bitflags! {
+	#[repr(transparent)]
+	#[derive(Clone, Copy, Debug)]
+	pub struct OutputFlag: u32 {
+		const OPOST = 0o000001;
+		const OLCUC = 0o000002;
+		const ONLCR = 0o000004;
+		const OCRNL = 0o000010;
+		const ONOCR = 0o000020;
+		const ONLRET = 0o000040;
+		const OFILL = 0o000100;
+		const OFDEL = 0o000200;
+		const NLDLY = 0o000400;
+		const NL0 = 0o000000;
+		const NL1 = 0o000400;
+		const CRDLY = 0o003000;
+		const CR0 = 0o000000;
+		const CR1 = 0o001000;
+		const CR2 = 0o002000;
+		const CR3 = 0o003000;
+		const TABDLY = 0o014000;
+		const TAB0 = 0o000000;
+		const TAB1 = 0o004000;
+		const TAB2 = 0o010000;
+		const TAB3 = 0o014000;
+		const XTABS = 0o014000;
+		const BSDLY = 0o020000;
+		const BS0 = 0o000000;
+		const BS1 = 0o020000;
+		const VTDLY = 0o040000;
+		const VT0 = 0o000000;
+		const VT1 = 0o040000;
+		const FFDLY = 0o100000;
+		const FF0 = 0o000000;
+		const FF1 = 0o100000;
+	}
+}
+
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct Termios {
+	pub iflag: InputFlag,
+	pub oflag: OutputFlag,
+	pub cflag: u32,
+	pub lflag: LocalFlag,
+	pub line_disc: u8,
+	pub control_char: [u8; 19],
+	pub ispeed: u32,
+	pub ospeed: u32,
+}
+
+impl Termios {
+	pub const RAW: Self = Self {
+		iflag: InputFlag::empty(),
+		oflag: OutputFlag::empty(),
+		cflag: 0,
+		lflag: LocalFlag::ECHO.union(LocalFlag::ECHOCTL),
+		line_disc: 0,
+		control_char: [
+			ETX, FS, DEL, 0x15, EOF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		],
+		ispeed: 0,
+		ospeed: 0,
+	};
+
+	pub const SANE: Self = Self {
+		iflag: InputFlag::ICRNL,
+		oflag: OutputFlag::OPOST.union(OutputFlag::ONLCR),
+		cflag: 0,
+		lflag: LocalFlag::ECHO
+			.union(LocalFlag::ECHOCTL)
+			.union(LocalFlag::ECHOE)
+			.union(LocalFlag::ECHOK)
+			.union(LocalFlag::ICANON)
+			.union(LocalFlag::ISIG),
+		line_disc: 0,
+		control_char: [
+			ETX, FS, DEL, 0x15, EOF, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		],
+		ispeed: 0,
+		ospeed: 0,
+	};
 }
