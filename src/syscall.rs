@@ -142,7 +142,7 @@ fn get_syscall_info(n: usize) -> (&'static str, usize) {
 		49 => ("geteuid", 0),
 		50 => ("getegid", 0),
 		51 => ("acct", 1),
-		52 => ("umount2", 6),
+		52 => ("umount2", 2),
 		53 => ("lock", 6),
 		54 => ("ioctl", 3),
 		55 => ("fcntl", 3),
@@ -558,6 +558,8 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 			pr_info!("syscall: signal: {}, {:x}", frame.ebx, frame.ecx);
 			sys_signal(frame.ebx, frame.ecx)
 		}
+		// todo: umount2
+		52 => sys_umount(frame.ebx),
 		54 => sys_ioctl(frame.ebx as isize, frame.ecx, frame.edx),
 		55 | 221 => sys_fcntl(frame.ebx as isize, frame.ecx, frame.edx),
 		57 => sys_setpgid(frame.ebx, frame.ecx),
