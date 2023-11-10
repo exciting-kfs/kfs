@@ -583,6 +583,7 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		}
 		80 => sys_reboot(frame.ebx),
 		83 => sys_symlink(frame.ebx, frame.ecx),
+		85 => sys_readlink(frame.ebx, frame.ecx, frame.edx),
 		// mmap / mmap2 TODO: proper mmap2 handling
 		90 | 192 => sys_mmap(
 			frame.ebx,

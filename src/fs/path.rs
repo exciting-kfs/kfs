@@ -170,6 +170,9 @@ impl Path {
 						buf.push(*ch);
 					}
 				}
+				if !self.components().is_empty() {
+					buf.push(b'/');
+				}
 			}
 		} else {
 			buf.push(b'/');
