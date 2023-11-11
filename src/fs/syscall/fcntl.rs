@@ -8,19 +8,21 @@ use crate::{
 	},
 	syscall::errno::Errno,
 };
-#[repr(u8)]
+#[repr(u16)]
 enum Cmd {
 	DupFd,
 	GetFd,
 	SetFd,
 	GetFl,
 	SetFl,
+	DupFdCloExec = 1030,
 }
 
 impl Cmd {
 	fn from_usize(cmd: usize) -> Result<Self, Errno> {
 		match cmd {
-			x @ 0..=4 => Ok(unsafe { transmute(x as u8) }),
+			1030 => Ok(Cmd::DupFdCloExec),
+			x @ 0..=4 => Ok(unsafe { transmute(x as u16) }),
 			_ => Err(Errno::EINVAL),
 		}
 	}
@@ -37,7 +39,13 @@ pub fn sys_fcntl(fd: isize, cmd: usize, arg: usize) -> Result<usize, Errno> {
 		SetFd => Ok(0),
 		GetFl => get_fl(fd),
 		SetFl => set_fl(fd, arg),
+		DupFdCloExec => dup_fd_clo_exec(fd, arg),
 	}
+}
+
+fn dup_fd_clo_exec(src: Fd, start: usize) -> Result<usize, Errno> {
+	// TODO CLOEXEC
+	dup_fd(src, start)
 }
 
 fn dup_fd(src: Fd, start: usize) -> Result<usize, Errno> {

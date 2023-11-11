@@ -41,6 +41,10 @@ impl Session {
 		self.ctty = Some(tty)
 	}
 
+	pub fn release_ctty(&mut self) {
+		self.ctty = None
+	}
+
 	pub fn insert(&mut self, pgid: Pgid, w: Weak<ProcessGroup>) {
 		if let None = self.foreground {
 			self.foreground = Some(w.clone());

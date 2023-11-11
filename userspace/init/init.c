@@ -7,8 +7,8 @@
 #include <sys/wait.h>
 
 #include "kfs/ft.h"
-#include "kfs/libft.h"
 #include "kfs/kernel.h"
+#include "kfs/libft.h"
 
 int main(void) {
 	mkdir("/dev", 0777);

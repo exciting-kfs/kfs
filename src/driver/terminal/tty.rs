@@ -503,6 +503,19 @@ impl TTYFile {
 
 		Ok(())
 	}
+
+	fn set_ctty(&self, sess: &Arc<Locked<Session>>) -> Result<(), Errno> {
+		let mut sess_lock = sess.lock();
+		sess_lock.set_ctty(self.clone());
+		self.lock_tty().connect(&sess)
+	}
+
+	fn release_ctty(&self, sess: &Arc<Locked<Session>>) -> Result<(), Errno> {
+		let mut sess_lock = sess.lock();
+		sess_lock.release_ctty();
+		self.lock_tty().disconnect();
+		Ok(())
+	}
 }
 
 impl FileHandle for TTYFile {
@@ -539,9 +552,10 @@ impl FileHandle for TTYFile {
 			.get_user_ext()
 			.expect("must be user process")
 			.lock_relation();
+		let curr_sess = rel.get_session();
 
 		if let Some(ref sess) = self.lock_tty().session.upgrade() {
-			if !Arc::ptr_eq(sess, &rel.get_session()) {
+			if !Arc::ptr_eq(sess, &curr_sess) {
 				return Err(Errno::EPERM);
 			}
 		}
@@ -550,6 +564,8 @@ impl FileHandle for TTYFile {
 			termios::TIOCGWINSZ => self.get_window_size(argp),
 			termios::TIOCGPGRP => self.get_foreground_group(argp),
 			termios::TIOCSPGRP => self.set_foreground_group(argp),
+			termios::TIOCSCTTY => self.set_ctty(&curr_sess),
+			termios::TIOCNOTTY => self.release_ctty(&curr_sess),
 			termios::TCGETS => self.get_termios(argp),
 			termios::TCSETSW | termios::TCSETS => self.set_termios(argp),
 			x => {
