@@ -137,13 +137,29 @@ impl VfsDirEntry {
 
 	pub fn link(
 		self: &Arc<Self>,
-		target: VfsEntry,
+		target: &VfsEntry,
 		link_name: &[u8],
 		task: &Arc<Task>,
 	) -> Result<(), Errno> {
 		self.access(Permission::ANY_EXECUTE | Permission::ANY_WRITE, task)?;
 
 		let inode = self.inode.link(target, link_name)?;
+		let entry = self.inode_to_entry(link_name, inode);
+
+		self.insert_child_force(entry);
+
+		Ok(())
+	}
+
+	pub fn overwrite(
+		self: &Arc<Self>,
+		src: &VfsEntry,
+		link_name: &[u8],
+		task: &Arc<Task>,
+	) -> Result<(), Errno> {
+		self.access(Permission::ANY_EXECUTE | Permission::ANY_WRITE, task)?;
+
+		let inode = self.inode.overwrite(src, link_name)?;
 		let entry = self.inode_to_entry(link_name, inode);
 
 		self.insert_child_force(entry);
@@ -326,7 +342,7 @@ impl VfsDirEntry {
 	}
 
 	pub fn insert_child_force(self: &Arc<Self>, entry: VfsEntry) {
-		self.sub_tree.lock().insert(entry.get_name(), entry.clone());
+		self.sub_tree.lock().insert(entry.get_name(), entry);
 	}
 }
 

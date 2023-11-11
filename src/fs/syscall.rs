@@ -29,7 +29,7 @@ pub use fcntl::sys_fcntl;
 pub use getcwd::sys_getcwd;
 pub use getdents::sys_getdents;
 pub use ioctl::sys_ioctl;
-pub use link::sys_link;
+pub use link::{sys_link, sys_rename};
 pub use lseek::sys_lseek;
 pub use mkdir::sys_mkdir;
 pub use mount::{sys_mount, sys_umount};

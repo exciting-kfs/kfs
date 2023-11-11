@@ -144,7 +144,11 @@ impl DirInode for Locked<ProcDirInode> {
 		Err(Errno::EPERM)
 	}
 
-	fn link(&self, _target: VfsEntry, _link_name: &[u8]) -> Result<VfsInode, Errno> {
+	fn link(&self, _target: &VfsEntry, _link_name: &[u8]) -> Result<VfsInode, Errno> {
+		Err(Errno::EPERM)
+	}
+
+	fn overwrite(&self, _src: &VfsEntry, _link_name: &[u8]) -> Result<VfsInode, Errno> {
 		Err(Errno::EPERM)
 	}
 }
