@@ -612,6 +612,8 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		147 => sys_getsid(frame.ebx),
 		158 => sys_sched_yield(),
 		162 => sys_nanosleep(frame.ebx, frame.ecx),
+		// poll
+		168 => Ok(frame.ecx),
 		// TODO: rt_sigprocmask
 		175 => sys_sigprocmask(frame.ebx, frame.ecx, frame.edx),
 		// TODO: rt_sigsuspend
