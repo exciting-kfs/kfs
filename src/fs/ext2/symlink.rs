@@ -8,6 +8,7 @@ use crate::{
 		path::Path,
 		vfs::{self, Permission},
 	},
+	mm::util::next_align,
 	sync::{LockRW, Locked},
 	syscall::errno::Errno,
 	trace_feature,
@@ -104,7 +105,7 @@ impl SymLinkInode {
 
 		let info = self.inode.info();
 		let size = info.get_size();
-		let len = size / size_of::<u32>();
+		let len = next_align(size, size_of::<u32>()) / size_of::<u32>();
 
 		for i in 0..len {
 			let mut data = info.block[i];
