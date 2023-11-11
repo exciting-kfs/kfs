@@ -53,12 +53,11 @@ pub fn sys_rename(old_path: usize, new_path: usize) -> Result<usize, Errno> {
 		}?;
 
 		new_parent.overwrite(&old, new.get_name().borrow(), current)?;
-		old_parent.unlink(old.get_name().borrow(), current)?;
 	} else {
 		new_parent.link(&old, name.as_slice(), current)?;
-		old_parent.unlink(old.get_name().borrow(), current)?;
 	}
 
+	old_parent.unlink(old.get_name().borrow(), current)?;
 	Ok(0)
 }
 

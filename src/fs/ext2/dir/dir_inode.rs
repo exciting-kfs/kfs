@@ -520,7 +520,7 @@ impl vfs::DirInode for DirInode {
 			(FileType::Directory | FileType::Regular | FileType::SymLink, true) => {
 				self.remove_child(&old_child)
 			}
-			(FileType::Regular | FileType::SymLink, true) => {
+			(FileType::Regular | FileType::SymLink, false) => {
 				old_child.info_mut().links_count -= 1;
 				Ok(())
 			}
