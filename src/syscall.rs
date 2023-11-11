@@ -31,7 +31,7 @@ use crate::process::task::CURRENT;
 use crate::process::uid::{sys_getuid, sys_setuid};
 use crate::scheduler::nano_sleep::sys_nanosleep;
 use crate::scheduler::sys_sched_yield;
-use crate::{pr_info, pr_warn, trace_feature};
+use crate::{pr_warn, trace_feature};
 
 use self::clock::sys_clock_gettime;
 use self::dup::{sys_dup, sys_dup2};
@@ -555,10 +555,7 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		41 => sys_dup(frame.ebx),
 		42 => sys_pipe(frame.ebx),
 		45 => sys_brk(frame.ebx),
-		48 => {
-			pr_info!("syscall: signal: {}, {:x}", frame.ebx, frame.ecx);
-			sys_signal(frame.ebx, frame.ecx)
-		}
+		48 => sys_signal(frame.ebx, frame.ecx),
 		// todo: umount2
 		52 => sys_umount(frame.ebx),
 		54 => sys_ioctl(frame.ebx as isize, frame.ecx, frame.edx),
@@ -569,19 +566,11 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		65 => sys_getpgrp(),
 		66 => sys_setsid(),
 		// sigaction / rt_sigaction
-		67 | 174 => {
-			// pr_info!(
-			// 	"syscall: sigaction: {}, {:x}, {:x}",
-			// 	frame.ebx,
-			// 	frame.ecx,
-			// 	frame.edx
-			// );
-			sys_sigaction(
-				frame.ebx,
-				frame.ecx as *const SigAction,
-				frame.edx as *mut SigAction,
-			)
-		}
+		67 | 174 => sys_sigaction(
+			frame.ebx,
+			frame.ecx as *const SigAction,
+			frame.edx as *mut SigAction,
+		),
 		80 => sys_reboot(frame.ebx),
 		83 => sys_symlink(frame.ebx, frame.ecx),
 		85 => sys_readlink(frame.ebx, frame.ecx, frame.edx),
@@ -599,10 +588,7 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		92 => sys_truncate(frame.ebx, frame.ecx as isize),
 		// TODO: wait4
 		114 => sys_waitpid(frame.ebx as isize, frame.ecx as *mut isize, frame.edx),
-		119 => {
-			// pr_info!("syscall: sigreturn: {:p}", &frame);
-			sys_sigreturn(frame, restart)
-		}
+		119 => sys_sigreturn(frame, restart),
 		122 => sys_uname(frame.ebx),
 		128 => sys_init_module(frame.ebx),
 		129 => sys_cleanup_module(frame.ebx),

@@ -293,7 +293,7 @@ pub fn send_signal_to(task: &Arc<Task>, sig_info: &SigInfo) -> Result<(), Errno>
 	}
 
 	pr_debug!(
-		"{:?} received SIG{:?} from pid[{}]",
+		"{:?} received SIG{:?} from Pid({})",
 		task.get_pid(),
 		sig_info.num,
 		sig_info.pid

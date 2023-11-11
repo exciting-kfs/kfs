@@ -1,5 +1,6 @@
 #include <fcntl.h>
 #include <signal.h>
+#include <sys/ioctl.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -473,7 +474,17 @@ void get_login_shell() {
 	if (pid == 0) {
 		signal(SIGINT, SIG_DFL);
 		signal(SIGQUIT, SIG_DFL);
-		// setsid();
+
+		ioctl(0, TIOCNOTTY, NULL);
+		ioctl(1, TIOCNOTTY, NULL);
+		ioctl(2, TIOCNOTTY, NULL);
+
+		setsid();
+
+		ioctl(0, TIOCSCTTY, NULL);
+		ioctl(1, TIOCSCTTY, NULL);
+		ioctl(2, TIOCSCTTY, NULL);
+
 		setuid(ent->uid);
 		setgid(ent->gid);
 		chdir(ent->home);

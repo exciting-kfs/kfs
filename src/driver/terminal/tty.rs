@@ -539,9 +539,10 @@ impl FileHandle for TTYFile {
 			.get_user_ext()
 			.expect("must be user process")
 			.lock_relation();
+		let curr_sess = rel.get_session();
 
 		if let Some(ref sess) = self.lock_tty().session.upgrade() {
-			if !Arc::ptr_eq(sess, &rel.get_session()) {
+			if !Arc::ptr_eq(sess, &curr_sess) {
 				return Err(Errno::EPERM);
 			}
 		}
@@ -550,6 +551,11 @@ impl FileHandle for TTYFile {
 			termios::TIOCGWINSZ => self.get_window_size(argp),
 			termios::TIOCGPGRP => self.get_foreground_group(argp),
 			termios::TIOCSPGRP => self.set_foreground_group(argp),
+			termios::TIOCSCTTY => self.lock_tty().connect(&curr_sess),
+			termios::TIOCNOTTY => {
+				self.lock_tty().disconnect();
+				Ok(())
+			}
 			termios::TCGETS => self.get_termios(argp),
 			termios::TCSETSW | termios::TCSETS => self.set_termios(argp),
 			x => {
