@@ -33,3 +33,9 @@ pub fn sys_set_thread_area(user_desc: usize) -> Result<usize, Errno> {
 
 	Ok(0)
 }
+
+pub fn sys_set_tid_address(_tid_ptr: usize) -> Result<usize, Errno> {
+	let current = unsafe { CURRENT.get_ref() };
+
+	Ok(current.get_pid().as_raw())
+}

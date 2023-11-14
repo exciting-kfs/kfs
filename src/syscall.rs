@@ -25,7 +25,7 @@ use crate::mm::user::mmap::{sys_mmap, sys_munmap};
 use crate::net::syscall::*;
 use crate::process::exit::sys_exit;
 use crate::process::gid::{sys_getgid, sys_setgid};
-use crate::process::set_thread_area::sys_set_thread_area;
+use crate::process::set_thread_area::{sys_set_thread_area, sys_set_tid_address};
 use crate::process::signal::sig_handler::SigAction;
 use crate::process::task::CURRENT;
 use crate::process::uid::{sys_getuid, sys_setuid};
@@ -615,6 +615,8 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		243 => sys_set_thread_area(frame.ebx),
 		// TODO: exit_group
 		252 => sys_exit(frame.ebx),
+		// TODO: set_tid_address
+		258 => sys_set_tid_address(frame.ebx),
 		265 => sys_clock_gettime(frame.ebx, frame.ecx),
 		268 => sys_statfs64(frame.ebx, frame.ecx, frame.edx),
 		359 => sys_socket(frame.ebx as i32, frame.ecx as i32, frame.edx as i32),
@@ -638,6 +640,8 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		),
 		// vfork
 		190 => sys_fork(frame),
+		// tkill
+		238 => sys_kill(frame.ebx as isize, frame.ecx as isize),
 		320 => sys_utimensat(frame.ebx as isize, frame.ecx, frame.edx, frame.esi),
 		// statx
 		383 => sys_statx(
