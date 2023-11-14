@@ -5,6 +5,7 @@ mod cursor;
 mod termios;
 mod tty;
 
+pub use termios::WinSize;
 pub use tty::TTYFile;
 
 use alloc::sync::Arc;
@@ -16,12 +17,17 @@ use tty::TTY;
 
 use self::termios::Termios;
 
+use super::vga::get_text_window_size;
+
 static FOREGROUND_TTY: Locked<MaybeUninit<TTYFile>> = Locked::uninit();
 static mut TTYS: [MaybeUninit<TTYFile>; NR_CONSOLES] = MaybeUninit::uninit_array();
 
 pub fn init() {
 	for tty in unsafe { &mut TTYS } {
-		tty.write(TTYFile::new(Arc::new(Locked::new(TTY::new(Termios::SANE)))));
+		tty.write(TTYFile::new(Arc::new(Locked::new(TTY::new(
+			Termios::SANE,
+			get_text_window_size(),
+		)))));
 	}
 
 	unsafe {

@@ -148,7 +148,6 @@ unsafe fn kernel_boot_alloc(bi_header: usize, magic: u32) {
 
 #[no_mangle]
 pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
-	driver::vga::text_vga::init();
 	driver::serial::init().expect("serial COM1 that will be used at boot time.");
 
 	// caution: order sensitive.
@@ -159,6 +158,7 @@ pub fn kernel_entry(bi_header: usize, magic: u32) -> ! {
 	mm::alloc::phys::init();
 	mm::alloc::virt::init();
 
+	driver::vga::init();
 	driver::terminal::init();
 	driver::bus::pci::enumerate();
 

@@ -8,6 +8,7 @@ use strtab::Strtab;
 use symtab::Symtab;
 
 use crate::acpi::RSDT_PADDR;
+use crate::driver::vga::FRAME_BUFFER_INFO;
 
 use kernel_symbol::KSYMS;
 pub use p_memory::BootAlloc;
@@ -37,6 +38,9 @@ pub fn init(bi_header: usize, magic: u32) -> Result<BootAlloc, Error> {
 	}
 
 	let bi = unsafe { multiboot2::load(bi_header) }.map_err(|_| Error::FailedToLoadHeader)?;
+
+	*FRAME_BUFFER_INFO.lock() = bi.framebuffer_tag().map(|x| x.into());
+
 	let mut kernel_end = 0;
 
 	kernel_symbol::init(&bi, &mut kernel_end)?;

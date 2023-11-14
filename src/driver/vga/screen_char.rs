@@ -18,7 +18,11 @@ impl Char {
 	}
 
 	pub fn into_u8(self) -> u8 {
-		(self.0 & (u8::MAX as u16 - 1)) as u8
+		(self.0 & (u8::MAX as u16)) as u8
+	}
+
+	pub fn get_attr(self) -> Attr {
+		Attr((self.0 >> 8) as u8)
 	}
 }
 

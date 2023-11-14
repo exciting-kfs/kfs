@@ -25,14 +25,14 @@ impl PipeEnd for WriteEnd {}
 impl PipeEnd for ReadEnd {}
 
 struct PipeBuffer {
-	pub data: WrapQueue<u8, 4096>,
+	pub data: WrapQueue<u8>,
 	pub widowed: bool,
 }
 
 impl PipeBuffer {
 	fn new() -> Self {
 		Self {
-			data: WrapQueue::new(),
+			data: WrapQueue::new(4096),
 			widowed: false,
 		}
 	}

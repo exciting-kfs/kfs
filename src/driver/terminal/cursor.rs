@@ -1,51 +1,63 @@
 //! Console Cursor
 
+use super::WinSize;
+
 pub type Result<T> = core::result::Result<T, ()>;
 
 #[derive(Clone, Copy)]
-pub struct Cursor<const H: usize, const W: usize> {
+pub struct Cursor {
+	bound: WinSize,
 	y: isize,
 	x: isize,
 }
 
-impl<const HEIGHT: usize, const WIDTH: usize> Cursor<HEIGHT, WIDTH> {
-	const HEIGHT: isize = HEIGHT as isize;
-	const WIDTH: isize = WIDTH as isize;
-	const NEWLINE: isize = Self::WIDTH - 1;
-
+impl Cursor {
 	/// construct new cursor pointing at (y, x)
-	pub fn at(y: isize, x: isize) -> Result<Self> {
-		if !Self::is_valid(y, x) {
+	pub fn at(bound: WinSize, y: isize, x: isize) -> Result<Self> {
+		let mut new = unsafe { Self::at_unchecked(bound, y, x) };
+
+		if !new.is_valid(y, x) {
 			return Err(());
 		}
 
-		let mut result = Self { y, x };
-		result.regularize();
+		new.regularize();
 
-		Ok(result)
+		Ok(new)
 	}
 
-	pub fn new() -> Self {
-		Cursor { y: 0, x: 0 }
+	pub fn width(&self) -> isize {
+		self.bound.col as isize
 	}
 
-	pub const unsafe fn at_unchecked(y: isize, x: isize) -> Self {
-		Cursor { y, x }
+	pub fn height(&self) -> isize {
+		self.bound.row as isize
+	}
+
+	pub fn newline_width(&self) -> isize {
+		self.width() - 1
+	}
+
+	pub fn new(bound: WinSize) -> Self {
+		Cursor { bound, y: 0, x: 0 }
+	}
+
+	pub const unsafe fn at_unchecked(bound: WinSize, y: isize, x: isize) -> Self {
+		Cursor { bound, y, x }
 	}
 
 	/// check `(y, x)` is `regular`.
-	fn is_regular(y: isize, x: isize) -> bool {
-		let x_ok = 0 <= x && x < Self::WIDTH;
-		let y_ok = 0 <= y && y < Self::HEIGHT;
+	fn is_regular(&self, y: isize, x: isize) -> bool {
+		let x_ok = 0 <= x && x < self.width();
+		let y_ok = 0 <= y && y < self.height();
 
 		x_ok && y_ok
 	}
 
 	/// check `(y, x)` is `valid`.
-	fn is_valid(y: isize, x: isize) -> bool {
-		let flat = y * Self::WIDTH + x;
+	fn is_valid(&self, y: isize, x: isize) -> bool {
+		let flat = y * self.width() + x;
 
-		0 <= flat && flat < Self::WIDTH * Self::HEIGHT
+		0 <= flat && flat < self.width() * self.height()
 	}
 
 	fn do_move(&mut self, y: isize, x: isize) {
@@ -55,11 +67,11 @@ impl<const HEIGHT: usize, const WIDTH: usize> Cursor<HEIGHT, WIDTH> {
 
 	/// move cursor relatively.
 	pub fn move_rel_y(&mut self, dy: isize) {
-		self.y = (self.y + dy).clamp(0, Self::HEIGHT - 1);
+		self.y = (self.y + dy).clamp(0, self.height() - 1);
 	}
 
 	pub fn move_rel_x(&mut self, dx: isize) {
-		self.x = (self.x + dx).clamp(0, Self::WIDTH - 1);
+		self.x = (self.x + dx).clamp(0, self.width() - 1);
 	}
 
 	/// convert `valid`, but not `regular` coordinate into `regular` coordinate.
@@ -72,26 +84,26 @@ impl<const HEIGHT: usize, const WIDTH: usize> Cursor<HEIGHT, WIDTH> {
 	/// - `regular` coord is `valid` coord.
 	/// - but `valid` coord may not `regular` coord.
 	fn regularize(&mut self) {
-		self.y += self.x / Self::WIDTH;
-		self.x %= Self::WIDTH;
+		self.y += self.x / self.width();
+		self.x %= self.width();
 
 		if self.x < 0 {
 			self.y -= 1;
-			self.x += Self::WIDTH;
+			self.x += self.width();
 		}
 	}
 
 	pub fn move_rel_wrap_x(&mut self, dx: isize) {
 		self.x += dx;
 
-		let flat = self.y * Self::WIDTH + self.x;
+		let flat = self.y * self.width() + self.x;
 		if flat < 0 {
 			self.do_move(0, 0);
 			return;
 		}
 
-		if flat >= Self::WIDTH * Self::HEIGHT {
-			self.do_move(Self::HEIGHT - 1, Self::WIDTH - 1);
+		if flat >= self.width() * self.height() {
+			self.do_move(self.height() - 1, self.width() - 1);
 			return;
 		}
 
@@ -100,7 +112,7 @@ impl<const HEIGHT: usize, const WIDTH: usize> Cursor<HEIGHT, WIDTH> {
 
 	/// if possible, move cursor absolutely.
 	pub fn move_abs(&mut self, y: isize, x: isize) {
-		self.do_move(y.clamp(0, Self::HEIGHT - 1), x.clamp(0, Self::WIDTH - 1));
+		self.do_move(y.clamp(0, self.height() - 1), x.clamp(0, self.width() - 1));
 	}
 
 	/// move cursor absolutely but only x.
@@ -115,21 +127,21 @@ impl<const HEIGHT: usize, const WIDTH: usize> Cursor<HEIGHT, WIDTH> {
 
 	/// check relative move is possible.
 	pub fn check_rel(&mut self, dy: isize, dx: isize) -> Result<()> {
-		match Self::is_regular(self.y + dy, self.x + dx) {
+		match self.is_regular(self.y + dy, self.x + dx) {
 			true => Ok(()),
 			false => Err(()),
 		}
 	}
 
 	pub fn fixup_line_end(&mut self) {
-		if self.x == Self::WIDTH - 1 {
+		if self.x == self.width() - 1 {
 			self.x -= 1;
 		}
 	}
 
 	/// convert 2d coordinate into 1d offset.
 	pub fn into_flat(self) -> usize {
-		(self.y as usize) * WIDTH + (self.x as usize)
+		(self.y as usize) * self.width() as usize + (self.x as usize)
 	}
 
 	pub fn to_tuple(&self) -> (usize, usize) {
@@ -137,8 +149,8 @@ impl<const HEIGHT: usize, const WIDTH: usize> Cursor<HEIGHT, WIDTH> {
 	}
 }
 
-impl<const H: usize, const W: usize> From<Cursor<H, W>> for usize {
-	fn from(value: Cursor<H, W>) -> Self {
+impl From<Cursor> for usize {
+	fn from(value: Cursor) -> Self {
 		value.into_flat()
 	}
 }

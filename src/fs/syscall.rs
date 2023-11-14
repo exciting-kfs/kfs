@@ -34,7 +34,7 @@ pub use lseek::sys_lseek;
 pub use mkdir::sys_mkdir;
 pub use mount::{sys_mount, sys_umount};
 pub use open::{sys_creat, sys_open};
-pub use read::sys_read;
+pub use read::{sys_read, sys_readv};
 pub use readlink::sys_readlink;
 pub use statfs::{sys_statfs64, FsMagic, StatFs};
 pub use statx::sys_statx;

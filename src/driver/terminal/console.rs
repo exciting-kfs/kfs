@@ -25,18 +25,15 @@ use alloc::vec::Vec;
 
 use super::ascii::{constants::*, Ascii, AsciiParser};
 use super::cursor::Cursor;
+use super::WinSize;
 
 use crate::collection::WrapQueue;
-use crate::driver::vga::text_vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
-use crate::driver::vga::text_vga::{HEIGHT as WINDOW_HEIGHT, WIDTH as WINDOW_WIDTH, WINDOW_SIZE};
+// use crate::driver::vga::text_vga::{HEIGHT as self.win_height(), WIDTH as WINDOW_WIDTH, self.win_size()};
+use crate::driver::vga::{self, Attr as VGAAttr, Char as VGAChar, Color};
 use crate::io::{BlkWrite, ChWrite, NoSpace};
 
-pub const BUFFER_HEIGHT: usize = WINDOW_HEIGHT * 4;
-pub const BUFFER_WIDTH: usize = WINDOW_WIDTH;
-pub const BUFFER_SIZE: usize = BUFFER_HEIGHT * BUFFER_WIDTH;
-
-type ConsoleCursor = Cursor<WINDOW_HEIGHT, WINDOW_WIDTH>;
-type ConsoleBuffer = WrapQueue<VGAChar, BUFFER_SIZE>;
+type ConsoleCursor = Cursor;
+type ConsoleBuffer = WrapQueue<VGAChar>;
 
 pub struct Console {
 	buf: ConsoleBuffer,
@@ -46,40 +43,67 @@ pub struct Console {
 	cursor_backup: ConsoleCursor,
 	attr: VGAAttr,
 	parser: AsciiParser,
+	winsize: WinSize,
 }
 
 impl Console {
 	/// construct new console with buffer reserved.
-	pub fn buffer_reserved(n: usize) -> Self {
-		let mut buf = WrapQueue::new();
-		buf.push_defaults(n);
+	pub fn buffer_reserved(winsize: WinSize) -> Self {
+		let buffer_size = winsize.col as usize * winsize.row as usize * 4;
+		let mut buf = WrapQueue::new(buffer_size);
+		buf.push_defaults(buffer_size);
 
 		Console {
 			buf,
 			window_start: 0,
 			window_start_backup: 0,
-			cursor: Cursor::new(),
-			cursor_backup: Cursor::new(),
+			cursor: Cursor::new(winsize),
+			cursor_backup: Cursor::new(winsize),
 			attr: VGAAttr::default(),
 			parser: AsciiParser::new(),
+			winsize,
 		}
+	}
+
+	fn win_height(&self) -> usize {
+		self.winsize.row as usize
+	}
+
+	fn win_width(&self) -> usize {
+		self.winsize.col as usize
+	}
+
+	fn win_size(&self) -> usize {
+		self.winsize.col as usize * self.winsize.row as usize
+	}
+
+	fn buf_height(&self) -> usize {
+		self.win_height() * 4
+	}
+
+	fn buf_width(&self) -> usize {
+		self.win_width()
+	}
+
+	fn buf_size(&self) -> usize {
+		self.buf_height() * self.buf_width()
 	}
 
 	/// draw current buffer to screen.
 	pub fn draw(&self) {
 		let window = self
 			.buf
-			.window(self.window_start, WINDOW_SIZE)
+			.window(self.window_start, self.win_size())
 			.expect("buffer overflow");
-		text_vga::put_slice_iter(window.as_slices());
-		text_vga::put_cursor(self.cursor.into_flat());
+		vga::draw_text_buffer(window.as_slices().into_iter().flatten());
+		vga::draw_cursor(self.cursor.into_flat());
 	}
 
 	/// put character at current cursor
 	fn put_char(&mut self, ch: u8) {
 		let mut window = self
 			.buf
-			.window_mut(self.window_start, WINDOW_SIZE)
+			.window_mut(self.window_start, self.win_size())
 			.expect("buffer overflow");
 
 		let ch = VGAChar::styled(self.attr, ch);
@@ -110,7 +134,7 @@ impl Console {
 
 	/// perform line-feed. if there is no enough room left in buffer, then extend.
 	fn line_feed(&mut self, lines: usize) {
-		let minimum_buf_size = self.window_start + WINDOW_SIZE + BUFFER_WIDTH * lines;
+		let minimum_buf_size = self.window_start + self.win_size() + self.buf_width() * lines;
 
 		let extend_size = minimum_buf_size
 			.checked_sub(self.buf.size())
@@ -119,14 +143,14 @@ impl Console {
 		self.buf
 			.push_copies(VGAChar::styled(self.attr, b' '), extend_size);
 		self.window_start =
-			(self.window_start + BUFFER_WIDTH * lines).min(BUFFER_SIZE - WINDOW_SIZE);
+			(self.window_start + self.buf_width() * lines).min(self.buf_size() - self.win_size());
 	}
 
 	/// move window up.
 	fn line_up(&mut self, lines: usize) {
 		self.window_start = self
 			.window_start
-			.checked_sub(BUFFER_WIDTH * lines)
+			.checked_sub(self.buf_width() * lines)
 			.unwrap_or_default();
 	}
 
@@ -135,7 +159,7 @@ impl Console {
 	/// so window can't go down beyond end of buffer.
 	fn line_down(&mut self, lines: usize) {
 		self.window_start =
-			(self.window_start + BUFFER_WIDTH * lines).min(self.buf.size() - WINDOW_SIZE);
+			(self.window_start + self.buf_width() * lines).min(self.buf.size() - self.win_size());
 	}
 
 	fn carriage_return(&mut self) {
@@ -188,7 +212,10 @@ impl Console {
 	where
 		I: IntoIterator<Item = usize>,
 	{
-		let mut win = self.buf.window_mut(self.window_start, WINDOW_SIZE).unwrap();
+		let mut win = self
+			.buf
+			.window_mut(self.window_start, self.win_size())
+			.unwrap();
 
 		for offset in it {
 			win[offset] = VGAChar::styled(self.attr, b' ');
@@ -199,20 +226,20 @@ impl Console {
 		let (y, x) = self.cursor.to_tuple();
 
 		let (b, e) = match param {
-			0 => (x, (BUFFER_WIDTH - 1)),
+			0 => (x, (self.buf_width() - 1)),
 			1 => (0, x),
-			2 => (0, (BUFFER_WIDTH - 1)),
+			2 => (0, (self.buf_width() - 1)),
 			_ => return,
 		};
 
-		self.erase_by_iterater((y * BUFFER_WIDTH + b)..=(y * BUFFER_WIDTH + e));
+		self.erase_by_iterater((y * self.buf_width() + b)..=(y * self.buf_width() + e));
 	}
 
 	fn screen_erase(&mut self, param: u16) {
 		let range = match param {
-			0 => self.cursor.into_flat()..=(WINDOW_SIZE - 1),
+			0 => self.cursor.into_flat()..=(self.win_size() - 1),
 			1 => 0..=self.cursor.into_flat(),
-			2 => 0..=(WINDOW_SIZE - 1),
+			2 => 0..=(self.win_size() - 1),
 			_ => return,
 		};
 
@@ -290,8 +317,8 @@ impl Console {
 	fn handle_key(&mut self, key: u16) {
 		match key {
 			3 => self.delete_char(),
-			5 => self.line_up(WINDOW_HEIGHT / 2),
-			6 => self.line_down(WINDOW_HEIGHT / 2),
+			5 => self.line_up(self.win_height() / 2),
+			6 => self.line_down(self.win_height() / 2),
 			_ => (),
 		}
 	}

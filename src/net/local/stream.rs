@@ -211,7 +211,7 @@ impl Socket for LocalStreamSocket {
 struct ConnectedSocket {
 	address: BindAddress,
 	peer: Weak<ConnectedSocket>,
-	recv_buffer: LocalLocked<WrapQueue<u8, 16384>>,
+	recv_buffer: LocalLocked<WrapQueue<u8>>,
 }
 
 impl ConnectedSocket {
@@ -219,14 +219,14 @@ impl ConnectedSocket {
 		let mut socket1 = Arc::new(Self {
 			address,
 			peer: Weak::default(),
-			recv_buffer: LocalLocked::new(WrapQueue::new()),
+			recv_buffer: LocalLocked::new(WrapQueue::new(16384)),
 		});
 		let s1_weak = Arc::downgrade(&socket1);
 
 		let mut socket2 = Arc::new(Self {
 			address: BindAddress::new(),
 			peer: Weak::default(),
-			recv_buffer: LocalLocked::new(WrapQueue::new()),
+			recv_buffer: LocalLocked::new(WrapQueue::new(16384)),
 		});
 		let s2_weak = Arc::downgrade(&socket2);
 
