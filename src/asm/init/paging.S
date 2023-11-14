@@ -21,7 +21,7 @@ global enable_paging:function (enable_paging.end - enable_paging)
 ;     - PSE(page size extension)
 ; 2) initialize global page directory.
 ; 3) load CR3 with global age directory.
-; 4) enable paging.
+; 4) enable paging with WP(write protect).
 ; 5) translate EIP, ESP, EBP to virtual address.
 ;
 ; after all,
@@ -65,7 +65,7 @@ enable_paging:
 
     ; Enable paging
     mov eax, cr0
-    or eax, 0x80000000; PG
+    or eax, 0x80010000; PG | WP
     mov cr0, eax
 
     ; translate registers and return.

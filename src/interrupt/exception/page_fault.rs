@@ -4,7 +4,7 @@ use bitflags::bitflags;
 use kfs_macro::interrupt_handler;
 
 use crate::interrupt::InterruptFrame;
-use crate::mm::alloc::virt::kmap;
+use crate::mm::alloc::virt::{kmap, kunmap};
 use crate::mm::alloc::Zone;
 use crate::mm::constant::PAGE_MASK;
 use crate::mm::page::PageFlag;
@@ -99,8 +99,8 @@ fn handle_user_page_fault(vaddr: usize, error_code: ErrorCode) -> Result<(), ()>
 	let page = PageBox::new(Zone::High).map_err(|_| ())?;
 
 	let temp = kmap(page.as_phys_addr()).map_err(|_| ())?;
-
 	unsafe { temp.as_ptr().write_bytes(0, PAGE_SIZE) };
+	kunmap(temp.as_ptr() as usize);
 
 	let (base, page_flags) = lookup_page_info(memory.get_vma(), vaddr, flags)?;
 
@@ -119,23 +119,19 @@ pub extern "C" fn handle_page_fault_impl(frame: InterruptFrame) {
 	let addr = register!("cr2");
 	let error_code = ErrorCode::from_bits_truncate(frame.error_code as u32);
 
-	if frame.is_user() {
-		if let Err(_) = handle_user_page_fault(addr, error_code) {
-			pr_err!("Exception(fault): PAGE FAULT");
-			pr_info!("{}", frame);
-			pr_info!("note: while accessing {:#0x}", addr);
-			pr_info!("[DETAILED ERROR CODE]\n{}", error_code);
-			exit_with_signal(SigNum::SEGV);
-		}
+	if let Ok(_) = handle_user_page_fault(addr, error_code) {
 		return;
 	}
-
-	// BUG
 
 	pr_err!("Exception(fault): PAGE FAULT");
 	pr_info!("{}", frame);
 	pr_info!("note: while accessing {:#0x}", addr);
 	pr_info!("[DETAILED ERROR CODE]\n{}", error_code);
 
+	if frame.is_user() {
+		exit_with_signal(SigNum::SEGV);
+	}
+
+	// BUG
 	loop {}
 }
