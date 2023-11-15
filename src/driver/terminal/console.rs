@@ -96,7 +96,9 @@ impl Console {
 			.window(self.window_start, self.win_size())
 			.expect("buffer overflow");
 		vga::draw_text_buffer(window.as_slices().into_iter().flatten());
-		vga::draw_cursor(self.cursor.into_flat());
+
+		let (y, x) = self.cursor.to_tuple();
+		vga::draw_cursor(y, x);
 	}
 
 	/// put character at current cursor

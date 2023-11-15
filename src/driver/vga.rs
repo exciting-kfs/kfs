@@ -53,7 +53,7 @@ pub trait VGA {
 	fn draw_text_buffer<'a, It>(&self, text_buffer: It)
 	where
 		It: Iterator<Item = &'a Char>;
-	fn draw_cursor(&self, offset: usize);
+	fn draw_cursor(&self, y: usize, x: usize);
 	fn get_text_window_size(&self) -> WinSize;
 
 	fn draw_buffer(&self, buffer: &[u32]);
@@ -91,8 +91,8 @@ where
 	get_vga_backend().draw_text_buffer(text_buffer);
 }
 
-pub fn draw_cursor(offset: usize) {
-	get_vga_backend().draw_cursor(offset);
+pub fn draw_cursor(y: usize, x: usize) {
+	get_vga_backend().draw_cursor(y, x);
 }
 
 pub fn draw_buffer(buffer: &[u32]) {

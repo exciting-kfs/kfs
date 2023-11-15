@@ -68,7 +68,15 @@ impl VGA for FrameBuffer {
 		}
 	}
 
-	fn draw_cursor(&self, _offset: usize) {}
+	fn draw_cursor(&self, y: usize, x: usize) {
+		let base = y * WIDTH * TEXT_HEIGHT + x * TEXT_WIDTH;
+
+		for y in 2..(TEXT_HEIGHT - 2) {
+			for x in 1..(TEXT_WIDTH - 1) {
+				self.as_buf()[base + y * WIDTH + x] = 0xaaaaaa;
+			}
+		}
+	}
 
 	fn draw_buffer(&self, buffer: &[u32]) {
 		let vga_buffer = self.as_buf();

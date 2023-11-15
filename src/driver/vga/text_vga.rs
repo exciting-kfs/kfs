@@ -36,7 +36,8 @@ impl VGA for TextVga {
 		}
 	}
 
-	fn draw_cursor(&self, offset: usize) {
+	fn draw_cursor(&self, y: usize, x: usize) {
+		let offset = y * WIDTH + x;
 		let low = offset & 0xff;
 		let high = (offset >> 8) & 0xff;
 
