@@ -109,7 +109,10 @@ pub extern "C" fn handle_keyboard_impl(_frame: InterruptFrame) {
 		input::keyboard::change_state(ev);
 
 		if ev.pressed() {
-			let tty = get_foreground_tty();
+			let tty = match get_foreground_tty() {
+				Some(tty) => tty,
+				_ => return,
+			};
 
 			if let KeyKind::Function(v) = ev.identify() {
 				let idx = v.index() as usize;

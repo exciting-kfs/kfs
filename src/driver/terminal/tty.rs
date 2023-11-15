@@ -11,7 +11,6 @@ use super::{console_screen_draw, termios};
 
 use crate::collection::LineBuffer;
 use crate::driver::terminal::termios::{VINTR, VQUIT};
-use crate::driver::vga::text_vga::WINDOW_SIZE;
 use crate::fs::vfs::{FileHandle, IOFlag};
 use crate::input::key_event::*;
 use crate::input::keyboard::KEYBOARD;
@@ -171,17 +170,19 @@ pub struct TTY {
 	into_process: VecDeque<u8>,
 	session: Weak<Locked<Session>>,
 	waitlist: WaitList,
+	winsize: WinSize,
 }
 
 impl TTY {
-	pub fn new(termios: Termios) -> Self {
+	pub fn new(termios: Termios, winsize: WinSize) -> Self {
 		Self {
 			termios,
 			line_buffer: LineBuffer::new(),
 			into_process: VecDeque::new(),
 			session: Weak::default(),
-			console: Console::buffer_reserved(WINDOW_SIZE),
+			console: Console::buffer_reserved(winsize),
 			waitlist: WaitList::new(),
+			winsize,
 		}
 	}
 
@@ -453,7 +454,7 @@ impl TTYFile {
 	fn get_window_size(&self, argp: usize) -> Result<(), Errno> {
 		let current = unsafe { CURRENT.get_ref() };
 		let win_size = verify_ptr_mut::<WinSize>(argp, current)?;
-		*win_size = WinSize { row: 24, col: 80 };
+		*win_size = self.tty.lock().winsize;
 
 		Ok(())
 	}

@@ -16,12 +16,16 @@ use core::fmt::{self, Display};
 use core::mem::transmute;
 
 use crate::driver::pipe::sys_pipe;
+use crate::driver::terminal::{sys_attach_tty, sys_deteach_tty};
+use crate::driver::vga::sys_draw_buffer;
 use crate::elf::syscall::*;
 use crate::fs::syscall::*;
+use crate::input::keyboard::sys_get_key_state;
 use crate::interrupt::InterruptFrame;
 use crate::mm::user::brk::sys_brk;
 use crate::mm::user::mmap::{sys_mmap, sys_munmap};
 
+use crate::mm::user::verify::verify_ptr_mut;
 use crate::net::syscall::*;
 use crate::process::exit::sys_exit;
 use crate::process::gid::{sys_getgid, sys_setgid};
@@ -589,11 +593,32 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		// TODO: wait4
 		114 => sys_waitpid(frame.ebx as isize, frame.ecx as *mut isize, frame.edx),
 		119 => sys_sigreturn(frame, restart),
+		// TODO: clone
+		// 120 => sys_fork(frame),
 		122 => sys_uname(frame.ebx),
 		128 => sys_init_module(frame.ebx),
 		129 => sys_cleanup_module(frame.ebx),
 		132 => sys_getpgid(frame.ebx),
+
+		// TODO: _llseek
+		140 => {
+			let current = unsafe { CURRENT.get_ref() };
+
+			let p = verify_ptr_mut::<i64>(frame.esi, current).unwrap();
+			let offset = (((frame.ecx as u64) << 32) | (frame.edx as u64)) as i64;
+			let raw_w = frame.edi;
+
+			let ret = sys_lseek(frame.ebx as isize, offset as isize, raw_w as isize);
+
+			if let Ok(x) = ret {
+				*p = x as i64;
+				return Ok(0);
+			}
+
+			ret
+		}
 		141 => sys_getdents(frame.ebx as isize, frame.ecx, frame.edx),
+		145 => sys_readv(frame.ebx as isize, frame.ecx, frame.edx),
 		146 => sys_writev(frame.ebx as isize, frame.ecx, frame.edx),
 		147 => sys_getsid(frame.ebx),
 		158 => sys_sched_yield(),
@@ -643,6 +668,8 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		// tkill
 		238 => sys_kill(frame.ebx as isize, frame.ecx as isize),
 		320 => sys_utimensat(frame.ebx as isize, frame.ecx, frame.edx, frame.esi),
+		// TODO: pipe2
+		331 => sys_pipe(frame.ebx),
 		// statx
 		383 => sys_statx(
 			frame.ebx as isize,
@@ -653,6 +680,10 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		),
 		// clock_gettime64
 		403 => Err(Errno::ENOSYS),
+		10000 => sys_draw_buffer(frame.ebx),
+		10001 => sys_get_key_state(frame.ebx),
+		10002 => sys_deteach_tty(),
+		10003 => sys_attach_tty(),
 		_ => {
 			pr_warn!(
 				"unimplemented syscall: {}(no={})",

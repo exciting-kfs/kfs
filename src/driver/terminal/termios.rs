@@ -112,6 +112,7 @@ pub const VLNEXT: usize = 15;
 pub const VEOL2: usize = 16;
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct WinSize {
 	pub row: u16,
 	pub col: u16,

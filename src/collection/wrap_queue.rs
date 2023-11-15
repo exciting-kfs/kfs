@@ -17,21 +17,27 @@ enum State {
 	Avail,
 }
 
-pub struct WrapQueue<T, const N: usize> {
+pub struct WrapQueue<T> {
 	data: Box<[MaybeUninit<T>]>,
 	head: usize,
 	tail: usize,
 	state: State,
+	capacity: usize,
 }
 
-impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
-	pub fn new() -> Self {
+impl<T> WrapQueue<T> {
+	pub fn new(capacity: usize) -> Self {
 		Self {
-			data: Box::new_uninit_slice(CAPACITY),
+			data: Box::new_uninit_slice(capacity),
 			head: 0,
 			tail: 0,
 			state: State::Empty,
+			capacity,
 		}
+	}
+
+	pub fn capacity(&self) -> usize {
+		self.capacity
 	}
 
 	/// translate linear index to discrete index.
@@ -39,20 +45,20 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 		if idx >= self.size() {
 			None
 		} else {
-			Some((self.head + idx) % CAPACITY)
+			Some((self.head + idx) % self.capacity())
 		}
 	}
 
 	/// calculate occupied size
 	pub fn size(&self) -> usize {
 		match self.state {
-			State::Full => CAPACITY,
+			State::Full => self.capacity(),
 			State::Empty => 0,
 			State::Avail => {
 				if self.head < self.tail {
 					self.tail - self.head
 				} else {
-					(CAPACITY - self.head) + self.tail
+					(self.capacity() - self.head) + self.tail
 				}
 			}
 		}
@@ -103,23 +109,23 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 	}
 
 	fn increase_size(&mut self, n: usize) {
-		if self.size() + n >= CAPACITY {
-			self.tail = (self.tail + n) % CAPACITY;
+		if self.size() + n >= self.capacity() {
+			self.tail = (self.tail + n) % self.capacity();
 			self.head = self.tail;
 			self.state = State::Full;
 		} else {
-			self.tail = (self.tail + n) % CAPACITY;
+			self.tail = (self.tail + n) % self.capacity();
 			self.state = State::Avail;
 		}
 	}
 
 	fn decrease_size(&mut self, n: usize) {
 		if self.size() <= n {
-			self.head = (self.head + n) % CAPACITY;
+			self.head = (self.head + n) % self.capacity();
 			self.tail = self.head;
 			self.state = State::Empty;
 		} else {
-			self.head = (self.head + n) % CAPACITY;
+			self.head = (self.head + n) % self.capacity();
 			self.state = State::Avail;
 		}
 	}
@@ -153,15 +159,15 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 			return None;
 		}
 
-		let head = (self.head + start) % CAPACITY;
-		let tail = (head + len) % CAPACITY;
+		let head = (self.head + start) % self.capacity();
+		let tail = (head + len) % self.capacity();
 
 		let lstart = self.index_as_ptr(head);
 		let rstart = self.index_as_ptr(0);
 
 		let (lsize, rsize) = match head < tail {
 			true => (tail - head, 0),
-			false => (CAPACITY - head, tail),
+			false => (self.capacity() - head, tail),
 		};
 
 		Some(unsafe { [from_raw_parts(lstart, lsize), from_raw_parts(rstart, rsize)] })
@@ -172,15 +178,15 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 			return None;
 		}
 
-		let head = (self.head + start) % CAPACITY;
-		let tail = (head + len) % CAPACITY;
+		let head = (self.head + start) % self.capacity();
+		let tail = (head + len) % self.capacity();
 
 		let lstart = self.index_as_mut_ptr(head);
 		let rstart = self.index_as_mut_ptr(0);
 
 		let (lsize, rsize) = match head < tail {
 			true => (tail - head, 0),
-			false => (CAPACITY - head, tail),
+			false => (self.capacity() - head, tail),
 		};
 
 		Some(unsafe {
@@ -221,7 +227,7 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 
 	pub fn write(&mut self, buf: &[T]) -> usize {
 		let old_size = self.size();
-		let inc_size = (CAPACITY - old_size).min(buf.len());
+		let inc_size = (self.capacity() - old_size).min(buf.len());
 
 		self.increase_size(inc_size);
 
@@ -247,12 +253,8 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 		inc_size
 	}
 
-	pub fn capacity() -> usize {
-		CAPACITY
-	}
-
 	/// create slice of wrap_queue.
-	pub fn window<'a>(&'a self, start: usize, len: usize) -> Option<Window<'a, T, CAPACITY>> {
+	pub fn window<'a>(&'a self, start: usize, len: usize) -> Option<Window<'a, T>> {
 		if self.size() < start + len {
 			return None;
 		}
@@ -264,11 +266,7 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 		})
 	}
 
-	pub fn window_mut<'a>(
-		&'a mut self,
-		start: usize,
-		len: usize,
-	) -> Option<WindowMut<'a, T, CAPACITY>> {
+	pub fn window_mut<'a>(&'a mut self, start: usize, len: usize) -> Option<WindowMut<'a, T>> {
 		if self.size() < start + len {
 			return None;
 		}
@@ -281,7 +279,7 @@ impl<T, const CAPACITY: usize> WrapQueue<T, CAPACITY> {
 	}
 }
 
-impl<T, const CAPACITY: usize> Index<usize> for WrapQueue<T, CAPACITY> {
+impl<T> Index<usize> for WrapQueue<T> {
 	type Output = T;
 
 	fn index(&self, index: usize) -> &Self::Output {
@@ -289,26 +287,26 @@ impl<T, const CAPACITY: usize> Index<usize> for WrapQueue<T, CAPACITY> {
 	}
 }
 
-impl<T, const CAPACITY: usize> IndexMut<usize> for WrapQueue<T, CAPACITY> {
+impl<T> IndexMut<usize> for WrapQueue<T> {
 	fn index_mut(&mut self, index: usize) -> &mut Self::Output {
 		self.at_mut(index).expect("WrapQueue: index out of bound")
 	}
 }
 
 /// sliced part of wrap_queue.
-pub struct Window<'a, T, const CAP: usize> {
-	inner: &'a WrapQueue<T, CAP>,
+pub struct Window<'a, T> {
+	inner: &'a WrapQueue<T>,
 	start: usize,
 	len: usize,
 }
 
-impl<'a, T, const CAP: usize> Window<'a, T, CAP> {
+impl<'a, T> Window<'a, T> {
 	pub fn as_slices(&'a self) -> [&'a [T]; 2] {
 		self.inner.as_slices(self.start, self.len).unwrap()
 	}
 }
 
-impl<'a, T, const CAP: usize> Index<usize> for Window<'a, T, CAP> {
+impl<'a, T> Index<usize> for Window<'a, T> {
 	type Output = T;
 
 	fn index(&self, index: usize) -> &Self::Output {
@@ -316,13 +314,13 @@ impl<'a, T, const CAP: usize> Index<usize> for Window<'a, T, CAP> {
 	}
 }
 
-pub struct WindowMut<'a, T, const CAP: usize> {
-	inner: &'a mut WrapQueue<T, CAP>,
+pub struct WindowMut<'a, T> {
+	inner: &'a mut WrapQueue<T>,
 	start: usize,
 	len: usize,
 }
 
-impl<'a, T, const CAP: usize> WindowMut<'a, T, CAP> {
+impl<'a, T> WindowMut<'a, T> {
 	pub fn as_slices(&'a self) -> [&'a [T]; 2] {
 		self.inner.as_slices(self.start, self.len).unwrap()
 	}
@@ -332,7 +330,7 @@ impl<'a, T, const CAP: usize> WindowMut<'a, T, CAP> {
 	}
 }
 
-impl<'a, T, const CAP: usize> Index<usize> for WindowMut<'a, T, CAP> {
+impl<'a, T> Index<usize> for WindowMut<'a, T> {
 	type Output = T;
 
 	fn index(&self, index: usize) -> &Self::Output {
@@ -340,7 +338,7 @@ impl<'a, T, const CAP: usize> Index<usize> for WindowMut<'a, T, CAP> {
 	}
 }
 
-impl<'a, T, const CAP: usize> IndexMut<usize> for WindowMut<'a, T, CAP> {
+impl<'a, T> IndexMut<usize> for WindowMut<'a, T> {
 	fn index_mut(&mut self, index: usize) -> &mut Self::Output {
 		&mut self.inner[self.start + index]
 	}
@@ -356,11 +354,11 @@ mod test {
 
 	use super::*;
 
-	type RingBuffer<const CAP: usize> = WrapQueue<u8, CAP>;
+	type RingBuffer = WrapQueue<u8>;
 
 	#[ktest(wrap_queue)]
 	pub fn basic() {
-		let mut buf: RingBuffer<2> = RingBuffer::new();
+		let mut buf: RingBuffer = RingBuffer::new(2);
 
 		assert_eq!(buf.empty(), true);
 		assert_eq!(buf.full(), false);
@@ -380,7 +378,7 @@ mod test {
 
 	#[ktest(wrap_queue)]
 	pub fn wrap() {
-		let mut buf: RingBuffer<4> = RingBuffer::new();
+		let mut buf: RingBuffer = RingBuffer::new(4);
 
 		for i in 0..4 {
 			buf.push(i);
@@ -421,7 +419,7 @@ mod test {
 
 	#[ktest(wrap_queue)]
 	pub fn push_multiple() {
-		let mut buf: RingBuffer<4> = RingBuffer::new();
+		let mut buf: RingBuffer = RingBuffer::new(4);
 
 		buf.push_copies(42, 4);
 
@@ -448,7 +446,7 @@ mod test {
 		}
 
 		let mut dq: VecDeque<u32> = VecDeque::new();
-		let mut wq: WrapQueue<u32, BUFFER_SIZE> = WrapQueue::new();
+		let mut wq: WrapQueue<u32> = WrapQueue::new(BUFFER_SIZE);
 
 		let mut lcg = LCG::new(42);
 		let mut random = |min: u32, max: u32| min + (lcg.rand() % (max - min));
@@ -470,7 +468,7 @@ mod test {
 
 	#[ktest(wrap_queue)]
 	pub fn io_basic() {
-		let mut wq: WrapQueue<u8, 4096> = WrapQueue::new();
+		let mut wq: WrapQueue<u8> = WrapQueue::new(4096);
 		let mut buf: [u8; 256] = array::from_fn(|i| i as u8);
 
 		let ret = wq.write(&buf);
@@ -521,7 +519,7 @@ mod test {
 		let mut buf_b: [u8; 256] = [0; 256];
 
 		let mut dq: VecDeque<u8> = VecDeque::new();
-		let mut wq: WrapQueue<u8, BUFFER_SIZE> = WrapQueue::new();
+		let mut wq: WrapQueue<u8> = WrapQueue::new(BUFFER_SIZE);
 
 		let mut lcg = LCG::new(42);
 		let mut random = |min: u32, max: u32| min + (lcg.rand() % (max - min));

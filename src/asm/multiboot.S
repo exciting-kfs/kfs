@@ -27,6 +27,14 @@ multiboot2_header_start:
 	dd LENGTH
 	dd CHECKSUM
 	; --- Extra  TAGS ---
+	dw 5
+	dw 0
+	dd 20
+	dd 1280
+	dd 800
+	dd 32
+	dd 0
+	dd 0
 	; --- End of TAGS ---
 	dw 0
 	dw 0
