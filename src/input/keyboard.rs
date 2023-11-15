@@ -7,7 +7,7 @@
 use alloc::sync::Arc;
 
 use super::key_event::{Code, KeyEvent, KeyKind};
-use crate::syscall::errno::Errno;
+use crate::{mm::user::verify::verify_ptr_mut, process::task::CURRENT, syscall::errno::Errno};
 
 pub static mut KEYBOARD: Keyboard = Keyboard::new();
 
@@ -142,4 +142,18 @@ impl Keyboard {
 
 pub fn change_state(event: KeyEvent) {
 	unsafe { KEYBOARD.change_state(event) }
+}
+
+pub fn copy_state(buf: &mut [u32; 8]) {
+	unsafe { *buf = KEYBOARD.pressed_key }
+}
+
+pub fn sys_get_key_state(buf: usize) -> Result<usize, Errno> {
+	let current = unsafe { CURRENT.get_ref() };
+
+	let buf = verify_ptr_mut::<[u32; 8]>(buf, current)?;
+
+	copy_state(buf);
+
+	Ok(0)
 }

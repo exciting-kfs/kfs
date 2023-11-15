@@ -16,9 +16,11 @@ use core::fmt::{self, Display};
 use core::mem::transmute;
 
 use crate::driver::pipe::sys_pipe;
+use crate::driver::terminal::{sys_attach_tty, sys_deteach_tty};
 use crate::driver::vga::sys_draw_buffer;
 use crate::elf::syscall::*;
 use crate::fs::syscall::*;
+use crate::input::keyboard::sys_get_key_state;
 use crate::interrupt::InterruptFrame;
 use crate::mm::user::brk::sys_brk;
 use crate::mm::user::mmap::{sys_mmap, sys_munmap};
@@ -592,7 +594,7 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		114 => sys_waitpid(frame.ebx as isize, frame.ecx as *mut isize, frame.edx),
 		119 => sys_sigreturn(frame, restart),
 		// TODO: clone
-		120 => sys_fork(frame),
+		// 120 => sys_fork(frame),
 		122 => sys_uname(frame.ebx),
 		128 => sys_init_module(frame.ebx),
 		129 => sys_cleanup_module(frame.ebx),
@@ -679,6 +681,9 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		// clock_gettime64
 		403 => Err(Errno::ENOSYS),
 		10000 => sys_draw_buffer(frame.ebx),
+		10001 => sys_get_key_state(frame.ebx),
+		10002 => sys_deteach_tty(),
+		10003 => sys_attach_tty(),
 		_ => {
 			pr_warn!(
 				"unimplemented syscall: {}(no={})",

@@ -3,6 +3,7 @@ use core::fmt::{self, Display};
 use bitflags::bitflags;
 use kfs_macro::interrupt_handler;
 
+use crate::driver::terminal::sys_attach_tty;
 use crate::interrupt::InterruptFrame;
 use crate::mm::alloc::virt::{kmap, kunmap};
 use crate::mm::alloc::Zone;
@@ -129,6 +130,7 @@ pub extern "C" fn handle_page_fault_impl(frame: InterruptFrame) {
 	pr_info!("[DETAILED ERROR CODE]\n{}", error_code);
 
 	if frame.is_user() {
+		_ = sys_attach_tty();
 		exit_with_signal(SigNum::SEGV);
 	}
 

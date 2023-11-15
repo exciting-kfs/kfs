@@ -50,14 +50,15 @@ w
 EOCMD
 
 echo MKFS.EXT2 $NBDP1
-mkfs.ext2 -q $NBDP1 -b 1024
+mkfs.ext2 -b 1024 -q $NBDP1
 
 echo MKFS.EXT2 $NBDP2
-mkfs.ext2 -q $NBDP2 -b 1024
+mkfs.ext2 -b 1024 -q $NBDP2
 
 mkdir -p $BUILD_ROOT/mnt/vol1
 mount $NBDP1 $BUILD_ROOT/mnt/vol1
 tar -C $BUILD_ROOT/mnt/vol1 -xf /root/alpine-minirootfs-3.18.4-x86.tar.gz
+cp /root/doom /root/doom1.wad $BUILD_ROOT/mnt/vol1/bin || echo warning: doom not found.
 
 echo CP sysroot
 cp -r $BUILD_ROOT/sysroot/* $BUILD_ROOT/mnt/vol1

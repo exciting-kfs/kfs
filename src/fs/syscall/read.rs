@@ -3,7 +3,6 @@ use core::slice::from_raw_parts;
 
 use crate::mm::user::verify::{verify_buffer_mut, verify_region};
 use crate::mm::user::vma::AreaFlag;
-use crate::pr_warn;
 use crate::process::task::CURRENT;
 use crate::syscall::errno::Errno;
 
@@ -45,8 +44,6 @@ pub fn sys_readv(fd: isize, iov: usize, iovcnt: usize) -> Result<usize, Errno> {
 
 		ret += curr;
 	}
-
-	pr_warn!("READV  ret={}", ret);
 
 	Ok(ret)
 }

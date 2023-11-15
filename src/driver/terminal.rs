@@ -9,9 +9,12 @@ pub use termios::WinSize;
 pub use tty::TTYFile;
 
 use alloc::sync::Arc;
-use core::mem::MaybeUninit;
+use core::{
+	mem::MaybeUninit,
+	sync::atomic::{AtomicBool, Ordering},
+};
 
-use crate::{config::NR_CONSOLES, scheduler::work, sync::Locked};
+use crate::{config::NR_CONSOLES, scheduler::work, sync::Locked, syscall::errno::Errno};
 
 use tty::TTY;
 
@@ -45,10 +48,28 @@ pub fn get_tty(idx: usize) -> Option<TTYFile> {
 	Some(unsafe { TTYS[idx].assume_init_ref() }.clone())
 }
 
-pub fn get_foreground_tty() -> TTYFile {
+static IS_TTY_DETEACHED: AtomicBool = AtomicBool::new(false);
+
+pub fn sys_deteach_tty() -> Result<usize, Errno> {
+	IS_TTY_DETEACHED.store(true, Ordering::Relaxed);
+
+	Ok(0)
+}
+
+pub fn sys_attach_tty() -> Result<usize, Errno> {
+	IS_TTY_DETEACHED.store(false, Ordering::Relaxed);
+
+	Ok(0)
+}
+
+pub fn get_foreground_tty() -> Option<TTYFile> {
+	if IS_TTY_DETEACHED.load(Ordering::Relaxed) {
+		return None;
+	}
+
 	let foreground = FOREGROUND_TTY.lock();
 
-	unsafe { foreground.assume_init_ref() }.clone()
+	Some(unsafe { foreground.assume_init_ref() }.clone())
 }
 
 pub fn set_foreground_tty(idx: usize) {
@@ -65,7 +86,9 @@ pub fn set_foreground_tty(idx: usize) {
 }
 
 pub fn console_screen_draw(_: &mut ()) -> Result<(), work::Error> {
-	get_foreground_tty().lock_tty().draw();
+	if let Some(tty) = get_foreground_tty() {
+		tty.lock_tty().draw();
+	}
 
 	Ok(())
 }
