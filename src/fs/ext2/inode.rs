@@ -212,6 +212,13 @@ impl LockRW<Inode> {
 		if !self.data_read().common().is_empty() {
 			return Ok(());
 		}
+
+		if FileType::from_mode(self.info().mode) == FileType::SymLink
+			&& self.info().get_size() <= 60
+		{
+			return Ok(());
+		}
+
 		// pr_debug!("load_bid {:?}", self.read_lock().info);
 
 		let v = self.id_space_read().read_bid()?;
