@@ -23,6 +23,7 @@ use crate::{
 	pr_debug,
 	process::{
 		exit::exit_with_signal,
+		process_tree::PROCESS_TREE,
 		relation::session::Session,
 		signal::{sig_flag::SigFlag, sig_handler::SigHandler, sig_num::SigNum},
 		task::{Task, CURRENT},
@@ -49,6 +50,12 @@ pub fn trampoline_address(addr: usize) -> usize {
 }
 
 pub struct Restart;
+
+/// Lock Order
+///
+/// 1. table
+/// 2. mask
+/// 3. queue
 pub struct Signal {
 	queue: Locked<LinkedList<SigInfo>>,
 	mask: Locked<SigMask>,
@@ -74,6 +81,21 @@ impl Signal {
 		}
 	}
 
+	pub fn do_for_exec(&self) {
+		let mut table = self.table.lock();
+
+		*self.mask.lock() = SigMask::empty();
+
+		self.queue.lock().clear();
+
+		for (i, t) in table.iter_mut().enumerate() {
+			match t {
+				SigHandler::Ignore => {}
+				x => *x = SigHandler::default(SigNum::from_usize(i + 1).unwrap()),
+			}
+		}
+	}
+
 	pub fn overwrite_mask(&self, mask: SigMask) {
 		*self.mask.lock() = mask;
 	}
@@ -83,13 +105,13 @@ impl Signal {
 	}
 
 	pub fn recv_signal(&self, info: SigInfo) {
-		let mask = self.mask.lock();
-		if mask.contains(info.num.into()) {
+		let table = self.table.lock();
+		if let SigHandler::Ignore = table[info.num.index()] {
 			return;
 		}
 
-		let table = self.table.lock();
-		if let SigHandler::Ignore = table[info.num.index()] {
+		let mask = self.mask.lock();
+		if mask.contains(info.num.into()) {
 			return;
 		}
 
@@ -140,7 +162,27 @@ impl Signal {
 	fn do_signal_default(&self, handler: &SigHandler, num: SigNum) -> Option<()> {
 		use SigHandler::*;
 		match handler {
-			Terminate | Core => exit_with_signal(num),
+			Terminate | Core => {
+				let current = unsafe { CURRENT.get_ref() };
+				let parent = {
+					let ptree = PROCESS_TREE.lock();
+					let ppid = current.get_ppid();
+					ptree.get(&ppid).cloned()
+				};
+
+				if let Option::Some(parent) = parent {
+					let info = SigInfo {
+						num: SigNum::CHLD,
+						pid: current.get_pid().as_raw(),
+						uid: current.get_uid(),
+						code: SigCode::CLD_EXITED,
+					};
+
+					let _ = send_signal_to(&parent, &info);
+				}
+
+				exit_with_signal(num)
+			}
 			Ignore | Continue => Option::Some(()),
 			Stop => {
 				sleep_and_yield(Sleep::Deep);

@@ -1,4 +1,5 @@
-use core::mem::size_of;
+use core::cmp::max;
+use core::mem::{align_of, size_of};
 use core::slice::{from_raw_parts, from_raw_parts_mut};
 
 use alloc::sync::Arc;
@@ -112,4 +113,22 @@ pub fn verify_ptr_mut<T>(ptr: usize, task: &Arc<Task>) -> Result<&'_ mut T, Errn
 	verify_region(ptr, size_of::<T>(), task, AreaFlag::Writable)?;
 
 	Ok(unsafe { &mut *(ptr as *mut T) })
+}
+
+pub fn verify_array_mut<T>(
+	arr_ptr: usize,
+	len: usize,
+	task: &Arc<Task>,
+) -> Result<&'_ mut [T], Errno> {
+	let size = max(size_of::<T>(), align_of::<T>());
+	verify_region(arr_ptr, len * size, task, AreaFlag::Writable)?;
+
+	Ok(unsafe { from_raw_parts_mut(arr_ptr as *mut T, len) })
+}
+
+pub fn verify_array<T>(arr_ptr: usize, len: usize, task: &Arc<Task>) -> Result<&'_ [T], Errno> {
+	let size = max(size_of::<T>(), align_of::<T>());
+	verify_region(arr_ptr, len * size, task, AreaFlag::Readable)?;
+
+	Ok(unsafe { from_raw_parts_mut(arr_ptr as *mut T, len) })
 }

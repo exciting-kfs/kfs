@@ -1,4 +1,7 @@
-use crate::{fs::vfs::Whence, syscall::errno::Errno};
+use crate::{
+	fs::vfs::Whence, mm::user::verify::verify_ptr_mut, process::task::CURRENT,
+	syscall::errno::Errno,
+};
 
 use super::get_file;
 
@@ -15,4 +18,26 @@ pub fn sys_lseek(fd: isize, offset: isize, raw_whence: isize) -> Result<usize, E
 	};
 
 	get_file(fd)?.lseek(offset, whence)
+}
+
+pub fn sys_llseek(
+	fd: isize,
+	h_offset: isize,
+	l_offset: isize,
+	result: usize,
+	raw_whence: isize,
+) -> Result<usize, Errno> {
+	let current = unsafe { CURRENT.get_ref() };
+
+	let p = verify_ptr_mut::<i64>(result, current).unwrap();
+	let offset = (((h_offset as u64) << 32) | (l_offset as u64)) as i64;
+
+	let ret = sys_lseek(fd, offset as isize, raw_whence);
+
+	if let Ok(x) = ret {
+		*p = x as i64;
+		return Ok(0);
+	}
+
+	ret
 }

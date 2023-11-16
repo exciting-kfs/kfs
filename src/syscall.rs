@@ -3,6 +3,7 @@ pub mod errno;
 pub mod exec;
 pub mod fork;
 pub mod kill;
+pub mod poll;
 pub mod relation;
 pub mod sendfile;
 pub mod signal;
@@ -25,7 +26,6 @@ use crate::interrupt::InterruptFrame;
 use crate::mm::user::brk::sys_brk;
 use crate::mm::user::mmap::{sys_mmap, sys_munmap};
 
-use crate::mm::user::verify::verify_ptr_mut;
 use crate::net::syscall::*;
 use crate::process::exit::sys_exit;
 use crate::process::gid::{sys_getgid, sys_setgid};
@@ -43,6 +43,7 @@ use self::errno::Errno;
 use self::exec::*;
 use self::fork::sys_fork;
 use self::kill::sys_kill;
+use self::poll::sys_poll;
 use self::reboot::sys_reboot;
 use self::relation::{
 	sys_getpgid, sys_getpgrp, sys_getpid, sys_getppid, sys_getsid, sys_setpgid, sys_setsid,
@@ -574,6 +575,7 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 			frame.ebx,
 			frame.ecx as *const SigAction,
 			frame.edx as *mut SigAction,
+			frame.esi,
 		),
 		80 => sys_reboot(frame.ebx),
 		83 => sys_symlink(frame.ebx, frame.ecx),
@@ -601,30 +603,20 @@ fn __syscall(frame: &mut InterruptFrame, restart: &mut bool) -> Result<usize, Er
 		132 => sys_getpgid(frame.ebx),
 
 		// TODO: _llseek
-		140 => {
-			let current = unsafe { CURRENT.get_ref() };
-
-			let p = verify_ptr_mut::<i64>(frame.esi, current).unwrap();
-			let offset = (((frame.ecx as u64) << 32) | (frame.edx as u64)) as i64;
-			let raw_w = frame.edi;
-
-			let ret = sys_lseek(frame.ebx as isize, offset as isize, raw_w as isize);
-
-			if let Ok(x) = ret {
-				*p = x as i64;
-				return Ok(0);
-			}
-
-			ret
-		}
+		140 => sys_llseek(
+			frame.ebx as isize,
+			frame.ecx as isize,
+			frame.edx as isize,
+			frame.esi,
+			frame.edi as isize,
+		),
 		141 => sys_getdents(frame.ebx as isize, frame.ecx, frame.edx),
 		145 => sys_readv(frame.ebx as isize, frame.ecx, frame.edx),
 		146 => sys_writev(frame.ebx as isize, frame.ecx, frame.edx),
 		147 => sys_getsid(frame.ebx),
 		158 => sys_sched_yield(),
 		162 => sys_nanosleep(frame.ebx, frame.ecx),
-		// poll
-		168 => Ok(frame.ecx),
+		168 => sys_poll(frame.ebx, frame.ecx, frame.edx),
 		// TODO: rt_sigprocmask
 		175 => sys_sigprocmask(frame.ebx, frame.ecx, frame.edx),
 		// TODO: rt_sigsuspend

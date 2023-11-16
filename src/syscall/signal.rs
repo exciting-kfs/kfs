@@ -48,6 +48,7 @@ pub fn sys_sigaction(
 	num: usize,
 	act: *const SigAction,
 	old: *mut SigAction,
+	_ssize: usize,
 ) -> Result<usize, Errno> {
 	validate_user_addr(act as usize)?;
 	validate_user_addr(old as usize)?;
@@ -64,7 +65,7 @@ pub fn sys_sigaction(
 		table[num.index()].clone()
 	} else {
 		let act = unsafe { &*act };
-		let new_handler = match act.flag().contains(SigFlag::ResetHand) {
+		let new_handler = match act.flag().contains(SigFlag::ResetHand) || act.handler() == 0 {
 			true => SigHandler::default(num), // SIGTRAP SIGILL ?
 			false => SigHandler::some(act.clone()),
 		};
@@ -109,7 +110,7 @@ pub fn sys_sigreturn(frame: &InterruptFrame, restart: &mut bool) -> Result<usize
 pub fn sys_sigsuspend(new_mask: usize) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_ref() };
 
-	let new_mask = *verify_ptr::<SigMask>(new_mask, current)?;
+	let new_mask = *verify_ptr::<[SigMask; 2]>(new_mask, current)?;
 
 	let old_mask = {
 		let mut curr_mask = current
@@ -118,7 +119,7 @@ pub fn sys_sigsuspend(new_mask: usize) -> Result<usize, Errno> {
 			.signal
 			.lock_mask();
 
-		mem::replace(&mut *curr_mask, new_mask)
+		mem::replace(&mut *curr_mask, new_mask[1])
 	};
 
 	loop {
@@ -159,7 +160,7 @@ pub fn sys_sigprocmask(how: usize, set: usize, oldset: usize) -> Result<usize, E
 
 	let how = SigProcMaskHow::try_from(how)?;
 
-	let set = verify_ptr::<SigMask>(set, current)?;
+	let set = verify_ptr::<[SigMask; 2]>(set, current)?;
 
 	let mut mask = current
 		.get_user_ext()
@@ -170,16 +171,16 @@ pub fn sys_sigprocmask(how: usize, set: usize, oldset: usize) -> Result<usize, E
 	let old_mask = *mask;
 
 	if oldset != 0 {
-		let oldset = verify_ptr_mut::<SigMask>(oldset, current)?;
+		let oldset = verify_ptr_mut::<[SigMask; 2]>(oldset, current)?;
 
-		*oldset = old_mask;
+		oldset[1] = old_mask;
 	}
 
 	use SigProcMaskHow::*;
 	let new_mask = match how {
-		SigBlock => old_mask | *set,
-		SigUnblock => old_mask - *set,
-		SigSetMask => *set,
+		SigBlock => old_mask | set[1],
+		SigUnblock => old_mask - set[1],
+		SigSetMask => set[1],
 	};
 
 	*mask = new_mask;
