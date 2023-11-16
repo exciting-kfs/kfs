@@ -1,6 +1,7 @@
 use core::{
 	cell::UnsafeCell,
 	mem::size_of,
+	ops::{Deref, DerefMut, Range},
 	slice::{from_raw_parts, from_raw_parts_mut},
 };
 
@@ -8,11 +9,11 @@ use alloc::sync::{Arc, Weak};
 
 use crate::{
 	driver::ide::{
-		block::{Block as IdeBlock, BlockChunk, BlockChunkMut},
+		block::{Block as IdeBlock, BlockChunkMut},
 		dma::hook::WriteBack,
 	},
 	driver::partition::BlockId,
-	sync::LockRW,
+	sync::{LockRW, ReadLockGuard, WriteLockGuard},
 	trace_feature,
 };
 
@@ -84,41 +85,12 @@ impl Block {
 		index % self.size()
 	}
 
-	pub fn as_slice_ref(&self) -> &[u8] {
-		self.move_to_back();
-
+	fn __as_slice_ref(&self) -> &[u8] {
 		unsafe { self.block.as_slice_ref(self.size()) }
 	}
 
-	pub fn as_slice_mut(&mut self) -> &mut [u8] {
-		self.dirty();
-		self.move_to_back();
-
+	fn __as_slice_mut(&mut self) -> &mut [u8] {
 		unsafe { self.block.as_slice_mut(self.size()) }
-	}
-
-	pub fn as_slice_ref_u32(&self) -> &[u32] {
-		self.move_to_back();
-
-		let slice = self.as_slice_ref();
-		let ptr = slice.as_ptr();
-		let len = slice.len();
-		unsafe { from_raw_parts(ptr.cast::<u32>(), len / size_of::<u32>()) }
-	}
-
-	pub fn as_slice_mut_u32(&mut self) -> &mut [u32] {
-		self.dirty();
-		self.move_to_back();
-
-		let slice = self.as_slice_mut();
-		let ptr = slice.as_mut_ptr();
-		let len = slice.len();
-		unsafe { from_raw_parts_mut(ptr.cast::<u32>(), len / size_of::<u32>()) }
-	}
-
-	pub fn as_chunks(&self, chunk_size: usize) -> impl Iterator<Item = BlockChunk<'_>> {
-		self.move_to_back();
-		self.block.as_chunks(chunk_size)
 	}
 
 	pub fn as_chunks_mut(&mut self, chunk_size: usize) -> impl Iterator<Item = BlockChunkMut<'_>> {
@@ -134,7 +106,7 @@ impl Block {
 		}
 	}
 
-	fn dirty(&self) {
+	pub fn dirty(&self) {
 		let bid = self.id();
 
 		if let Some(pool) = self.pool.upgrade() {
@@ -143,7 +115,6 @@ impl Block {
 	}
 }
 
-#[cfg(log_level = "debug")]
 impl Drop for Block {
 	fn drop(&mut self) {
 		trace_feature!(
@@ -151,6 +122,16 @@ impl Drop for Block {
 			"block: drop: {:?}",
 			self.id()
 		);
+
+		let node = self.node.clone();
+
+		if !node.is_connected() {
+			return;
+		}
+
+		if let Some(pool) = self.pool.upgrade() {
+			pool.lru.lock().remove(node)
+		}
 	}
 }
 
@@ -162,6 +143,34 @@ impl LockRW<Block> {
 			Arc::strong_count(self)
 		);
 		Arc::strong_count(self) > 1
+	}
+
+	pub fn as_slice_ref<'a>(self: &'a Arc<Self>) -> Slice<'a> {
+		self.read_lock().move_to_back();
+
+		let size = self.size();
+		Slice::new(self, 0..size)
+	}
+
+	pub fn as_slice_mut<'a>(self: &'a Arc<Self>) -> SliceMut<'a> {
+		self.read_lock().move_to_back();
+
+		let size = self.size();
+		SliceMut::new(self, 0..size)
+	}
+
+	pub fn as_slice_ref_u32<'a>(self: &'a Arc<Self>) -> Slice32<'a> {
+		self.read_lock().move_to_back();
+
+		let size = self.size() / size_of::<u32>();
+		Slice32::new(self, 0..size)
+	}
+
+	pub fn as_slice_mut_u32<'a>(self: &'a Arc<Self>) -> SliceMut32<'a> {
+		self.read_lock().move_to_back();
+
+		let size = self.size() / size_of::<u32>();
+		SliceMut32::new(self, 0..size)
 	}
 }
 
@@ -194,6 +203,16 @@ impl BidNode {
 	pub fn bid(&self) -> BlockId {
 		unsafe { *self.bid.get() }
 	}
+
+	pub fn is_connected(self: &Arc<Self>) -> bool {
+		let prev = self.get_prev().upgrade();
+
+		if let Some(p) = prev {
+			*p != **self
+		} else {
+			false
+		}
+	}
 }
 
 impl PartialEq for BidNode {
@@ -221,3 +240,148 @@ impl ListNode<BidNode> for BidNode {
 		unsafe { (*self.next.get()) = next }
 	}
 }
+
+pub struct Slice<'a> {
+	chunk_read: ReadLockGuard<'a, Block>,
+	rng: Range<usize>,
+}
+
+impl<'a> Slice<'a> {
+	pub fn new(block: &'a Arc<LockRW<Block>>, rng: Range<usize>) -> Self {
+		Self {
+			chunk_read: block.read_lock(),
+			rng,
+		}
+	}
+}
+
+impl<'a> Deref for Slice<'a> {
+	type Target = [u8];
+	fn deref(&self) -> &Self::Target {
+		unsafe {
+			self.chunk_read.move_to_back();
+			let slice = self.chunk_read.__as_slice_ref();
+			let ptr = slice.as_ptr().offset(self.rng.start as isize);
+			from_raw_parts(ptr, self.rng.len())
+		}
+	}
+}
+
+pub struct SliceMut<'a> {
+	chunk_write: WriteLockGuard<'a, Block>,
+	rng: Range<usize>,
+}
+
+impl<'a> SliceMut<'a> {
+	pub fn new(block: &'a Arc<LockRW<Block>>, rng: Range<usize>) -> Self {
+		Self {
+			chunk_write: block.write_lock(),
+			rng,
+		}
+	}
+}
+
+impl<'a> Deref for SliceMut<'a> {
+	type Target = [u8];
+	fn deref(&self) -> &Self::Target {
+		unsafe {
+			self.chunk_write.move_to_back();
+
+			let slice = self.chunk_write.__as_slice_ref();
+			let ptr = slice.as_ptr().offset(self.rng.start as isize);
+			from_raw_parts(ptr, self.rng.len())
+		}
+	}
+}
+
+impl<'a> DerefMut for SliceMut<'a> {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		unsafe {
+			self.chunk_write.move_to_back();
+
+			let slice = self.chunk_write.__as_slice_mut();
+			let ptr = slice.as_mut_ptr().offset(self.rng.start as isize);
+			from_raw_parts_mut(ptr, self.rng.len())
+		}
+	}
+}
+
+impl<'a> Drop for SliceMut<'a> {
+	fn drop(&mut self) {
+		self.chunk_write.dirty();
+	}
+}
+
+pub struct Slice32<'a> {
+	chunk_read: ReadLockGuard<'a, Block>,
+	rng: Range<usize>,
+}
+
+impl<'a> Slice32<'a> {
+	pub fn new(block: &'a Arc<LockRW<Block>>, rng: Range<usize>) -> Self {
+		Self {
+			chunk_read: block.read_lock(),
+			rng,
+		}
+	}
+}
+
+impl<'a> Deref for Slice32<'a> {
+	type Target = [u32];
+	fn deref(&self) -> &Self::Target {
+		unsafe {
+			self.chunk_read.move_to_back();
+
+			let slice = self.chunk_read.__as_slice_ref();
+			let ptr = (slice.as_ptr() as *const u32).offset(self.rng.start as isize);
+			from_raw_parts(ptr, self.rng.len())
+		}
+	}
+}
+
+pub struct SliceMut32<'a> {
+	chunk_write: WriteLockGuard<'a, Block>,
+	rng: Range<usize>,
+}
+
+impl<'a> SliceMut32<'a> {
+	pub fn new(block: &'a Arc<LockRW<Block>>, rng: Range<usize>) -> Self {
+		Self {
+			chunk_write: block.write_lock(),
+			rng,
+		}
+	}
+}
+
+impl<'a> Deref for SliceMut32<'a> {
+	type Target = [u32];
+	fn deref(&self) -> &Self::Target {
+		unsafe {
+			self.chunk_write.move_to_back();
+
+			let slice = self.chunk_write.__as_slice_ref();
+			let ptr = (slice.as_ptr() as *const u32).offset(self.rng.start as isize);
+			from_raw_parts(ptr, self.rng.len())
+		}
+	}
+}
+
+impl<'a> DerefMut for SliceMut32<'a> {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		unsafe {
+			self.chunk_write.move_to_back();
+
+			let slice = self.chunk_write.__as_slice_mut();
+			let ptr = (slice.as_mut_ptr() as *mut u32).offset(self.rng.start as isize);
+			from_raw_parts_mut(ptr, self.rng.len())
+		}
+	}
+}
+
+impl<'a> Drop for SliceMut32<'a> {
+	fn drop(&mut self) {
+		self.chunk_write.dirty();
+	}
+}
+
+pub struct IterChunksMut {}

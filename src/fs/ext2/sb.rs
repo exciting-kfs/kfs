@@ -222,9 +222,16 @@ impl SuperBlock {
 		}
 
 		let mut bids = Vec::new();
+		// crate::pr_debug!("reserve block: count: {}", count);
 		for (bgd, bitmap) in groups.iter_mut().zip(bitmaps.iter_mut()) {
 			let free_count = bgd.free_count();
 			let indexes = bitmap.find_free_space_multi(free_count).unwrap();
+			// crate::pr_debug!(
+			// 	"gid: {}, free_count: {}, indexes: {:?}",
+			// 	bgd.gid(),
+			// 	free_count,
+			// 	indexes
+			// );
 			indexes
 				.iter()
 				.for_each(|index| bitmap.toggle_bitmap(*index));
@@ -352,8 +359,7 @@ impl SuperBlock {
 
 		for bid in bids {
 			let block = self.block_pool.get_or_load(bid)?;
-			let mut block = block.write_lock();
-			let slice = block.as_slice_mut();
+			let mut slice = block.as_slice_mut();
 
 			let dst = if bid.inner() == 0 {
 				let dst = &mut slice[1024..];
@@ -383,7 +389,8 @@ impl SuperBlock {
 			let end = start + block_count;
 			for bid in (start..end).map(|i| unsafe { BlockId::new_unchecked(i) }) {
 				let block = self.block_pool.get_or_load(bid)?;
-				let dst = block.write_lock().as_slice_mut().as_mut_ptr().cast();
+				let mut slice = block.as_slice_mut();
+				let dst = slice.as_mut_ptr().cast();
 
 				if let Some(slice) = bgdt_iter.next() {
 					unsafe { copy_nonoverlapping(slice.as_ptr(), dst, slice.len()) }

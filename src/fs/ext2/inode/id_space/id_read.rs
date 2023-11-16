@@ -67,10 +67,9 @@ impl<'a> IdSpaceRead<'a> {
 				bid
 			);
 			let block = sb.block_pool.get_or_load(bid)?;
-			let block_read = block.read_lock();
-			let slice = block_read.as_slice_ref_u32();
+			let slice = block.as_slice_ref_u32();
 
-			if self.__read_bid(sb, bid_vec, slice, depth - 1)? {
+			if self.__read_bid(sb, bid_vec, &slice, depth - 1)? {
 				return Ok(true);
 			}
 		}

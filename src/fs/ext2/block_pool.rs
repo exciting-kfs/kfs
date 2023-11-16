@@ -121,8 +121,8 @@ impl BlockPool {
 			let mut pool = self.pool.lock();
 			let mut lru = self.lru.lock();
 
+			pool.insert(bid, MaybeBlock::Block(block.clone()));
 			lru.push_back(block.read_lock().node());
-			pool.insert(bid, MaybeBlock::Block(block));
 			self.nr_block.fetch_add(1, Ordering::Relaxed);
 
 			self.dirty(bid);
@@ -154,8 +154,8 @@ impl BlockPool {
 		trace_feature!("block_pool", "block {:?} deleted", bid);
 
 		if let Some(block) = self.pool.lock().remove(&bid) {
-			if let MaybeBlock::Block(block) = block {
-				self.lru.lock().remove(block.read_lock().node());
+			if let MaybeBlock::Block(_) = block {
+				// self.lru.lock().remove(block.read_lock().node());
 				self.nr_block.fetch_sub(1, Ordering::Relaxed);
 			}
 		}

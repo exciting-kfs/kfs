@@ -166,14 +166,14 @@ impl BGDT {
 		let mut v = Vec::new();
 		let mut bgid = 0;
 
-		for chunk in self.0.iter_mut() {
+		'a: for chunk in self.0.iter_mut() {
 			for bgd in chunk.iter_mut() {
 				let free = bgd.free_blocks_count as usize;
 				match free.checked_sub(count) {
 					Some(_) => {
 						v.push(FreeBGD::new(bgd, bgid, count));
 						count = 0;
-						break;
+						break 'a;
 					}
 					None => {
 						v.push(FreeBGD::new(bgd, bgid, free));

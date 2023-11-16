@@ -60,7 +60,6 @@ impl SymLinkInode {
 		sb: &Arc<SuperBlock>,
 	) -> Arc<Self> {
 		block
-			.write_lock()
 			.as_slice_mut()
 			.iter_mut()
 			.zip(target)

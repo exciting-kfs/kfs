@@ -1,18 +1,16 @@
-use core::{
-	ops::{Deref, DerefMut},
-	slice::{from_raw_parts, from_raw_parts_mut},
-};
-
 use alloc::sync::Arc;
 
 use crate::{
-	fs::ext2::Block,
+	fs::ext2::{
+		block_pool::block::{Slice, SliceMut},
+		Block,
+	},
 	process::signal::poll_signal_queue,
 	scheduler::{
 		preempt::AtomicOps,
 		sleep::{sleep_and_yield_atomic, Sleep},
 	},
-	sync::{LockRW, ReadLockGuard, WriteLockGuard},
+	sync::LockRW,
 	syscall::errno::Errno,
 };
 
@@ -240,11 +238,7 @@ impl Chunk {
 	}
 
 	pub fn slice(&self) -> Slice<'_> {
-		Slice {
-			chunk_read: self.chunk.read_lock(),
-			idx: self.idx,
-			len: self.len,
-		}
+		Slice::new(&self.chunk, self.idx..(self.idx + self.len))
 	}
 }
 
@@ -296,54 +290,6 @@ impl ChunkMut {
 	}
 
 	pub fn slice_mut(&self) -> SliceMut<'_> {
-		SliceMut {
-			chunk_write: self.chunk.write_lock(),
-			idx: self.idx,
-			len: self.len,
-		}
-	}
-}
-
-pub struct Slice<'a> {
-	chunk_read: ReadLockGuard<'a, Block>,
-	idx: usize,
-	len: usize,
-}
-
-impl<'a> Deref for Slice<'a> {
-	type Target = [u8];
-	fn deref(&self) -> &Self::Target {
-		unsafe {
-			let slice = self.chunk_read.as_slice_ref();
-			let ptr = slice.as_ptr().offset(self.idx as isize);
-			from_raw_parts(ptr, self.len)
-		}
-	}
-}
-
-pub struct SliceMut<'a> {
-	chunk_write: WriteLockGuard<'a, Block>,
-	idx: usize,
-	len: usize,
-}
-
-impl<'a> Deref for SliceMut<'a> {
-	type Target = [u8];
-	fn deref(&self) -> &Self::Target {
-		unsafe {
-			let slice = self.chunk_write.as_slice_ref();
-			let ptr = slice.as_ptr().offset(self.idx as isize);
-			from_raw_parts(ptr, self.len)
-		}
-	}
-}
-
-impl<'a> DerefMut for SliceMut<'a> {
-	fn deref_mut(&mut self) -> &mut Self::Target {
-		unsafe {
-			let slice = self.chunk_write.as_slice_mut();
-			let ptr = slice.as_mut_ptr().offset(self.idx as isize);
-			from_raw_parts_mut(ptr, self.len)
-		}
+		SliceMut::new(&self.chunk, self.idx..(self.idx + self.len))
 	}
 }

@@ -8,17 +8,17 @@ pub use self::id_adjust::IdSpaceAdjust;
 pub use self::id_read::IdSpaceRead;
 pub use self::id_write::IdSapceWrite;
 
-use core::{
-	mem::size_of,
-	ops::{Deref, DerefMut, Range},
-};
+use core::{mem::size_of, ops::Range};
 
 use alloc::{sync::Arc, vec::Vec};
 
 use crate::{
 	driver::partition::BlockId,
-	fs::ext2::Block,
-	sync::{LockRW, WriteLockGuard},
+	fs::ext2::{
+		block_pool::block::{Slice32, SliceMut32},
+		Block,
+	},
+	sync::LockRW,
 	syscall::errno::Errno,
 };
 
@@ -115,15 +115,19 @@ impl Chunk {
 		}
 	}
 
-	fn slice(&mut self) -> Slice<'_> {
-		Slice::new(&mut self.block, self.range.clone())
+	fn slice(&mut self) -> Slice32<'_> {
+		Slice32::new(&mut self.block, self.range.clone())
+	}
+
+	fn slice_mut(&mut self) -> SliceMut32<'_> {
+		SliceMut32::new(&mut self.block, self.range.clone())
 	}
 
 	fn len(&self) -> usize {
 		self.range.len()
 	}
 
-	fn split_first(&mut self) -> Option<Slice<'_>> {
+	fn split_first(&mut self) -> Option<SliceMut32<'_>> {
 		if self.len() == 0 {
 			return None;
 		}
@@ -133,38 +137,11 @@ impl Chunk {
 		let start = rng.start;
 
 		*rng = rng.start + 1..rng.end;
-		Some(Slice::new(block, start..start + 1))
+		Some(SliceMut32::new(block, start..start + 1))
 	}
 
 	fn range(&self) -> &Range<usize> {
 		&self.range
-	}
-}
-
-struct Slice<'a> {
-	block: WriteLockGuard<'a, Block>,
-	range: Range<usize>,
-}
-
-impl<'a> Slice<'a> {
-	fn new(block: &'a mut Arc<LockRW<Block>>, rng: Range<usize>) -> Self {
-		Self {
-			block: block.write_lock(),
-			range: rng,
-		}
-	}
-}
-
-impl<'a> Deref for Slice<'a> {
-	type Target = [u32];
-	fn deref(&self) -> &Self::Target {
-		&self.block.as_slice_ref_u32()[self.range.start..self.range.end]
-	}
-}
-
-impl<'a> DerefMut for Slice<'a> {
-	fn deref_mut(&mut self) -> &mut Self::Target {
-		&mut self.block.as_slice_mut_u32()[self.range.start..self.range.end]
 	}
 }
 
@@ -235,7 +212,7 @@ impl<'a> StackHelper<'a> {
 
 		for dep in (1..=depth).rev() {
 			let (first, blk_i) = blk_i.split_first().expect("check slice length");
-			let bid = idspace.read_lock().as_slice_ref_u32()[*first as usize];
+			let bid = idspace.as_slice_ref_u32()[*first as usize];
 			let bid = unsafe { BlockId::new_unchecked(bid as usize) };
 
 			let block = block_pool.get_or_load(bid)?;
