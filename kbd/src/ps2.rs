@@ -4,14 +4,15 @@ pub mod keyboard;
 use kernel::pr_err;
 
 use kernel::driver::apic::local::LOCAL_APIC;
-use kernel::driver::terminal::{console_screen_draw, get_foreground_tty, set_foreground_tty};
+use kernel::driver::terminal::{
+	get_foreground_tty, schedule_console_screen_draw, set_foreground_tty,
+};
 use kernel::input::{
 	self,
 	key_event::{Code, KeyKind},
 };
 use kernel::interrupt::InterruptFrame;
 use kernel::io::ChWrite;
-use kernel::scheduler::work::schedule_fast_work;
 use kernel::{acpi::IAPC_BOOT_ARCH, io::pmio::Port};
 use keyboard::{get_raw_scancode, into_key_event};
 
@@ -123,8 +124,7 @@ pub extern "C" fn handle_keyboard_impl(_frame: InterruptFrame) {
 			}
 		}
 
-		schedule_fast_work(console_screen_draw, ());
-		// wakeup_fast_woker();
+		schedule_console_screen_draw();
 	});
 
 	LOCAL_APIC.end_of_interrupt();

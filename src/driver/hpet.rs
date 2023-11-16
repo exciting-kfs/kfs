@@ -144,7 +144,11 @@ pub fn get_time_elapsed() -> u64 {
 }
 
 pub fn get_timestamp_nano() -> u64 {
-	unsafe { BOOT_TIMESTAMP + get_time_elapsed() }
+	if RUN_TIME.load(Ordering::Relaxed) {
+		unsafe { BOOT_TIMESTAMP + get_time_elapsed() }
+	} else {
+		0
+	}
 }
 
 pub fn get_timestamp_mili() -> u64 {
@@ -152,11 +156,7 @@ pub fn get_timestamp_mili() -> u64 {
 }
 
 pub fn get_timestamp_micro() -> u64 {
-	if RUN_TIME.load(Ordering::Relaxed) {
-		get_timestamp_nano() / 1000
-	} else {
-		0
-	}
+	get_timestamp_nano() / 1000
 }
 
 pub fn get_timestamp_second() -> u64 {

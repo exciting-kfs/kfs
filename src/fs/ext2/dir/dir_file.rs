@@ -4,6 +4,7 @@ use crate::{
 	fs::vfs::{self, IOFlag, KfsDirent},
 	handle_r_iter_error,
 	mm::util::next_align,
+	pr_debug,
 	sync::LocalLocked,
 	syscall::errno::Errno,
 	trace_feature,
@@ -28,14 +29,37 @@ impl DirFile {
 
 impl vfs::DirHandle for DirFile {
 	fn getdents(&self, buf: &mut [u8], flags: vfs::IOFlag) -> Result<usize, Errno> {
+		pr_debug!("getdents: buf_len: {}", buf.len());
+
 		let non_block = flags.contains(IOFlag::O_NONBLOCK);
+
+		trace_feature!(
+			"time-ext2-getdents",
+			"start: {}",
+			crate::driver::hpet::get_timestamp_mili() % 1000
+		);
 
 		let mut sum = 0;
 		let mut iter = self.iter.lock();
 
-		loop {
-			let chunk = iter.next();
+		trace_feature!(
+			"time-ext2-getdents",
+			"after lock: {}",
+			get_timestamp_mili() % 1000
+		);
 
+		let mut chunk = iter.next();
+
+		if let Ok(chunk) = chunk.as_ref() {
+			let name = chunk.get_name();
+			let size = KfsDirent::total_len(&name);
+
+			if size > buf.len() {
+				return Err(Errno::EINVAL);
+			}
+		}
+
+		loop {
 			if let Ok(chunk) = chunk {
 				let res = write_to_buf(buf, chunk, sum);
 				if res == 0 {
@@ -47,6 +71,14 @@ impl vfs::DirHandle for DirFile {
 			} else {
 				handle_r_iter_error!(chunk.unwrap_err(), non_block);
 			}
+
+			trace_feature!(
+				"time-ext2-getdents",
+				"one entry end: {}",
+				crate::driver::hpet::get_timestamp_mili() % 1000
+			);
+
+			chunk = iter.next();
 		}
 
 		Ok(sum)
@@ -62,13 +94,14 @@ fn write_to_buf(buf: &mut [u8], chunk: Dirent, sum: usize) -> usize {
 	let record = chunk.get_record();
 	let size = next_align(KfsDirent::total_len(&name), 8);
 
-	trace_feature!("ext2-getdents"
+	trace_feature!(
+		"ext2-getdents",
 		"name: {:?}, record: {:?}",
-		String::from_utf8(name.iter().map(|e| *e).collect::<Vec<u8>>()),
-		*record
+		alloc::string::String::from_utf8((&*name).to_vec()),
+		*record,
 	);
 
-	if sum + size > buf.len() {
+	if sum + size > buf.len() || name.len() == 0 {
 		return 0;
 	}
 

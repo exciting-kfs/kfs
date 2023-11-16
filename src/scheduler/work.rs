@@ -1,5 +1,8 @@
+pub mod atomic;
+pub mod default;
+
+use core::alloc::AllocError;
 use core::mem;
-use core::{alloc::AllocError, mem::MaybeUninit};
 
 use alloc::sync::Arc;
 use alloc::{boxed::Box, collections::LinkedList};
@@ -7,29 +10,15 @@ use alloc::{boxed::Box, collections::LinkedList};
 use crate::mm::oom::wake_up_oom_handler;
 use crate::process::task::{State, Task};
 use crate::sync::Locked;
+use crate::trace_feature;
+
+use self::default::DefaultWork;
 
 use super::context::yield_now;
-use super::{schedule_first, schedule_last};
-
-pub struct Work<ArgType> {
-	func: fn(&mut ArgType) -> Result<(), Error>,
-	arg: Box<ArgType>,
-}
-
-impl<ArgType> Work<ArgType> {
-	pub fn new(func: fn(&mut ArgType) -> Result<(), Error>, arg: Box<ArgType>) -> Self {
-		Self { func, arg }
-	}
-}
+use super::schedule_last;
 
 pub trait Workable {
-	fn work(&mut self) -> Result<(), Error>;
-}
-
-impl<ArgType> Workable for Work<ArgType> {
-	fn work(&mut self) -> Result<(), Error> {
-		(self.func)(self.arg.as_mut())
-	}
+	fn work(&self) -> Result<(), Error>;
 }
 
 pub enum Error {
@@ -38,7 +27,7 @@ pub enum Error {
 	Next(Box<dyn Workable>),
 }
 
-static FAST_WORK_POOL: Locked<LinkedList<Box<dyn Workable>>> = Locked::new(LinkedList::new());
+static FAST_WORK_POOL: Locked<LinkedList<Arc<dyn Workable>>> = Locked::new(LinkedList::new());
 static SLOW_WORK_POOL: Locked<LinkedList<Box<dyn Workable>>> = Locked::new(LinkedList::new());
 
 pub fn schedule_worker<ArgType: 'static>(
@@ -58,28 +47,18 @@ pub fn schedule_slow_work<ArgType: 'static>(
 	arg: ArgType,
 ) {
 	let arg = Box::new(arg);
-	let work = Box::new(Work::new(func, arg));
+	let work = Box::new(DefaultWork::new(func, arg));
 	let mut pool = SLOW_WORK_POOL.lock();
 	pool.push_back(work);
 }
 
-pub fn schedule_fast_work<ArgType: 'static>(
-	func: fn(&mut ArgType) -> Result<(), Error>,
-	arg: ArgType,
-) {
-	let arg = Box::new(arg);
-	let work = Box::new(Work::new(func, arg));
-	let mut pool = FAST_WORK_POOL.lock();
-	pool.push_back(work);
-}
-
 pub fn fast_worker(_: usize) {
-	fn take_work() -> Option<Box<dyn Workable>> {
+	fn take_work() -> Option<Arc<dyn Workable>> {
 		let mut pool = FAST_WORK_POOL.lock();
 		pool.pop_front()
 	}
 
-	while let Some(mut w) = take_work() {
+	while let Some(w) = take_work() {
 		let _ = w.work();
 	}
 }
@@ -92,11 +71,15 @@ pub fn slow_worker(_: usize) {
 			mem::take(&mut *pool)
 		};
 
-		if works.len() == 0 {
-			yield_now();
-		}
+		trace_feature!(
+			"worker",
+			"WORKER: work start! mili: {}",
+			crate::driver::hpet::get_timestamp_mili() % 1000,
+		);
 
-		for mut work in works {
+		let len = works.len();
+
+		for work in works {
 			if let Err(e) = work.work() {
 				match e {
 					Error::Alloc => wake_up_oom_handler(),
@@ -105,30 +88,23 @@ pub fn slow_worker(_: usize) {
 				}
 			}
 		}
+
+		if len == 0 {
+			yield_now();
+			trace_feature!(
+				"worker",
+				"WORKER: wake up! mili: {}, fast len: {}, slow len: {}",
+				crate::driver::hpet::get_timestamp_mili() % 1000,
+				FAST_WORK_POOL.lock().len(),
+				SLOW_WORK_POOL.lock().len()
+			);
+		}
 	}
-}
-
-// FIXME
-static mut FAST_WORKER: MaybeUninit<Arc<Task>> = MaybeUninit::uninit();
-
-// FIXME
-pub fn wakeup_fast_woker() {
-	let task = unsafe { FAST_WORKER.assume_init_mut().clone() };
-
-	let mut state = task.lock_state();
-	if *state == State::Running {
-		return;
-	}
-	*state = State::Running;
-	drop(state);
-
-	schedule_first(task);
 }
 
 pub fn init() -> Result<(), AllocError> {
 	let worker = Task::new_kernel(fast_worker as usize, 0)?;
 	*worker.lock_state() = State::Exited;
 
-	unsafe { FAST_WORKER.write(worker) };
 	Ok(())
 }

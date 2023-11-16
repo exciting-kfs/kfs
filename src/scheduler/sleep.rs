@@ -37,7 +37,12 @@ pub fn sleep_and_yield_lock<'a, T>(sleep: Sleep, lock: LockedGuard<'a, T>) {
 		Sleep::Light => State::Sleeping,
 	};
 
-	trace_feature!("sleep_atomic", "sleep: {:?}", current.get_pid());
+	trace_feature!(
+		"sleep_atomic",
+		"sleep: {:?}, mili: {}",
+		current.get_pid(),
+		crate::driver::hpet::get_timestamp_mili() % 1000
+	);
 
 	drop(lock);
 	yield_now();
@@ -50,7 +55,12 @@ pub fn sleep_and_yield_atomic(sleep: Sleep, atomic: AtomicOps) {
 		Sleep::Light => State::Sleeping,
 	};
 
-	trace_feature!("sleep_atomic", "sleep: {:?}", current.get_pid());
+	trace_feature!(
+		"sleep_atomic",
+		"sleep: {:?}, mili: {}",
+		current.get_pid(),
+		crate::driver::hpet::get_timestamp_mili() % 1000
+	);
 
 	drop(atomic);
 	yield_now();
