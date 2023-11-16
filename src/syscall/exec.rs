@@ -57,6 +57,9 @@ pub fn sys_execve(
 
 	let new_memory = Memory::from_elf(elf, argv, envp)?;
 
+	let signal = &current.user_ext_ok_or(Errno::EPERM)?.signal;
+	signal.do_for_exec();
+
 	new_memory.pick_up();
 
 	let mut memory = current

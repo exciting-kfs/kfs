@@ -4,6 +4,7 @@ use crate::{
 	mm::user::vma::AreaFlag,
 	process::{
 		relation::{Pgid, Pid},
+		signal::poll_signal_queue,
 		task::CURRENT,
 	},
 	scheduler::context::yield_now,
@@ -62,6 +63,8 @@ pub fn sys_waitpid(cpid: isize, stat_loc: *mut isize, option: usize) -> Result<u
 		}
 
 		yield_now();
+
+		unsafe { poll_signal_queue() }?
 	};
 
 	ret

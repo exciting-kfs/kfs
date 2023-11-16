@@ -3,14 +3,14 @@ use bitflags::bitflags;
 bitflags! {
 	#[derive(Debug, Clone, Copy)]
 	pub struct SigFlag: u32 {
-		const OnStack = 1;
-		const Restart = 2;
-		const ResetHand = 4;
-		const NoChildStop = 8;
-		const NoDefer = 16;
-		const NoChildWait = 32;
-		const SigInfo = 64;
-
+		const NoCldStop = 1;
+		const NoCldWait = 2;
+		const SigInfo   = 4;
+		const OnStack   = 0x08000000;
+		const Restart   = 0x10000000;
+		const NoDefer   = 0x40000000;
+		const ResetHand = 0x80000000;
+		const Restorer  = 0x04000000;
 	}
 }
 

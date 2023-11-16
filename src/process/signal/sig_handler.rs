@@ -3,41 +3,36 @@ use super::{sig_flag::SigFlag, sig_mask::SigMask, sig_num::SigNum};
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct SigAction {
-	addr: usize,
-	addr_info: usize,
-	mask: SigMask,
+	handler: usize,
 	flag: SigFlag,
+	restorer: usize,
+	mask2: SigMask,
+	mask: SigMask,
 }
 
 impl SigAction {
 	pub const fn empty() -> Self {
 		Self {
-			addr: 0,
-			addr_info: 0,
-			mask: SigMask::empty(),
+			handler: 0,
 			flag: SigFlag::empty(),
+			restorer: 0,
+			mask: SigMask::empty(),
+			mask2: SigMask::empty(),
 		}
 	}
 
 	pub fn new(addr: usize, mask: SigMask, flag: SigFlag) -> Self {
-		let (addr, addr_info) = match flag.contains(SigFlag::SigInfo) {
-			true => (0, addr),
-			false => (addr, 0),
-		};
-
 		Self {
-			addr,
-			addr_info,
-			mask,
+			handler: addr,
 			flag,
+			restorer: 0,
+			mask,
+			mask2: SigMask::empty(),
 		}
 	}
 
 	pub fn handler(&self) -> usize {
-		match self.flag.contains(SigFlag::SigInfo) {
-			true => self.addr_info,
-			false => self.addr,
-		}
+		self.handler
 	}
 
 	pub fn mask(&self) -> SigMask {
