@@ -84,15 +84,8 @@ impl DmaQ {
 		}
 	}
 
-	fn cleanup_scheduled(&mut self) {
-		if let Some(ev) = take(&mut self.scheduled) {
-			trace_feature!(
-				"time-dma-verbose",
-				"end: {}",
-				get_timestamp_micro() % 1000000,
-			);
-			ev.cleanup()
-		}
+	fn take_scheduled(&mut self) -> Option<DmaRun> {
+		take(&mut self.scheduled)
 	}
 
 	fn scheduled(&mut self, running: DmaRun) {
@@ -142,6 +135,7 @@ pub mod work {
 			try_get_ide_controller,
 		},
 		scheduler::work::{Error, Work},
+		trace_feature,
 	};
 
 	const LOCK_TRY: usize = 3;
@@ -155,11 +149,19 @@ pub mod work {
 	}
 
 	pub fn do_next_dma(id: &mut IdeId) -> Result<(), Error> {
-		let event = {
+		let (scheduled, event) = {
 			let mut dma_q = get_dma_q(*id);
-			dma_q.cleanup_scheduled();
-			dma_q.pop_front()
+			(dma_q.take_scheduled(), dma_q.pop_front())
 		};
+
+		if let Some(ev) = scheduled {
+			trace_feature!(
+				"time-dma-verbose",
+				"end: {}",
+				get_timestamp_micro() % 1000000,
+			);
+			ev.cleanup();
+		}
 
 		// first, hold read lock of the `Arc<LockRW<Block>>`.
 		let ready = event
