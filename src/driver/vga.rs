@@ -16,7 +16,6 @@ use enum_dispatch::enum_dispatch;
 use crate::{
 	mm::user::{verify::verify_region, vma::AreaFlag},
 	process::task::CURRENT,
-	sync::Locked,
 	syscall::errno::Errno,
 };
 
@@ -42,7 +41,7 @@ impl From<multiboot2::FramebufferTag<'_>> for FrameBufferInfo {
 	}
 }
 
-pub static FRAME_BUFFER_INFO: Locked<Option<FrameBufferInfo>> = Locked::new(None);
+pub static mut FRAME_BUFFER_INFO: Option<FrameBufferInfo> = None;
 
 static mut SELECTED_VGA: MaybeUninit<Vga> = MaybeUninit::uninit();
 
