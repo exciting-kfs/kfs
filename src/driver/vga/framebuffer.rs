@@ -119,7 +119,7 @@ impl FrameBuffer {
 }
 
 pub fn init() -> Result<FrameBuffer, Errno> {
-	match &*FRAME_BUFFER_INFO.lock() {
+	match unsafe { &FRAME_BUFFER_INFO } {
 		Some(fb) => FrameBuffer::new(fb),
 		None => Err(Errno::ENOSYS),
 	}
