@@ -1,11 +1,11 @@
-use core::mem::size_of;
-
 use alloc::{sync::Arc, vec::Vec};
 
 use crate::{
 	driver::partition::BlockId,
 	fs::ext2::{inode::inum::Inum, Block},
+	mm::util::next_align,
 	sync::LockRW,
+	trace_feature,
 };
 
 use super::info::SuperBlockInfo;
@@ -36,25 +36,40 @@ impl InGroupInum {
 
 pub struct InGroupBid {
 	bid: BlockId,
-	count: usize,
+	nr_blk_in_grp: usize,
+	block_size: usize,
 }
 
 impl InGroupBid {
 	pub fn new(bid: BlockId, info: &SuperBlockInfo) -> Self {
 		let count = info.nr_block_in_group() as usize;
-		Self { bid, count }
+		Self {
+			bid,
+			nr_blk_in_grp: count,
+			block_size: info.block_size().as_bytes(),
+		}
 	}
 
 	pub fn bgid(&self) -> usize {
-		self.bid.inner() / self.count
+		self.bid.index(self.block_size) / self.nr_blk_in_grp
 	}
 
+	/// Index in block group
+	///
+	/// ex) nr_blk_in_grp = 8192
+	/// - block size: 1024
+	///   - block ID: 1 ~ 8192, 8193 ~ 16384, ...
+	///   - index: 0 ~ 8191
+	///
+	/// - block size: 2048
+	///   - block ID: 0 ~ 8191, 8192 ~ 16383, ...
+	///   - index: 0 ~ 8191
 	pub fn index_in_group(&self) -> usize {
-		self.bid.inner() % self.count
+		self.bid.index(self.block_size) % self.nr_blk_in_grp
 	}
 
 	pub fn count(&self) -> usize {
-		self.count
+		self.nr_blk_in_grp
 	}
 }
 
@@ -72,14 +87,12 @@ impl BitMap {
 	}
 
 	pub fn find_free_space(&mut self) -> Option<usize> {
-		let mut block = self.block.write_lock();
-		let bitmap = block.as_chunks_mut(size_of::<usize>());
-		let len = self.len / usize::BITS as usize;
+		let mut bitmap = self.block.as_slice_mut_u32();
+		let len = next_align(self.len, u32::BITS as usize) / u32::BITS as usize;
 
-		for (i, mut x) in (0..len).zip(bitmap) {
-			let x = unsafe { x.cast::<usize>() };
-			if *x != usize::MAX {
-				return Some(i * usize::BITS as usize + x.trailing_ones() as usize);
+		for (i, x) in (0..len).zip(bitmap.iter_mut()) {
+			if *x != u32::MAX {
+				return Some(i * u32::BITS as usize + x.trailing_ones() as usize);
 			}
 		}
 
@@ -87,18 +100,17 @@ impl BitMap {
 	}
 
 	pub fn find_free_space_multi(&mut self, count: usize) -> Option<Vec<usize>> {
-		let mut block = self.block.write_lock();
-		let bitmap = block.as_chunks_mut(size_of::<usize>());
-		let len = self.len / usize::BITS as usize;
+		let bitmap = self.block.as_slice_mut_u32();
+		let len = next_align(self.len, u32::BITS as usize) / u32::BITS as usize;
 
 		let mut v = Vec::new();
-		for (i, mut x) in (0..len).zip(bitmap) {
-			let base = i * usize::BITS as usize;
-			let mut x = *unsafe { x.cast::<usize>() };
+		'a: for (i, x) in (0..len).zip(bitmap.iter()) {
+			let base = i * u32::BITS as usize;
+			let mut x = *x;
 			let mut local = x.trailing_ones() as usize;
-			while x != usize::MAX {
+			while x != u32::MAX {
 				if v.len() >= count {
-					break;
+					break 'a;
 				}
 
 				let digit = 1 << local;
@@ -106,14 +118,20 @@ impl BitMap {
 				if x & digit == 0 {
 					v.push(base + local);
 					x ^= digit;
-					local += 1;
-				} else {
-					local = x.trailing_ones() as usize;
 				}
+
+				local += 1;
 			}
 		}
 
-		// pr_debug!("bitmap: multi: count: {}, v_len: {}", count, v.len());
+		trace_feature!(
+			"ext2-bitmap",
+			"bitmap: multi: v_len: {}, count: {}",
+			v.len(),
+			count
+		);
+
+		trace_feature!("ext2-bitmap", "bitmap: indexes: {:?}", v);
 
 		(v.len() == count).then_some(v)
 	}
@@ -122,13 +140,10 @@ impl BitMap {
 		let idx_h = idx / usize::BITS as usize;
 		let idx_l = idx % usize::BITS as usize;
 
-		let mut block = self.block.write_lock();
-		let mut bitmap = block.as_chunks_mut(size_of::<usize>()).skip(idx_h);
-		let chunk = bitmap.next();
+		let mut slice = self.block.as_slice_mut_u32();
 
-		if let Some(mut x) = chunk {
-			let x = unsafe { x.cast::<usize>() };
-			*x ^= 1 << idx_l;
+		if idx_h < slice.len() {
+			slice[idx_h] ^= 1 << idx_l;
 		}
 	}
 

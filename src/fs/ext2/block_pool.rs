@@ -119,10 +119,9 @@ impl BlockPool {
 			block.write_lock().register(bid, self);
 
 			let mut pool = self.pool.lock();
-			let mut lru = self.lru.lock();
 
 			pool.insert(bid, MaybeBlock::Block(block.clone()));
-			lru.push_back(block.read_lock().node());
+			self.lru.lock().push_back(block.read_lock().node());
 			self.nr_block.fetch_add(1, Ordering::Relaxed);
 
 			self.dirty(bid);
@@ -155,22 +154,18 @@ impl BlockPool {
 
 		if let Some(block) = self.pool.lock().remove(&bid) {
 			if let MaybeBlock::Block(_) = block {
-				// self.lru.lock().remove(block.read_lock().node());
 				self.nr_block.fetch_sub(1, Ordering::Relaxed);
 			}
 		}
 	}
 
 	pub fn get(&self, bid: BlockId) -> Option<Arc<LockRW<Block>>> {
-		// pr_debug!("block pool: get: bid: {:?}", bid);
 		let pool = self.pool.lock();
 
 		pool.get(&bid).and_then(|e| e.into_block())
 	}
 
 	pub fn get_or_load(self: &Arc<Self>, bid: BlockId) -> Result<Arc<LockRW<Block>>, Errno> {
-		// pr_debug!("get_or_load: {:?}", bid);
-
 		loop {
 			let block = self.get_or_waitlist(bid);
 
@@ -205,7 +200,6 @@ impl BlockPool {
 	}
 
 	fn get_or_waitlist(&self, bid: BlockId) -> Result<Arc<LockRW<Block>>, InErr> {
-		// pr_debug!("block pool: get_or_waitlist: bid: {:?}", bid);
 		let mut pool = self.pool.lock();
 
 		match pool.entry(bid) {

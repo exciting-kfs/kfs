@@ -8,10 +8,7 @@ use core::{
 use alloc::sync::{Arc, Weak};
 
 use crate::{
-	driver::ide::{
-		block::{Block as IdeBlock, BlockChunkMut},
-		dma::hook::WriteBack,
-	},
+	driver::ide::{block::Block as IdeBlock, dma::hook::WriteBack},
 	driver::partition::BlockId,
 	sync::{LockRW, ReadLockGuard, WriteLockGuard},
 	trace_feature,
@@ -93,12 +90,6 @@ impl Block {
 		unsafe { self.block.as_slice_mut(self.size()) }
 	}
 
-	pub fn as_chunks_mut(&mut self, chunk_size: usize) -> impl Iterator<Item = BlockChunkMut<'_>> {
-		self.dirty();
-		self.move_to_back();
-		self.block.as_chunks_mut(chunk_size)
-	}
-
 	fn move_to_back(&self) {
 		if let Some(pool) = self.pool.upgrade() {
 			trace_feature!("lru-verbose", "block {:?} move to back", self.node.bid());
@@ -119,6 +110,7 @@ impl Drop for Block {
 	fn drop(&mut self) {
 		trace_feature!(
 			"ext2-unmount" | "lru" | "ext2-idspace",
+			"block_pool",
 			"block: drop: {:?}",
 			self.id()
 		);
@@ -383,5 +375,3 @@ impl<'a> Drop for SliceMut32<'a> {
 		self.chunk_write.dirty();
 	}
 }
-
-pub struct IterChunksMut {}
