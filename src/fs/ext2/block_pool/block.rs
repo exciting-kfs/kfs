@@ -97,7 +97,7 @@ impl Block {
 		}
 	}
 
-	pub fn dirty(&self) {
+	fn dirty(&self) {
 		let bid = self.id();
 
 		if let Some(pool) = self.pool.upgrade() {

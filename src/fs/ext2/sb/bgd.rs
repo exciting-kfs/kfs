@@ -7,7 +7,8 @@ use core::{
 use alloc::{boxed::Box, vec::Vec};
 
 use crate::{
-	driver::partition::BlockId, fs::ext2::inode::inum::Inum, sync::LocalLocked, write_field,
+	driver::partition::BlockId, fs::ext2::inode::inum::Inum, sync::LocalLocked, trace_feature,
+	write_field,
 };
 
 use super::info::SuperBlockInfo;
@@ -168,7 +169,7 @@ impl BGDT {
 		for (bgid, bgd) in self.0.iter_mut().flat_map(|c| c.iter_mut()).enumerate() {
 			let free = bgd.free_blocks_count as usize;
 
-			crate::pr_debug!("BGD: bgid: {}, free: {}", bgid, free);
+			trace_feature!("ext2-bitmap", "BGD: bgid: {}, free: {}", bgid, free);
 			if count == 0 {
 				break;
 			}
