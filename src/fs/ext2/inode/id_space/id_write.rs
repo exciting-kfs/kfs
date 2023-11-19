@@ -54,7 +54,7 @@ impl<'a> IdSapceWrite<'a> {
 
 			let mut stack = self.prepare_stack(data_len)?;
 			if let Some(mut depth) = stack.pop() {
-				depth.chunk().slice()[0] = 0;
+				depth.chunk().slice_mut()[0] = 0;
 			}
 		}
 
@@ -176,7 +176,7 @@ impl IdWriter {
 	) -> Result<Command, Errno> {
 		match top {
 			Depth::Zero(chunk) => {
-				for s in chunk.slice().iter_mut() {
+				for s in chunk.slice_mut().iter_mut() {
 					let bid = match stream.next() {
 						Some(id) => id,
 						None => return Ok(Command::End),

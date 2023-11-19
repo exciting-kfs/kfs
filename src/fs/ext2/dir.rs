@@ -10,7 +10,10 @@ use crate::{mm::util::next_align, syscall::errno::Errno};
 
 use self::{dir_inode::DirInode, record::Record};
 
-use super::inode::{self, IterBlockError, ReadIterError};
+use super::{
+	block_pool::block::{Slice, SliceMut},
+	inode::{self, IterBlockError, ReadIterError},
+};
 
 pub mod dir_file;
 pub mod dir_inode;
@@ -171,7 +174,7 @@ impl DirentMut {
 	}
 }
 
-struct RecordSlice<'a>(inode::Slice<'a>);
+struct RecordSlice<'a>(Slice<'a>);
 
 impl<'a> Deref for RecordSlice<'a> {
 	type Target = Record;
@@ -180,7 +183,7 @@ impl<'a> Deref for RecordSlice<'a> {
 	}
 }
 
-struct RecordSliceMut<'a>(inode::SliceMut<'a>);
+struct RecordSliceMut<'a>(SliceMut<'a>);
 
 impl<'a> Deref for RecordSliceMut<'a> {
 	type Target = Record;
@@ -196,7 +199,7 @@ impl<'a> DerefMut for RecordSliceMut<'a> {
 }
 
 struct NameSlice<'a> {
-	slice: inode::Slice<'a>,
+	slice: Slice<'a>,
 	len: usize,
 }
 
@@ -211,7 +214,7 @@ impl<'a> Deref for NameSlice<'a> {
 }
 
 struct NameSliceMut<'a> {
-	slice: inode::SliceMut<'a>,
+	slice: SliceMut<'a>,
 	len: usize,
 }
 

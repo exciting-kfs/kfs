@@ -254,7 +254,7 @@ impl SpaceExpander {
 	fn __run(top: &mut Depth, stream: &mut vec::IntoIter<Arc<LockRW<Block>>>) -> Option<Command> {
 		match top {
 			Depth::Zero(chunk) => {
-				for s in chunk.slice().iter_mut() {
+				for s in chunk.slice_mut().iter_mut() {
 					let block = stream.next()?;
 					let bid = block.read_lock().id();
 					*s = bid.as_u32();
@@ -324,7 +324,7 @@ impl SpaceReader {
 	) -> Result<Command, Errno> {
 		match top {
 			Depth::Zero(chunk) => {
-				for s in chunk.slice().iter_mut() {
+				for s in chunk.slice_mut().iter_mut() {
 					basket.push(unsafe { BlockId::new_unchecked(*s as usize) });
 					if basket.len() >= end {
 						return Ok(Command::End);

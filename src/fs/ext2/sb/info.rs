@@ -99,7 +99,7 @@ impl SuperBlockInfo {
 
 	#[inline]
 	pub fn bid_to_bgid(&self, bid: BlockId) -> usize {
-		bid.inner() / self.blocks_per_group as usize
+		(bid.index(self.block_size().as_bytes())) / self.blocks_per_group as usize
 	}
 
 	#[inline]

@@ -7,7 +7,8 @@ use core::{
 use alloc::{boxed::Box, vec::Vec};
 
 use crate::{
-	driver::partition::BlockId, fs::ext2::inode::inum::Inum, sync::LocalLocked, write_field,
+	driver::partition::BlockId, fs::ext2::inode::inum::Inum, sync::LocalLocked, trace_feature,
+	write_field,
 };
 
 use super::info::SuperBlockInfo;
@@ -164,23 +165,25 @@ impl BGDT {
 
 	pub fn find_groups(&mut self, mut count: usize) -> Option<Vec<FreeBGD>> {
 		let mut v = Vec::new();
-		let mut bgid = 0;
 
-		for chunk in self.0.iter_mut() {
-			for bgd in chunk.iter_mut() {
-				let free = bgd.free_blocks_count as usize;
-				match free.checked_sub(count) {
-					Some(_) => {
-						v.push(FreeBGD::new(bgd, bgid, count));
-						count = 0;
-						break;
-					}
-					None => {
-						v.push(FreeBGD::new(bgd, bgid, free));
-						count -= free;
-					}
-				}
-				bgid += 1;
+		for (bgid, bgd) in self.0.iter_mut().flat_map(|c| c.iter_mut()).enumerate() {
+			let free = bgd.free_blocks_count as usize;
+
+			trace_feature!("ext2-bitmap", "BGD: bgid: {}, free: {}", bgid, free);
+			if count == 0 {
+				break;
+			}
+
+			if free == 0 {
+				continue;
+			}
+
+			if free > count {
+				v.push(FreeBGD::new(bgd, bgid, count));
+				count = 0;
+			} else {
+				v.push(FreeBGD::new(bgd, bgid, free));
+				count -= free;
 			}
 		}
 		(count == 0).then_some(v)

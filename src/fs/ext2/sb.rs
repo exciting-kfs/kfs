@@ -90,15 +90,13 @@ impl SuperBlock {
 		let count = info.nr_inode_in_block();
 		let local_index = inum.index() % count;
 
-		let mut block = block.write_lock();
-		let mut chunk = block
-			.as_chunks_mut(info.inode_size())
-			.skip(local_index)
-			.next()
-			.unwrap();
-
 		unsafe {
-			let info = chunk.cast::<InodeInfo>();
+			let slice = block.as_slice_ref();
+			let ptr = slice
+				.as_ptr()
+				.offset(local_index as isize * info.inode_size() as isize)
+				.cast::<InodeInfo>();
+			let info = &(*ptr);
 			Arc::new(LockRW::new(Inode::from_info(inum, info.clone(), self)))
 		}
 	}
@@ -137,16 +135,15 @@ impl SuperBlock {
 			(local_index, info.inode_size())
 		};
 
-		{
-			let mut block = block.write_lock();
-			let mut chunk = block
-				.as_chunks_mut(inode_size)
-				.skip(local_index)
-				.next()
-				.unwrap();
-
-			let info: &InodeInfo = &inode.info();
-			unsafe { copy_nonoverlapping(info, chunk.cast::<InodeInfo>(), 1) };
+		unsafe {
+			let mut slice = block.as_slice_mut();
+			let ptr = slice
+				.as_mut_ptr()
+				.offset(local_index as isize * inode_size as isize)
+				.cast::<InodeInfo>();
+			let dst = &mut (*ptr);
+			let src: &InodeInfo = &inode.info();
+			copy_nonoverlapping(src, dst, 1);
 		}
 		Ok(())
 	}
@@ -205,19 +202,21 @@ impl SuperBlock {
 	}
 
 	pub fn reserve_blocks(&self, count: usize) -> Result<Vec<BlockId>, Errno> {
+		trace_feature!("ext2-block_alloc", "reserve_block: count: {}", count);
+
 		if count >= self.info.read_lock().free_blocks_count() {
 			return Err(Errno::ENOSPC);
 		}
 
-		let count_in_group = self.info.read_lock().nr_block_in_group();
+		let nr_in_group = self.info.read_lock().nr_block_in_group();
 
 		let mut bgdt = self.bgd_table.lock();
 		let mut groups = bgdt.find_groups(count).ok_or_else(|| Errno::ENOSPC)?;
-
 		let mut bitmaps = Vec::new();
+
 		for bgd in groups.iter() {
 			let bitmap = self.block_pool.get_or_load(bgd.block_bitmap())?;
-			let bitmap = BitMap::new(&bitmap, count_in_group);
+			let bitmap = BitMap::new(&bitmap, nr_in_group);
 			bitmaps.push(bitmap);
 		}
 
@@ -225,6 +224,7 @@ impl SuperBlock {
 		for (bgd, bitmap) in groups.iter_mut().zip(bitmaps.iter_mut()) {
 			let free_count = bgd.free_count();
 			let indexes = bitmap.find_free_space_multi(free_count).unwrap();
+
 			indexes
 				.iter()
 				.for_each(|index| bitmap.toggle_bitmap(*index));
@@ -293,7 +293,6 @@ impl SuperBlock {
 			let bgd = bgdt.bgd_of_bid_mut(bid, &sb.info.read_lock());
 			bgd.free_blocks_count += 1;
 
-			// pr_debug!("dealloc block staged: bid: {:?}", bid);
 			sb.info.write_lock().inc_free_blocks_count(1);
 			sb.block_pool.delete(bid);
 		}))
@@ -348,12 +347,11 @@ impl SuperBlock {
 
 	fn sync_info(&self) -> Result<(), Errno> {
 		let bids = self.sb_backup_bid();
-		trace_feature!("ext2-sb-sync", "info: bid list: {:?}", bids);
+		trace_feature!("ext2-sb_sync", "info: bid list: {:?}", bids);
 
 		for bid in bids {
 			let block = self.block_pool.get_or_load(bid)?;
-			let mut block = block.write_lock();
-			let slice = block.as_slice_mut();
+			let mut slice = block.as_slice_mut();
 
 			let dst = if bid.inner() == 0 {
 				let dst = &mut slice[1024..];
@@ -376,14 +374,15 @@ impl SuperBlock {
 
 		let mut bgdt_iter = self.bgd_table.iter(block_size);
 
-		trace_feature!("ext2-sb-sync", "bgdt: bid list: {:?}", bids);
+		trace_feature!("ext2-sb_sync", "bgdt: bid list: {:?}", bids);
 
 		for bid in bids {
 			let start = bid.inner();
 			let end = start + block_count;
 			for bid in (start..end).map(|i| unsafe { BlockId::new_unchecked(i) }) {
 				let block = self.block_pool.get_or_load(bid)?;
-				let dst = block.write_lock().as_slice_mut().as_mut_ptr().cast();
+				let mut slice = block.as_slice_mut();
+				let dst = slice.as_mut_ptr().cast();
 
 				if let Some(slice) = bgdt_iter.next() {
 					unsafe { copy_nonoverlapping(slice.as_ptr(), dst, slice.len()) }

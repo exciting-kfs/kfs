@@ -55,6 +55,10 @@ impl BlockId {
 		self.0
 	}
 
+	pub fn index(&self, block_size: usize) -> usize {
+		self.inner() - (1024 / block_size)
+	}
+
 	#[inline]
 	pub fn as_u32(&self) -> u32 {
 		self.0 as u32

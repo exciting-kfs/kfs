@@ -63,7 +63,6 @@ impl DirInode {
 		let records = s_rec.chain(p_rec);
 
 		block
-			.write_lock()
 			.as_slice_mut()
 			.iter_mut()
 			.zip(records)
