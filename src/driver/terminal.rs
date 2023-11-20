@@ -14,7 +14,9 @@ use core::{
 	sync::atomic::{AtomicBool, Ordering},
 };
 
-use crate::{config::NR_CONSOLES, scheduler::work, sync::Locked, syscall::errno::Errno};
+use crate::{
+	config::NR_CONSOLES, scheduler::work::once::WorkOnce, sync::Locked, syscall::errno::Errno,
+};
 
 use tty::TTY;
 
@@ -26,6 +28,8 @@ static FOREGROUND_TTY: Locked<MaybeUninit<TTYFile>> = Locked::uninit();
 static mut TTYS: [MaybeUninit<TTYFile>; NR_CONSOLES] = MaybeUninit::uninit_array();
 
 pub fn init() {
+	work_init();
+
 	for tty in unsafe { &mut TTYS } {
 		tty.write(TTYFile::new(Arc::new(Locked::new(TTY::new(
 			Termios::SANE,
@@ -85,10 +89,18 @@ pub fn set_foreground_tty(idx: usize) {
 	}
 }
 
-pub fn console_screen_draw(_: &mut ()) -> Result<(), work::Error> {
+fn console_screen_draw() {
 	if let Some(tty) = get_foreground_tty() {
 		tty.lock_tty().draw();
 	}
+}
 
-	Ok(())
+static mut CONSOLE_SCREEN_DRAW: MaybeUninit<Arc<WorkOnce>> = MaybeUninit::uninit();
+
+pub fn get_screen_draw_work() -> Arc<WorkOnce> {
+	unsafe { CONSOLE_SCREEN_DRAW.assume_init_ref().clone() }
+}
+
+fn work_init() {
+	unsafe { CONSOLE_SCREEN_DRAW.write(Arc::new(WorkOnce::new(console_screen_draw))) };
 }

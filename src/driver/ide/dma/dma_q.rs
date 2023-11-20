@@ -4,7 +4,10 @@ use alloc::collections::LinkedList;
 
 use crate::{
 	driver::ide::{ide_id::IdeId, IdeController},
-	scheduler::{context::yield_now, work::schedule_slow_work},
+	scheduler::{
+		context::yield_now,
+		work::{schedule_work, Work},
+	},
 	sync::{Locked, LockedGuard},
 	trace_feature,
 };
@@ -45,7 +48,7 @@ impl DmaQ {
 	pub fn start_with(&mut self, dev: IdeId, event: DmaInit) {
 		self.prev = dev.pair();
 		self.queue[dev.index_in_channel()].push_front(event);
-		schedule_slow_work(work::do_next_dma, dev);
+		schedule_work(Work::new_default(work::do_next_dma, dev));
 	}
 
 	pub fn merge_insert(&mut self, dev: IdeId, mut event: DmaInit) {
@@ -92,7 +95,7 @@ impl DmaQ {
 		trace_feature!(
 			"time-dma-verbose",
 			"start: {}",
-			get_timestamp_micro() % 1000000,
+			crate::driver::ide::dma::dma_q::get_timestamp_micro() % 1_000_000,
 		);
 
 		let _ = replace(&mut self.scheduled, Some(running));
@@ -125,7 +128,7 @@ pub fn wait_idle() {
 pub mod work {
 	use core::mem::take;
 
-	use alloc::boxed::Box;
+	use alloc::{boxed::Box, sync::Arc};
 
 	use crate::{
 		driver::ide::{
@@ -134,7 +137,7 @@ pub mod work {
 			ide_id::IdeId,
 			try_get_ide_controller,
 		},
-		scheduler::work::{Error, Work},
+		scheduler::work::{default::WorkDefault, Error},
 		trace_feature,
 	};
 
@@ -149,6 +152,12 @@ pub mod work {
 	}
 
 	pub fn do_next_dma(id: &mut IdeId) -> Result<(), Error> {
+		trace_feature!(
+			"time-dma-verbose",
+			"do_next_dma: {}",
+			crate::driver::ide::dma::dma_q::get_timestamp_micro() % 1_000_000,
+		);
+
 		let (scheduled, event) = {
 			let mut dma_q = get_dma_q(*id);
 			(dma_q.take_scheduled(), dma_q.pop_front())
@@ -158,7 +167,7 @@ pub mod work {
 			trace_feature!(
 				"time-dma-verbose",
 				"end: {}",
-				get_timestamp_micro() % 1000000,
+				crate::driver::ide::dma::dma_q::get_timestamp_micro() % 1_000_000,
 			);
 			ev.cleanup();
 		}
@@ -174,8 +183,8 @@ pub mod work {
 			Ok(ide) => ide,
 			Err(_) => {
 				let arg = Box::new((*id, ready));
-				let work = Work::new(do_next_dma_postponed, arg);
-				return Err(Error::Next(Box::new(work)));
+				let work = WorkDefault::new(do_next_dma_postponed, arg);
+				return Err(Error::Next(Arc::new(work)));
 			}
 		};
 
@@ -189,7 +198,7 @@ pub mod work {
 	}
 
 	pub fn do_next_dma_postponed(arg: &mut (IdeId, Option<DmaReady>)) -> Result<(), Error> {
-		// pr_warn!("do next dma postponed");
+		// crate:: pr_warn!("do next dma postponed");
 		let id = &mut arg.0;
 		let ide = try_get_ide_controller(*id, LOCK_TRY).map_err(|_| Error::Retry)?;
 

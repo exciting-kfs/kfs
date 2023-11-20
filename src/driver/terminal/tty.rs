@@ -6,8 +6,8 @@ use alloc::sync::{Arc, Weak};
 
 use super::ascii::constants::*;
 use super::console::Console;
-use super::termios::{InputFlag, LocalFlag, OutputFlag, Termios, WinSize};
-use super::{console_screen_draw, termios};
+use super::get_screen_draw_work;
+use super::termios::{self, InputFlag, LocalFlag, OutputFlag, Termios, WinSize};
 
 use crate::collection::LineBuffer;
 use crate::driver::terminal::termios::{VINTR, VQUIT};
@@ -24,7 +24,7 @@ use crate::process::task::CURRENT;
 use crate::process::wait_list::WaitList;
 use crate::scheduler::preempt::{preempt_disable, AtomicOps};
 use crate::scheduler::sleep::{sleep_and_yield_atomic, Sleep};
-use crate::scheduler::work::schedule_fast_work;
+use crate::scheduler::work::{schedule_work, Work};
 use crate::sync::{Locked, LockedGuard};
 use crate::syscall::errno::Errno;
 
@@ -414,7 +414,10 @@ impl ChWrite<u8> for TTY {
 			self.console.write_one(*c)?
 		}
 
-		schedule_fast_work(console_screen_draw, ());
+		if let Some(w) = Work::new_once(get_screen_draw_work()) {
+			schedule_work(w);
+		}
+
 		Ok(())
 	}
 }

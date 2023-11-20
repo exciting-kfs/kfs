@@ -224,7 +224,6 @@ impl SuperBlock {
 		for (bgd, bitmap) in groups.iter_mut().zip(bitmaps.iter_mut()) {
 			let free_count = bgd.free_count();
 			let indexes = bitmap.find_free_space_multi(free_count).unwrap();
-
 			indexes
 				.iter()
 				.for_each(|index| bitmap.toggle_bitmap(*index));

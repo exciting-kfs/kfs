@@ -4,6 +4,8 @@ pub mod event;
 pub mod hook;
 pub mod wait_io;
 
+use crate::trace_feature;
+
 use self::{dma_q::get_dma_q, event::DmaInit};
 
 use super::ide_id::IdeId;
@@ -15,6 +17,12 @@ pub enum DmaOps {
 }
 
 pub fn dma_schedule(id: IdeId, event: DmaInit) {
+	trace_feature!(
+		"time-dma-verbose",
+		"dma_schedule: {}",
+		crate::driver::hpet::get_timestamp_microget_timestamp_micro() % 1_000_000
+	);
+
 	let mut dma_q = get_dma_q(id);
 
 	if dma_q.is_idle() {
