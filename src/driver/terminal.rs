@@ -15,7 +15,7 @@ use core::{
 };
 
 use crate::{
-	config::NR_CONSOLES, scheduler::work::atomic::AtomicWork, sync::Locked, syscall::errno::Errno,
+	config::NR_CONSOLES, scheduler::work::once::WorkOnce, sync::Locked, syscall::errno::Errno,
 };
 
 use tty::TTY;
@@ -95,14 +95,12 @@ fn console_screen_draw() {
 	}
 }
 
-static mut CONSOLE_SCREEN_DRAW: MaybeUninit<Arc<AtomicWork>> = MaybeUninit::uninit();
+static mut CONSOLE_SCREEN_DRAW: MaybeUninit<Arc<WorkOnce>> = MaybeUninit::uninit();
 
-pub fn schedule_console_screen_draw() {
-	let work = unsafe { CONSOLE_SCREEN_DRAW.assume_init_ref() }.clone();
-
-	AtomicWork::schedule(&work)
+pub fn get_screen_draw_work() -> Arc<WorkOnce> {
+	unsafe { CONSOLE_SCREEN_DRAW.assume_init_ref().clone() }
 }
 
 fn work_init() {
-	unsafe { CONSOLE_SCREEN_DRAW.write(Arc::new(AtomicWork::new(console_screen_draw))) };
+	unsafe { CONSOLE_SCREEN_DRAW.write(Arc::new(WorkOnce::new(console_screen_draw))) };
 }

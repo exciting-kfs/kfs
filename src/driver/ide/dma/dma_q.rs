@@ -4,7 +4,10 @@ use alloc::collections::LinkedList;
 
 use crate::{
 	driver::ide::{ide_id::IdeId, IdeController},
-	scheduler::{context::yield_now, work::schedule_slow_work},
+	scheduler::{
+		context::yield_now,
+		work::{schedule_work, Work},
+	},
 	sync::{Locked, LockedGuard},
 	trace_feature,
 };
@@ -45,7 +48,7 @@ impl DmaQ {
 	pub fn start_with(&mut self, dev: IdeId, event: DmaInit) {
 		self.prev = dev.pair();
 		self.queue[dev.index_in_channel()].push_front(event);
-		schedule_slow_work(work::do_next_dma, dev);
+		schedule_work(Work::new_default(work::do_next_dma, dev));
 	}
 
 	pub fn merge_insert(&mut self, dev: IdeId, mut event: DmaInit) {
@@ -125,7 +128,7 @@ pub fn wait_idle() {
 pub mod work {
 	use core::mem::take;
 
-	use alloc::boxed::Box;
+	use alloc::{boxed::Box, sync::Arc};
 
 	use crate::{
 		driver::ide::{
@@ -134,7 +137,7 @@ pub mod work {
 			ide_id::IdeId,
 			try_get_ide_controller,
 		},
-		scheduler::work::{default::DefaultWork, Error},
+		scheduler::work::{default::WorkDefault, Error},
 		trace_feature,
 	};
 
@@ -180,8 +183,8 @@ pub mod work {
 			Ok(ide) => ide,
 			Err(_) => {
 				let arg = Box::new((*id, ready));
-				let work = DefaultWork::new(do_next_dma_postponed, arg);
-				return Err(Error::Next(Box::new(work)));
+				let work = WorkDefault::new(do_next_dma_postponed, arg);
+				return Err(Error::Next(Arc::new(work)));
 			}
 		};
 

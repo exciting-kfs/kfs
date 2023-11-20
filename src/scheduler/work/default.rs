@@ -4,12 +4,12 @@ use crate::sync::LocalLocked;
 
 use super::{Error, Workable};
 
-pub struct DefaultWork<ArgType> {
+pub struct WorkDefault<ArgType> {
 	func: fn(&mut ArgType) -> Result<(), Error>,
 	arg: LocalLocked<Box<ArgType>>,
 }
 
-impl<ArgType> DefaultWork<ArgType> {
+impl<ArgType> WorkDefault<ArgType> {
 	pub fn new(func: fn(&mut ArgType) -> Result<(), Error>, arg: Box<ArgType>) -> Self {
 		Self {
 			func,
@@ -18,7 +18,7 @@ impl<ArgType> DefaultWork<ArgType> {
 	}
 }
 
-impl<ArgType> Workable for DefaultWork<ArgType> {
+impl<ArgType> Workable for WorkDefault<ArgType> {
 	fn work(&self) -> Result<(), Error> {
 		(self.func)(self.arg.lock().as_mut())
 	}

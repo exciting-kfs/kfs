@@ -1,5 +1,5 @@
-pub mod atomic;
 pub mod default;
+pub mod once;
 
 use core::alloc::AllocError;
 use core::mem;
@@ -12,44 +12,53 @@ use crate::process::task::{State, Task};
 use crate::sync::Locked;
 use crate::trace_feature;
 
-use self::default::DefaultWork;
+use self::default::WorkDefault;
+use self::once::WorkOnce;
 
 use super::context::yield_now;
-use super::schedule_last;
 
 pub trait Workable {
 	fn work(&self) -> Result<(), Error>;
 }
 
+pub enum Work {
+	Fast(Arc<dyn Workable>),
+	Slow(Arc<dyn Workable>),
+}
+
+impl Work {
+	pub fn new_default<ArgType: 'static>(
+		func: fn(&mut ArgType) -> Result<(), Error>,
+		arg: ArgType,
+	) -> Self {
+		let arg = Box::new(arg);
+		let work = Arc::new(WorkDefault::new(func, arg));
+		Work::Slow(work)
+	}
+
+	pub fn new_once(work: Arc<WorkOnce>) -> Option<Self> {
+		if work.schedulable() {
+			Some(Work::Fast(work))
+		} else {
+			None
+		}
+	}
+}
+
 pub enum Error {
 	Alloc,
 	Retry,
-	Next(Box<dyn Workable>),
+	Next(Arc<dyn Workable>),
 }
 
 static FAST_WORK_POOL: Locked<LinkedList<Arc<dyn Workable>>> = Locked::new(LinkedList::new());
-static SLOW_WORK_POOL: Locked<LinkedList<Box<dyn Workable>>> = Locked::new(LinkedList::new());
+static SLOW_WORK_POOL: Locked<LinkedList<Arc<dyn Workable>>> = Locked::new(LinkedList::new());
 
-pub fn schedule_worker<ArgType: 'static>(
-	func: fn(usize) -> (),
-	arg: Box<ArgType>,
-) -> Result<(), AllocError> {
-	let arg = Box::into_raw(arg) as usize;
-
-	let task = Task::new_kernel(func as usize, arg)?;
-	schedule_last(task);
-
-	Ok(())
-}
-
-pub fn schedule_slow_work<ArgType: 'static>(
-	func: fn(&mut ArgType) -> Result<(), Error>,
-	arg: ArgType,
-) {
-	let arg = Box::new(arg);
-	let work = Box::new(DefaultWork::new(func, arg));
-	let mut pool = SLOW_WORK_POOL.lock();
-	pool.push_back(work);
+pub fn schedule_work(work: Work) {
+	match work {
+		Work::Fast(f) => FAST_WORK_POOL.lock().push_back(f),
+		Work::Slow(s) => SLOW_WORK_POOL.lock().push_back(s),
+	}
 }
 
 pub fn fast_worker(_: usize) {

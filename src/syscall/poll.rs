@@ -1,4 +1,4 @@
-use crate::{mm::user::verify::verify_array_mut, pr_debug, process::task::CURRENT};
+use crate::{mm::user::verify::verify_array_mut, process::task::CURRENT};
 
 use super::errno::Errno;
 
@@ -13,9 +13,9 @@ struct PollFd {
 pub fn sys_poll(fds: usize, nfds: usize, _timeout: usize) -> Result<usize, Errno> {
 	let current = unsafe { CURRENT.get_ref() };
 
-	let fds = verify_array_mut::<PollFd>(fds, nfds, current)?;
+	let _fds = verify_array_mut::<PollFd>(fds, nfds, current)?;
 
-	pr_debug!("POLL: {:?}", fds);
+	// crate::pr_debug!("POLL: {:?}", fds);
 
 	Ok(nfds)
 }

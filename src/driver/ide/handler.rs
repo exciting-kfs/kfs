@@ -8,7 +8,7 @@ use crate::{
 	},
 	interrupt::InterruptFrame,
 	pr_debug,
-	scheduler::work::schedule_slow_work,
+	scheduler::work::{schedule_work, Work},
 };
 
 use super::{dma::dma_q::work, ide_id::IdeId, IDE};
@@ -48,7 +48,7 @@ pub fn handle_ide_impl(channel: usize) {
 		// schedule work.
 		let num = channel * 2 + (is_secondary as usize);
 		let id = unsafe { IdeId::new_unchecked(num) };
-		schedule_slow_work(work::do_next_dma, id);
+		schedule_work(Work::new_default(work::do_next_dma, id));
 		// pr_debug!("** ide handler: do_next_dma scheduled: {:?} **", id);
 	}
 
