@@ -50,7 +50,7 @@ impl FileInode for DevZero {
 	}
 
 	fn truncate(&self, _length: isize) -> Result<(), Errno> {
-		Err(Errno::EPERM)
+		Ok(())
 	}
 }
 

@@ -10,6 +10,7 @@ use crate::fs::vfs::{
 use crate::mm::user::verify::verify_path;
 use crate::process::task::{Task, CURRENT};
 use crate::syscall::errno::Errno;
+use crate::trace_feature;
 
 fn lookup_or_create(
 	mut path: Path,
@@ -58,6 +59,14 @@ pub fn sys_open(path: usize, flags: i32, perm: u32) -> Result<usize, Errno> {
 	let path = verify_path(path, current)?;
 
 	let path = Path::new(path);
+
+	trace_feature!("sys-open"
+		"SYS_OPEN: {:?}, {:?}, {:?}, {:?}",
+		path,
+		access_flags,
+		creation_flags,
+		io_flags
+	);
 
 	let ent = match creation_flags.contains(CreationFlag::O_CREAT) {
 		true => lookup_or_create(
