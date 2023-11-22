@@ -4,7 +4,6 @@ use crate::{
 	fs::vfs::{self, IOFlag, KfsDirent},
 	handle_r_iter_error,
 	mm::util::next_align,
-	pr_debug,
 	sync::LocalLocked,
 	syscall::errno::Errno,
 	trace_feature,
@@ -29,8 +28,6 @@ impl DirFile {
 
 impl vfs::DirHandle for DirFile {
 	fn getdents(&self, buf: &mut [u8], flags: vfs::IOFlag) -> Result<usize, Errno> {
-		pr_debug!("getdents: buf_len: {}", buf.len());
-
 		let non_block = flags.contains(IOFlag::O_NONBLOCK);
 
 		trace_feature!(
