@@ -434,7 +434,9 @@ impl vfs::DirInode for DirInode {
 		}
 
 		self.remove_child(&child)?;
+
 		record.commit(());
+		self.0.info_mut().links_count -= 1;
 
 		vfs::SuperBlock::sync(self.super_block().as_ref());
 		Ok(())
