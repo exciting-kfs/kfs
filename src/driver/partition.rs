@@ -191,7 +191,7 @@ impl Partition {
 		let entry = unsafe { self.entry.get_unchecked() };
 		let lba = entry.begin().block_size_add(self.block_size(), maybe_bid)?;
 
-		(lba < entry.end()).then_some(unsafe { BlockId::new_unchecked(maybe_bid) })
+		(lba < entry.end()).then(|| unsafe { BlockId::new_unchecked(maybe_bid) })
 	}
 
 	fn bid_to_lba(&self, bid: BlockId) -> LBA28 {
