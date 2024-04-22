@@ -48,7 +48,7 @@ LIBFT := $(BUILDDIR)/libft.a
 # recipes
 
 .PHONY : all
-all : $(USER_MODULES)
+all : $(USER_BIN_NAMES)
 
 .PHONY : $(USER_BIN_NAMES)
 $(USER_BIN_NAMES) : $(LIBSYSTEM) $(LIBFT) | $(BUILDDIR)
