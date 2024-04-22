@@ -1,3 +1,5 @@
+-include build/config.mk
+
 # === OS ===
 
 OS := $(shell uname -s)
@@ -9,14 +11,7 @@ PREFIX := i686-elf-
 LDFLAG = -n --no-warn-rwx-segments --no-warn-execstack
 endif
 
-# === User settings / toolchain ===
-
-RELEASE_MODE := y
-DEBUG_WITH_VSCODE := y
-TEST_CASE := all
-FAST_HDD_BUILD := y
-
-# LOG_LEVEL := debug # ALL = debug > info > warn > error
+# === toolchain ===
 
 I386_GRUB2_PREFIX := $(I386_GRUB2_PREFIX)
 
@@ -32,99 +27,23 @@ ADDR2LINE := $(PREFIX)addr2line
 
 PAGER := vim -
 
-# === compiler flag ===
-
-# RUSTC_FLAG += --cfg log_level='"$(LOG_LEVEL)"' 
-
-# === toolchain (inferred from above) ===
-
-GRUB2_MKRESCUE=$(I386_GRUB2_PREFIX)/bin/grub-mkrescue
-GRUB2_I386_LIB=$(I386_GRUB2_PREFIX)/lib/grub/i386-pc
-
 # === Targets ===
-
-ifeq ($(RELEASE_MODE),y)
-TARGET_ROOT := target/i686-unknown-none-elf/release
-CARGO_FLAG :=  --release
-else
-TARGET_ROOT := target/i686-unknown-none-elf/debug
-endif
-
-KERNEL_MODULE_NAMES := kbd timestamp
-
-KERNEL_MODULES := $(addprefix $(TARGET_ROOT)/,$(KERNEL_MODULE_NAMES))
-KERNEL_MODULES := $(addsuffix .ko,$(KERNEL_MODULES))
-
-KERNEL_MODULE_LIBS := $(addprefix lib,$(KERNEL_MODULE_NAMES))
-KERNEL_MODULE_LIBS := $(addsuffix .a,$(KERNEL_MODULE_LIBS))
-KERNEL_MODULE_LIBS := $(addprefix $(TARGET_ROOT)/,$(KERNEL_MODULE_LIBS))
-
-LIB_KERNEL_NAME := libkernel.a
-
 LIB_KERNEL := $(TARGET_ROOT)/$(LIB_KERNEL_NAME)
-
-KERNEL_BIN_NAME := kernel
 KERNEL_BIN := $(TARGET_ROOT)/$(KERNEL_BIN_NAME)
-
-KERNEL_ELF_NAME := $(KERNEL_BIN_NAME).elf
-KERNEL_ELF := $(TARGET_ROOT)/$(KERNEL_ELF_NAME)
-
-KERNEL_DEBUG_SYMBOL_NAME := $(KERNEL_BIN_NAME).sym
 KERNEL_DEBUG_SYMBOL := $(TARGET_ROOT)/$(KERNEL_DEBUG_SYMBOL_NAME)
+KERNEL_MODULES := $(shell for x in $(KERNEL_MODULE_NAMES); do printf "$(TARGET_ROOT)/%s.ko " $$x; done)
 
-RESCUE_TARGET_ROOT := $(TARGET_ROOT)/iso
-RESUCE_SRC_ROOT := iso
-
-RESCUE_IMG_NAME := rescue.iso
 RESCUE_IMG := $(TARGET_ROOT)/$(RESCUE_IMG_NAME)
-
-HDD_IMG_NAME := disk.qcow2
 HDD_IMG := $(TARGET_ROOT)/$(HDD_IMG_NAME)
-
-LINKER_SCRIPT := linker-script/kernel.ld
 
 DOC := $(shell dirname $(TARGET_ROOT))/doc/kernel/index.html
 
-CARGO_TARGETS := $(addprefix cargo-buildlib-,kfs $(KERNEL_MODULE_NAMES))
-
-# === user space targets
-
-USER_SRC_ROOT := userspace
-export USER_BIN_NAMES := init shell test_pipe test_sig test_setXid test_sig_stop_cont test_file test_socket getty test test_argv test_mmap test_sleep
 USER_BINS := $(addprefix $(USER_SRC_ROOT)/build/, $(USER_BIN_NAMES))
-USER_BIN_TARGETS := $(addprefix make-userbin-, $(USER_BIN_NAMES))
 
-# === Phony recipes ===
-
-.PHONY : all
+# === Project management recipes ===
+.PHONY : all clean re run
 all : rescue hdd modules userspace
 
-.PHONY : kernel
-kernel : $(KERNEL_BIN)
-
-.PHONY : rescue
-rescue : $(RESCUE_IMG)
-
-.PHONY : modules
-modules : $(KERNEL_MODULES)
-
-.PHONY : userspace
-userspace : $(USER_BINS)
-
-.PHONY : ci
-ci : export CFLAGS := -Werror
-ci : export RUSTC_FLAG += -D warnings
-ci : test
-
-.PHONY: hdd
-hdd: $(HDD_IMG)
-
-.PHONY : hdd-force
-hdd-force :
-	touch scripts/hdd/make-sysroot.sh 
-	$(MAKE) hdd
-
-.PHONY : clean
 clean :
 	@echo 'CARGO clean'
 	@cargo clean -v
@@ -134,13 +53,43 @@ clean :
 	@echo 'MAKE clean'
 	@$(MAKE) -s -C $(USER_SRC_ROOT) clean
 
-.PHONY : re
 re : clean
 	@$(MAKE) all
 
-.PHONY : run
 run : all
 	@scripts/qemu.sh $(RESCUE_IMG) $(HDD_IMG) stdio -monitor pty
+
+# === Target recipes ===
+.PHONY : kernel rescue modules userspace hdd hdd-force doc doc-open
+kernel : $(KERNEL_BIN)
+-include build/kernel.mk
+
+rescue : $(RESCUE_IMG)
+-include build/rescue.mk
+
+modules : $(KERNEL_MODULES)
+-include build/module.mk
+
+userspace : $(USER_BINS)
+-include build/userbin.mk
+
+## Cargo
+-include build/cargo.mk
+
+hdd: $(HDD_IMG)
+-include build/hdd.mk
+
+hdd-force :
+	touch scripts/hdd/make-sysroot.sh 
+	$(MAKE) hdd
+
+doc :
+	@cargo doc $(CARGO_FLAG)
+
+doc-open : doc
+	@open $(DOC)
+
+# === Debuging recipes ===
 
 .PHONY : debug debug-display
 ifeq ($(DEBUG_WITH_VSCODE),y)
@@ -160,16 +109,7 @@ debug : all $(KERNEL_DEBUG_SYMBOL)
 		--source scripts/debug.lldb
 endif
 
-.PHONY : doc
-doc :
-	@cargo doc $(CARGO_FLAG)
-
-.PHONY : doc-open
-doc-open : doc
-	@open $(DOC)
-
-# Prepend PIPE operator only if PAGER is set.
-ifdef PAGER
+ifdef PAGER # Prepend PIPE operator only if PAGER is set.
 PAGER := | $(PAGER)
 endif
 
@@ -198,76 +138,14 @@ else
 	@$(ADDR2LINE) -e $(KERNEL_DEBUG_SYMBOL) $(ADDR) 
 endif
 
+# === Testing recipes ===
 .PHONY : test
 test : export RUSTC_FLAG += --cfg ktest
 test : export RUSTC_FLAG += --cfg ktest='"$(TEST_CASE)"'
 test : rescue 
 	@scripts/qemu.sh $(RESCUE_IMG) - stdio -display none
 
-# === Main recipes ===
-
-.PHONY : $(CARGO_TARGETS)
-$(CARGO_TARGETS) :
-	@echo CARGO lib$(subst cargo-buildlib-,,$@).a
-	@cargo rustc -p $(subst cargo-buildlib-,,$@) $(CARGO_FLAG) -- $(RUSTC_FLAG)
-
-$(KERNEL_MODULE_LIBS) : $(TARGET_ROOT)/lib%.a : cargo-buildlib-%
-
-.PHONY : $(USER_BIN_TARGETS)
-$(USER_BIN_TARGETS) :
-	@$(MAKE) EXTRA_CFLAGS=$(CFLAGS) -s -C $(USER_SRC_ROOT) $(subst make-userbin-,,$@)
-
-$(USER_BINS) : $(USER_SRC_ROOT)/build/% : make-userbin-%
-
-$(KERNEL_MODULES) : $(TARGET_ROOT)/%.ko : $(TARGET_ROOT)/lib%.a $(LIB_KERNEL)
-	@echo LD $(patsubst %.ko,lib%.a,$(notdir $@))
-	@$(LD) $(LDFLAG)		\
-		--whole-archive		\
-		-R $(KERNEL_BIN)	\
-		-r					\
-		-o $@				\
-		$<
-	@echo OBJCOPY $(notdir $@)
-	@$(OBJCOPY) --strip-debug $@
-
-$(LIB_KERNEL) : make-userbin-init
-	@$(MAKE) cargo-buildlib-kfs
-
-$(KERNEL_ELF) : $(LIB_KERNEL) $(LINKER_SCRIPT)
-	@echo LD $(notdir $@)
-	@$(LD) $(LDFLAG)		\
-		--whole-archive		\
-		-T $(LINKER_SCRIPT) \
-		-o $@				\
-		$(LIB_KERNEL)
-
-$(KERNEL_BIN) : $(KERNEL_ELF)
-	@echo OBJCOPY $(notdir $@)
-	@$(OBJCOPY) --strip-debug $< $(KERNEL_BIN)
-
-$(KERNEL_DEBUG_SYMBOL) : $(KERNEL_ELF)
-	@echo OBJCOPY $(notdir $@)
-	@$(OBJCOPY) --only-keep-debug $< $(KERNEL_DEBUG_SYMBOL)
-
-$(RESCUE_IMG) : $(KERNEL_BIN) $(shell find $(RESUCE_SRC_ROOT) -type f) $(KERNEL_DEBUG_SYMBOL)
-	@echo MKRESCUE $(notdir $@)
-	@mkdir -p $(TARGET_ROOT)/boot
-	@cp -r $(RESUCE_SRC_ROOT) $(TARGET_ROOT)
-	@cp $(KERNEL_BIN) $(RESCUE_TARGET_ROOT)/boot
-	@$(GRUB2_MKRESCUE) -d $(GRUB2_I386_LIB) $(RESCUE_TARGET_ROOT) -o $@ 2>/dev/null >/dev/null
-
-$(TARGET_ROOT)/sysroot : $(USER_BINS) $(KERNEL_MODULES) scripts/hdd/make-sysroot.sh
-	@echo MAKE sysroot
-	@rm -rf $(TARGET_ROOT)/sysroot
-	@mkdir -p $(TARGET_ROOT)/sysroot
-	@scripts/hdd/make-sysroot.sh $(TARGET_ROOT)/sysroot
-	@cp $(KERNEL_MODULES) $(TARGET_ROOT)/sysroot/lib/modules
-	@cp $(USER_BINS) $(TARGET_ROOT)/sysroot/bin
-
-$(HDD_IMG) : $(USER_BINS) $(TARGET_ROOT)/sysroot scripts/hdd/make-hdd.sh scripts/hdd/make-hdd-linux.sh
-	@echo MAKE $(notdir $@)
-ifeq ($(FAST_HDD_BUILD),y)
-	@scripts/hdd/make-hdd-linux.sh $@ $(TARGET_ROOT)/sysroot
-else
-	@scripts/hdd/make-hdd.sh $@ $(TARGET_ROOT)/sysroot
-endif
+.PHONY : ci
+ci : export CFLAGS := -Werror
+ci : export RUSTC_FLAG += -D warnings
+ci : test

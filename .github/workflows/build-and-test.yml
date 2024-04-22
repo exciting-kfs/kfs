@@ -15,7 +15,7 @@ jobs:
         with:
           override: true
           profile: minimal
-          toolchain: nightly
+          toolchain: nightly-2023-06-30
           components: rust-src
 
       - name: Setup extra tools
