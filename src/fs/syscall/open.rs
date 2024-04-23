@@ -60,8 +60,9 @@ pub fn sys_open(path: usize, flags: i32, perm: u32) -> Result<usize, Errno> {
 
 	let path = Path::new(path);
 
-	trace_feature!("sys-open"
-		"SYS_OPEN: {:?}, {:?}, {:?}, {:?}",
+	trace_feature!(
+		"sys-open",
+		"SYS_OPEN: {}, {:?}, {:?}, {:?}",
 		path,
 		access_flags,
 		creation_flags,

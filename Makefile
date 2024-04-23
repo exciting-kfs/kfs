@@ -80,7 +80,7 @@ hdd: $(HDD_IMG)
 -include build/hdd.mk
 
 hdd-force :
-	touch scripts/hdd/make-sysroot.sh 
+	rm $(HDD_IMG)
 	$(MAKE) hdd
 
 doc :
