@@ -6,16 +6,17 @@ if [ -z "$SYSROOT" ]; then
 fi
 
 DIRS="bin boot dev etc lib media mnt opt run sbin srv tmp usr var home root"
-USERS="cjeon"
-
 for DIR in $DIRS; do
     mkdir $SYSROOT/$DIR
 done
 
+ALPINE_SYSROOT="scripts/hdd/alpine-minirootfs-3.19.1-x86.tar.gz"
+tar -xf $ALPINE_SYSROOT -C $SYSROOT/
+
+USERS="cjeon"
 for USER in $USERS; do
     mkdir $SYSROOT/home/$USER
 done
-
 
 mkdir $SYSROOT/lib/modules
 
@@ -35,3 +36,5 @@ USER=cjeon
 HOME=/home/cjeon
 DEF=456
 EOF
+
+chmod -R 777 $SYSROOT # TODO remove this
