@@ -14,6 +14,8 @@ use crate::mm::user::verify::verify_path;
 use crate::process::task::{Task, CURRENT};
 use crate::ptr::VirtPageBox;
 use crate::syscall::errno::Errno;
+use crate::syscall::SyscallSnapshot;
+use crate::trace_feature;
 
 const PATH_MAX: usize = 128;
 
@@ -44,6 +46,14 @@ pub fn sys_execve(
 
 	let path = verify_path(path_ptr, current)?;
 	let path = Path::new(path);
+
+	trace_feature!(
+		"syscall",
+		"{:?}: {} #P: {}",
+		unsafe { CURRENT.get_ref().get_pid() },
+		SyscallSnapshot::new(unsafe { &*frame }),
+		path
+	);
 
 	let raw_bin = read_user_binary(path, current)?;
 	let elf = Elf::new(raw_bin.as_slice()).map_err(|_| Errno::ENOEXEC)?;
